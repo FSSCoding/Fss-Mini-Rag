@@ -29,18 +29,41 @@ FSS-Mini-RAG is a distilled, lightweight implementation of a production-quality 
 
 **The Problem This Solves**: Most RAG implementations are either too simple (poor results) or too complex (impossible to understand and modify). This bridges that gap.
 
+## Two Powerful Modes
+
+FSS-Mini-RAG offers **two distinct experiences** optimized for different use cases:
+
+### 🚀 **Synthesis Mode** - Fast & Consistent
+```bash
+./rag-mini search ~/project "authentication logic" --synthesize
+```
+- **Perfect for**: Quick answers, code discovery, fast lookups
+- **Speed**: Lightning fast responses (no thinking overhead)
+- **Quality**: Consistent, reliable results
+
+### 🧠 **Exploration Mode** - Deep & Interactive  
+```bash
+./rag-mini explore ~/project
+> How does authentication work in this codebase?
+> Why is the login function slow?
+> What security concerns should I be aware of?
+```
+- **Perfect for**: Learning codebases, debugging, detailed analysis
+- **Features**: Thinking-enabled LLM, conversation memory, follow-up questions
+- **Quality**: Deep reasoning with full context awareness
+
 ## Quick Start (2 Minutes)
 
 ```bash
 # 1. Install everything
 ./install_mini_rag.sh
 
-# 2. Start using it
-./rag-tui                    # Friendly interface for beginners
-# OR
-./rag-mini index ~/my-project     # Direct CLI for developers
-./rag-mini search ~/my-project "authentication logic"      # 10 results
-./rag-mini search ~/my-project "error handling" --synthesize  # AI analysis
+# 2. Choose your interface
+./rag-tui                         # Friendly interface for beginners
+# OR choose your mode:
+./rag-mini index ~/my-project     # Index your project first
+./rag-mini search ~/my-project "query" --synthesize  # Fast synthesis
+./rag-mini explore ~/my-project   # Interactive exploration
 ```
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.

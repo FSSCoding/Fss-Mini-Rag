@@ -364,6 +364,111 @@ class SimpleTUI:
         print()
         input("Press Enter to continue...")
     
+    def explore_interactive(self):
+        """Interactive exploration interface with thinking mode."""
+        if not self.project_path:
+            print("❌ No project selected")
+            input("Press Enter to continue...")
+            return
+        
+        # Check if indexed
+        rag_dir = self.project_path / '.claude-rag'
+        if not rag_dir.exists():
+            print(f"❌ Project not indexed: {self.project_path.name}")
+            print("   Index the project first!")
+            input("Press Enter to continue...")
+            return
+        
+        self.clear_screen()
+        self.print_header()
+        
+        print("🧠 Interactive Exploration Mode")
+        print("==============================")
+        print()
+        print(f"Project: {self.project_path.name}")
+        print()
+        print("💡 This mode enables:")
+        print("   • Thinking-enabled LLM for detailed reasoning")
+        print("   • Conversation memory across questions") 
+        print("   • Perfect for learning and debugging")
+        print()
+        
+        # Show CLI command
+        cli_cmd = f"./rag-mini explore {self.project_path}"
+        self.print_cli_command(cli_cmd, "Start interactive exploration session")
+        
+        print("Starting exploration mode...")
+        print("=" * 50)
+        
+        # Launch exploration mode
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from claude_rag.explorer import CodeExplorer
+            
+            explorer = CodeExplorer(self.project_path)
+            
+            if not explorer.start_exploration_session():
+                print("❌ Could not start exploration mode")
+                print("   Make sure Ollama is running with a model installed")
+                input("Press Enter to continue...")
+                return
+            
+            print("\n🤔 Ask your first question about the codebase:")
+            print("   (Type 'help' for commands, 'quit' to return to menu)")
+            
+            while True:
+                try:
+                    question = input("\n> ").strip()
+                    
+                    if question.lower() in ['quit', 'exit', 'q', 'back']:
+                        print("\n" + explorer.end_session())
+                        break
+                    
+                    if not question:
+                        continue
+                    
+                    if question.lower() in ['help', 'h']:
+                        print("""
+🧠 EXPLORATION MODE HELP:
+  • Ask any question about the codebase
+  • I remember our conversation for follow-up questions  
+  • Use 'why', 'how', 'explain' for detailed reasoning
+  • Type 'summary' to see session overview
+  • Type 'quit' to return to main menu
+  
+💡 Example questions:
+  • "How does authentication work?"
+  • "Why is this function slow?"
+  • "Explain the database connection logic"
+  • "What are the security concerns here?"
+""")
+                        continue
+                    
+                    if question.lower() == 'summary':
+                        print("\n" + explorer.get_session_summary())
+                        continue
+                    
+                    print("\n🔍 Analyzing...")
+                    response = explorer.explore_question(question)
+                    
+                    if response:
+                        print(f"\n{response}")
+                    else:
+                        print("❌ Sorry, I couldn't process that question. Please try again.")
+                
+                except KeyboardInterrupt:
+                    print(f"\n\n{explorer.end_session()}")
+                    break
+                except EOFError:
+                    print(f"\n\n{explorer.end_session()}")
+                    break
+            
+        except Exception as e:
+            print(f"❌ Exploration mode failed: {e}")
+            print("   Try running the CLI command directly for more details")
+        
+        input("\nPress Enter to continue...")
+    
     def show_status(self):
         """Show project and system status."""
         self.clear_screen()
@@ -536,9 +641,10 @@ class SimpleTUI:
         print()
         
         print("🚀 Basic Commands:")
-        print("   ./rag-mini index <project_path>       # Index project")
-        print("   ./rag-mini search <project_path> <query>  # Search project")
-        print("   ./rag-mini status <project_path>      # Show status")
+        print("   ./rag-mini index <project_path>         # Index project")
+        print("   ./rag-mini search <project_path> <query> --synthesize  # Fast synthesis")
+        print("   ./rag-mini explore <project_path>       # Interactive thinking mode")
+        print("   ./rag-mini status <project_path>        # Show status")
         print()
         
         print("🎯 Enhanced Commands:")
@@ -580,7 +686,8 @@ class SimpleTUI:
             options = [
                 "Select project directory",
                 "Index project for search",
-                "Search project",
+                "Search project (Fast synthesis)",
+                "Explore project (Deep thinking)",
                 "View status",
                 "Configuration",
                 "CLI command reference",
@@ -596,12 +703,14 @@ class SimpleTUI:
             elif choice == 2:
                 self.search_interactive()
             elif choice == 3:
-                self.show_status()
+                self.explore_interactive()
             elif choice == 4:
-                self.show_configuration()
+                self.show_status()
             elif choice == 5:
-                self.show_cli_reference()
+                self.show_configuration()
             elif choice == 6:
+                self.show_cli_reference()
+            elif choice == 7:
                 print("\nThanks for using FSS-Mini-RAG! 🚀")
                 print("Try the CLI commands for even more power!")
                 break

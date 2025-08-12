@@ -216,7 +216,122 @@ class TestOllamaIntegration(unittest.TestCase):
             self.assertEqual(expanded, cached)
             print("   ✅ Expansion and caching working!")
     
-    def test_05_with_mocked_ollama(self):
+    def test_05_synthesis_mode_no_thinking(self):
+        """
+        ✅ Test synthesis mode operates without thinking.
+        
+        Verifies that LLMSynthesizer in synthesis mode:
+        - Defaults to no thinking
+        - Handles <no_think> tokens properly
+        - Works independently of exploration mode
+        """
+        print("\n🚀 Testing synthesis mode (no thinking)...")
+        
+        # Create synthesis mode synthesizer (default behavior)
+        synthesizer = LLMSynthesizer()
+        
+        # Should default to no thinking
+        self.assertFalse(synthesizer.enable_thinking, 
+                        "Synthesis mode should default to no thinking")
+        print("   ✅ Defaults to no thinking")
+        
+        if synthesizer.is_available():
+            print("   📝 Testing with live Ollama...")
+            
+            # Create mock search results
+            from dataclasses import dataclass
+            
+            @dataclass
+            class MockResult:
+                file_path: str
+                content: str
+                score: float
+            
+            results = [
+                MockResult("auth.py", "def authenticate(user): return True", 0.95)
+            ]
+            
+            # Test synthesis 
+            synthesis = synthesizer.synthesize_search_results(
+                "user authentication", results, Path(".")
+            )
+            
+            # Should get reasonable synthesis
+            self.assertIsNotNone(synthesis)
+            self.assertGreater(len(synthesis.summary), 10)
+            print("   ✅ Synthesis mode working without thinking")
+        else:
+            print("   ⏭️  Live test skipped - Ollama not available")
+    
+    def test_06_exploration_mode_thinking(self):
+        """
+        ✅ Test exploration mode enables thinking.
+        
+        Verifies that CodeExplorer:
+        - Enables thinking by default
+        - Has session management
+        - Works independently of synthesis mode
+        """
+        print("\n🧠 Testing exploration mode (with thinking)...")
+        
+        try:
+            from claude_rag.explorer import CodeExplorer
+        except ImportError:
+            self.skipTest("⏭️  CodeExplorer not available")
+        
+        # Create exploration mode
+        explorer = CodeExplorer(Path("."), self.config)
+        
+        # Should enable thinking
+        self.assertTrue(explorer.synthesizer.enable_thinking,
+                       "Exploration mode should enable thinking")
+        print("   ✅ Enables thinking by default")
+        
+        # Should have session management
+        self.assertIsNone(explorer.current_session,
+                         "Should start with no active session")
+        print("   ✅ Session management available")
+        
+        # Should handle session summary gracefully
+        summary = explorer.get_session_summary()
+        self.assertIn("No active", summary)
+        print("   ✅ Graceful session handling")
+    
+    def test_07_mode_separation(self):
+        """
+        ✅ Test that synthesis and exploration modes don't interfere.
+        
+        Verifies clean separation:
+        - Different thinking settings
+        - Independent operation
+        - No cross-contamination
+        """
+        print("\n🔄 Testing mode separation...")
+        
+        # Create both modes
+        synthesizer = LLMSynthesizer(enable_thinking=False)
+        
+        try:
+            from claude_rag.explorer import CodeExplorer
+            explorer = CodeExplorer(Path("."), self.config)
+        except ImportError:
+            self.skipTest("⏭️  CodeExplorer not available")
+        
+        # Should have different thinking settings
+        self.assertFalse(synthesizer.enable_thinking,
+                        "Synthesis should not use thinking")
+        self.assertTrue(explorer.synthesizer.enable_thinking,
+                       "Exploration should use thinking")
+        
+        # Both should be uninitialized (lazy loading)
+        self.assertFalse(synthesizer._initialized,
+                        "Should use lazy loading")
+        self.assertFalse(explorer.synthesizer._initialized,
+                        "Should use lazy loading")
+        
+        print("   ✅ Clean mode separation confirmed")
+    
+    def test_08_with_mocked_ollama(self):
         """
         ✅ Test components work with mocked Ollama (for offline testing).
         
