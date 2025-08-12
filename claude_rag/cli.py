@@ -1,6 +1,6 @@
 """
 Command-line interface for Claude RAG system.
-Beautiful, intuitive, and fucking powerful.
+Beautiful, intuitive, and highly effective.
 """
 
 import click

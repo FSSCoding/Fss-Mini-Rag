@@ -1,6 +1,6 @@
 """
 Windows Console Unicode/Emoji Fix
-This fucking works in 2025. No more emoji bullshit.
+Reliable Windows console Unicode/emoji support for 2025.
 """
 
 import sys

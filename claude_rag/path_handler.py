@@ -1,7 +1,7 @@
 """
 Cross-platform path handler for the RAG system.
 Handles forward/backward slashes on any file system.
-No more path bullshit!
+Robust cross-platform path handling.
 """
 
 import os
