@@ -60,7 +60,7 @@ similar_search() {
     echo "🔄 Finding similar patterns to: '$query'"
     # Use semantic search with pattern-focused terms
     pattern_query="similar to $query OR like $query OR pattern $query"
-    "$PYTHON" "$SCRIPT_DIR/rag-mini.py" search "$project_path" "$pattern_query" --limit 5
+    "$PYTHON" "$SCRIPT_DIR/rag-mini.py" search "$project_path" "$pattern_query" --limit 10
 }
 
 # Smart indexing with optimizations

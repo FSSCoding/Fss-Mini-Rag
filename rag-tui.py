@@ -285,14 +285,14 @@ class SimpleTUI:
         
         # Get result limit
         try:
-            limit = int(self.get_input("Number of results", "5"))
+            limit = int(self.get_input("Number of results", "10"))
             limit = max(1, min(20, limit))  # Clamp between 1-20
         except ValueError:
-            limit = 5
+            limit = 10
         
         # Show CLI command
         cli_cmd = f"./rag-mini search {self.project_path} \"{query}\""
-        if limit != 5:
+        if limit != 10:
             cli_cmd += f" --limit {limit}"
         
         self.print_cli_command(cli_cmd, "Search for semantic matches")

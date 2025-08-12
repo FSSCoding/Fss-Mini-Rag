@@ -156,6 +156,24 @@ class DemoSimulator:
                 "function": "User.authenticate()",
                 "preview": "User model authentication method.\nQueries database for user credentials\nand handles account status checks.",
                 "score": "0.82"
+            },
+            {
+                "file": "auth/tokens.py",
+                "function": "generate_jwt_token()",
+                "preview": "Generate JWT authentication tokens.\nIncludes expiration, claims, and signature.\nSupports refresh and access token types.",
+                "score": "0.79"
+            },
+            {
+                "file": "utils/security.py",
+                "function": "hash_password()",
+                "preview": "Secure password hashing utility.\nUses bcrypt with configurable rounds.\nProvides salt generation and validation.",
+                "score": "0.76"
+            },
+            {
+                "file": "config/auth_settings.py",
+                "function": "load_auth_config()",
+                "preview": "Load authentication configuration.\nHandles JWT secrets, token expiration,\nand authentication provider settings.",
+                "score": "0.73"
             }
         ]
         

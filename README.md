@@ -39,7 +39,8 @@ FSS-Mini-RAG is a distilled, lightweight implementation of a production-quality 
 ./rag-tui                    # Friendly interface for beginners
 # OR
 ./rag-mini index ~/my-project     # Direct CLI for developers
-./rag-mini search ~/my-project "authentication logic"
+./rag-mini search ~/my-project "authentication logic"      # 10 results
+./rag-mini search ~/my-project "error handling" --synthesize  # AI analysis
 ```
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.

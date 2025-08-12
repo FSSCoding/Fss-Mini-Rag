@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from claude_rag.indexer import ProjectIndexer
 from claude_rag.search import CodeSearcher
 from claude_rag.ollama_embeddings import OllamaEmbedder
+from claude_rag.llm_synthesizer import LLMSynthesizer
 
 # Configure logging for user-friendly output
 logging.basicConfig(
@@ -71,7 +72,7 @@ def index_project(project_path: Path, force: bool = False):
         print(f"   Use --verbose for details")
         sys.exit(1)
 
-def search_project(project_path: Path, query: str, limit: int = 5):
+def search_project(project_path: Path, query: str, limit: int = 10, synthesize: bool = False):
     """Search a project directory."""
     try:
         # Check if indexed first
@@ -122,6 +123,21 @@ def search_project(project_path: Path, query: str, limit: int = 5):
                 print(f"     Use --verbose or rag-mini-enhanced for full context")
             
             print()
+        
+        # LLM Synthesis if requested
+        if synthesize:
+            print("🧠 Generating LLM synthesis...")
+            synthesizer = LLMSynthesizer()
+            
+            if synthesizer.is_available():
+                synthesis = synthesizer.synthesize_search_results(query, results, project_path)
+                print()
+                print(synthesizer.format_synthesis_output(synthesis, query))
+            else:
+                print("❌ LLM synthesis unavailable")
+                print("   • Ensure Ollama is running: ollama serve")
+                print("   • Install a model: ollama pull llama3.2")
+                print("   • Check connection to http://localhost:11434")
         
         # Save last search for potential enhancements
         try:
@@ -222,9 +238,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  rag-mini index /path/to/project          # Index a project
-  rag-mini search /path/to/project "query" # Search indexed project
-  rag-mini status /path/to/project         # Show status
+  rag-mini index /path/to/project              # Index a project
+  rag-mini search /path/to/project "query"     # Search indexed project  
+  rag-mini search /path/to/project "query" -s  # Search with LLM synthesis
+  rag-mini status /path/to/project             # Show status
         """
     )
     
@@ -236,10 +253,12 @@ Examples:
                        help='Search query (for search command)')
     parser.add_argument('--force', action='store_true',
                        help='Force reindex all files')
-    parser.add_argument('--limit', type=int, default=5,
+    parser.add_argument('--limit', type=int, default=10,
                        help='Maximum number of search results')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
+    parser.add_argument('--synthesize', '-s', action='store_true',
+                       help='Generate LLM synthesis of search results (requires Ollama)')
     
     args = parser.parse_args()
     
@@ -263,7 +282,7 @@ Examples:
         if not args.query:
             print("❌ Search query required")
             sys.exit(1)
-        search_project(args.project_path, args.query, args.limit)
+        search_project(args.project_path, args.query, args.limit, args.synthesize)
     elif args.command == 'status':
         status_check(args.project_path)
 
