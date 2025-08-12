@@ -10,7 +10,7 @@ from rich.syntax import Syntax
 from rich.panel import Panel
 from rich.table import Table
 
-from claude_rag.search import CodeSearcher
+from mini_rag.search import CodeSearcher
 
 console = Console()
 
@@ -18,7 +18,7 @@ console = Console()
 def demo_search(project_path: Path):
     """Run demo searches showing the hybrid system in action."""
     
-    console.print("\n[bold cyan]Claude RAG Hybrid Search Demo[/bold cyan]\n")
+    console.print("\n[bold cyan]Mini RAG Hybrid Search Demo[/bold cyan]\n")
     
     # Initialize searcher
     console.print("Initializing search system...")
@@ -123,9 +123,9 @@ def main():
         # Use the RAG system itself as the demo project
         project_path = Path(__file__).parent
     
-    if not (project_path / '.claude-rag').exists():
-        console.print("[red]Error: No RAG index found. Run 'claude-rag index' first.[/red]")
-        console.print(f"[dim]Looked in: {project_path / '.claude-rag'}[/dim]")
+    if not (project_path / '.mini-rag').exists():
+        console.print("[red]Error: No RAG index found. Run 'mini-rag index' first.[/red]")
+        console.print(f"[dim]Looked in: {project_path / '.mini-rag'}[/dim]")
         return
     
     demo_search(project_path)

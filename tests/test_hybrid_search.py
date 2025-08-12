@@ -15,8 +15,8 @@ from rich.columns import Columns
 from rich.syntax import Syntax
 from rich.progress import track
 
-from claude_rag.search import CodeSearcher, SearchResult
-from claude_rag.embeddings import CodeEmbedder
+from mini_rag.search import CodeSearcher, SearchResult
+from mini_rag.embeddings import CodeEmbedder
 
 console = Console()
 
@@ -320,8 +320,8 @@ def main():
     else:
         project_path = Path.cwd()
     
-    if not (project_path / '.claude-rag').exists():
-        console.print("[red]Error: No RAG index found. Run 'claude-rag index' first.[/red]")
+    if not (project_path / '.mini-rag').exists():
+        console.print("[red]Error: No RAG index found. Run 'mini-rag index' first.[/red]")
         return
     
     # Create tester
@@ -329,7 +329,7 @@ def main():
     
     # Run all tests
     console.print("\n" + "="*80)
-    console.print("[bold green]Claude RAG Hybrid Search Test Suite[/bold green]")
+    console.print("[bold green]Mini RAG Hybrid Search Test Suite[/bold green]")
     console.print("="*80)
     
     # Test 1: Query type analysis

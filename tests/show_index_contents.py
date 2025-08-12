@@ -13,7 +13,7 @@ if sys.platform == 'win32':
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from claude_rag.vector_store import VectorStore
+from mini_rag.vector_store import VectorStore
 from collections import Counter
 
 project_path = Path.cwd()

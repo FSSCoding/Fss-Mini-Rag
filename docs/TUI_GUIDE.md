@@ -56,7 +56,7 @@ That's it! The TUI will guide you through everything.
 - Scans all files in project directory
 - Breaks text into searchable chunks
 - Creates embeddings (AI numerical representations)
-- Stores in local database (`.claude-rag/` folder)
+- Stores in local database (`.mini-rag/` folder)
 
 **Interactive Elements**:
 - **Force re-index option** - Completely rebuild if needed
@@ -67,7 +67,7 @@ That's it! The TUI will guide you through everything.
 - Why indexing is necessary (one-time setup per project)
 - What gets indexed (code files, documentation, configs)
 - How fast the system works
-- Storage location (`.claude-rag/` directory)
+- Storage location (`.mini-rag/` directory)
 
 **CLI Commands Shown**:
 ```bash
@@ -168,8 +168,8 @@ That's it! The TUI will guide you through everything.
 
 **CLI Commands Shown**:
 ```bash
-cat /path/to/project/.claude-rag/config.yaml   # View config
-nano /path/to/project/.claude-rag/config.yaml  # Edit config
+cat /path/to/project/.mini-rag/config.yaml   # View config
+nano /path/to/project/.mini-rag/config.yaml  # Edit config
 ```
 
 ### 6. CLI Command Reference

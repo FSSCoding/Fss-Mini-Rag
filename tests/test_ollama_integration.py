@@ -18,9 +18,9 @@ from unittest.mock import patch, MagicMock
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from claude_rag.query_expander import QueryExpander
-from claude_rag.llm_synthesizer import LLMSynthesizer  
-from claude_rag.config import RAGConfig
+from mini_rag.query_expander import QueryExpander
+from mini_rag.llm_synthesizer import LLMSynthesizer  
+from mini_rag.config import RAGConfig
 
 
 class TestOllamaIntegration(unittest.TestCase):
@@ -275,7 +275,7 @@ class TestOllamaIntegration(unittest.TestCase):
         print("\n🧠 Testing exploration mode (with thinking)...")
         
         try:
-            from claude_rag.explorer import CodeExplorer
+            from mini_rag.explorer import CodeExplorer
         except ImportError:
             self.skipTest("⏭️  CodeExplorer not available")
         
@@ -312,7 +312,7 @@ class TestOllamaIntegration(unittest.TestCase):
         synthesizer = LLMSynthesizer(enable_thinking=False)
         
         try:
-            from claude_rag.explorer import CodeExplorer
+            from mini_rag.explorer import CodeExplorer
             explorer = CodeExplorer(Path("."), self.config)
         except ImportError:
             self.skipTest("⏭️  CodeExplorer not available")

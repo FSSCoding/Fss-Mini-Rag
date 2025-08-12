@@ -99,7 +99,7 @@ llm:
 # • CI/CD environments where speed matters
 # 
 # 🚀 TO USE THIS CONFIG:
-# 1. Copy to project: cp examples/config-fast.yaml .claude-rag/config.yaml
+# 1. Copy to project: cp examples/config-fast.yaml .mini-rag/config.yaml
 # 2. Index: ./rag-mini index /path/to/project
 # 3. Enjoy lightning-fast searches! ⚡
 #═══════════════════════════════════════════════════════════════════════

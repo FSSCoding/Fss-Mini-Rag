@@ -272,7 +272,7 @@ class RAGClient:
         except ConnectionRefusedError:
             return {
                 'success': False,
-                'error': 'RAG server not running. Start with: claude-rag server'
+                'error': 'RAG server not running. Start with: mini-rag server'
             }
         except ConnectionError as e:
             # Try legacy mode without message framing
@@ -389,7 +389,7 @@ def auto_start_if_needed(project_path: Path) -> Optional[subprocess.Popen]:
     if not client.is_running():
         # Start server in background
         import subprocess
-        cmd = [sys.executable, "-m", "claude_rag.cli", "server", "--path", str(project_path)]
+        cmd = [sys.executable, "-m", "mini_rag.cli", "server", "--path", str(project_path)]
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,

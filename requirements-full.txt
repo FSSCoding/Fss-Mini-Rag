@@ -1,4 +1,4 @@
-# Full Claude RAG - With ML Fallback
+# Full Mini RAG - With ML Fallback
 # Base lightweight dependencies + ML stack for offline use
 
 # Lightweight dependencies (always required)

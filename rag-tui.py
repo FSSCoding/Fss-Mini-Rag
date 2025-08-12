@@ -136,7 +136,7 @@ class SimpleTUI:
         print("=================")
         print()
         
-        # Look for .claude-rag directories in common locations
+        # Look for .mini-rag directories in common locations
         search_paths = [
             Path.home(),
             Path.home() / "projects", 
@@ -152,7 +152,7 @@ class SimpleTUI:
                 try:
                     for item in search_path.iterdir():
                         if item.is_dir():
-                            rag_dir = item / '.claude-rag'
+                            rag_dir = item / '.mini-rag'
                             if rag_dir.exists():
                                 recent_projects.append(item)
                 except (PermissionError, OSError):
@@ -161,19 +161,19 @@ class SimpleTUI:
         # Remove duplicates and sort by modification time
         recent_projects = list(set(recent_projects))
         try:
-            recent_projects.sort(key=lambda p: (p / '.claude-rag').stat().st_mtime, reverse=True)
+            recent_projects.sort(key=lambda p: (p / '.mini-rag').stat().st_mtime, reverse=True)
         except:
             pass
         
         if not recent_projects:
             print("❌ No recently indexed projects found")
-            print("   Projects with .claude-rag directories will appear here")
+            print("   Projects with .mini-rag directories will appear here")
             return
         
         print("Found indexed projects:")
         for i, project in enumerate(recent_projects[:10], 1):  # Show up to 10
             try:
-                manifest = project / '.claude-rag' / 'manifest.json'
+                manifest = project / '.mini-rag' / 'manifest.json'
                 if manifest.exists():
                     with open(manifest) as f:
                         data = json.load(f)
@@ -211,7 +211,7 @@ class SimpleTUI:
         print()
         
         # Check if already indexed
-        rag_dir = self.project_path / '.claude-rag'
+        rag_dir = self.project_path / '.mini-rag'
         if rag_dir.exists():
             print("⚠️  Project appears to be already indexed")
             print()
@@ -233,7 +233,7 @@ class SimpleTUI:
         try:
             # Import here to avoid startup delays
             sys.path.insert(0, str(Path(__file__).parent))
-            from claude_rag.indexer import ProjectIndexer
+            from mini_rag.indexer import ProjectIndexer
             
             indexer = ProjectIndexer(self.project_path)
             result = indexer.index_project(force_reindex=force)
@@ -262,7 +262,7 @@ class SimpleTUI:
             return
         
         # Check if indexed
-        rag_dir = self.project_path / '.claude-rag'
+        rag_dir = self.project_path / '.mini-rag'
         if not rag_dir.exists():
             print(f"❌ Project not indexed: {self.project_path.name}")
             print("   Index the project first!")
@@ -303,7 +303,7 @@ class SimpleTUI:
         # Actually run the search
         try:
             sys.path.insert(0, str(Path(__file__).parent))
-            from claude_rag.search import CodeSearcher
+            from mini_rag.search import CodeSearcher
             
             searcher = CodeSearcher(self.project_path)
             # Enable query expansion in TUI for better results
@@ -372,7 +372,7 @@ class SimpleTUI:
             return
         
         # Check if indexed
-        rag_dir = self.project_path / '.claude-rag'
+        rag_dir = self.project_path / '.mini-rag'
         if not rag_dir.exists():
             print(f"❌ Project not indexed: {self.project_path.name}")
             print("   Index the project first!")
@@ -403,7 +403,7 @@ class SimpleTUI:
         # Launch exploration mode
         try:
             sys.path.insert(0, str(Path(__file__).parent))
-            from claude_rag.explorer import CodeExplorer
+            from mini_rag.explorer import CodeExplorer
             
             explorer = CodeExplorer(self.project_path)
             
@@ -483,7 +483,7 @@ class SimpleTUI:
             self.print_cli_command(cli_cmd, "Show detailed status information")
             
             # Check project status
-            rag_dir = self.project_path / '.claude-rag'
+            rag_dir = self.project_path / '.mini-rag'
             if rag_dir.exists():
                 try:
                     manifest = rag_dir / 'manifest.json'
@@ -511,7 +511,7 @@ class SimpleTUI:
         # Show embedding system status
         try:
             sys.path.insert(0, str(Path(__file__).parent))
-            from claude_rag.ollama_embeddings import OllamaEmbedder
+            from mini_rag.ollama_embeddings import OllamaEmbedder
             
             embedder = OllamaEmbedder()
             info = embedder.get_embedding_info()
@@ -549,7 +549,7 @@ class SimpleTUI:
         print(f"Project: {self.project_path.name}")
         print()
         
-        config_path = self.project_path / '.claude-rag' / 'config.yaml'
+        config_path = self.project_path / '.mini-rag' / 'config.yaml'
         
         # Show current configuration if it exists
         if config_path.exists():
@@ -678,7 +678,7 @@ class SimpleTUI:
             
             # Show current project status
             if self.project_path:
-                rag_dir = self.project_path / '.claude-rag'
+                rag_dir = self.project_path / '.mini-rag'
                 status = "✅ Indexed" if rag_dir.exists() else "❌ Not indexed"
                 print(f"📁 Current project: {self.project_path.name} ({status})")
                 print()

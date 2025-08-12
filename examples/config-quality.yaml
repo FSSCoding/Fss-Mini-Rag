@@ -92,7 +92,7 @@ llm:
 # 1. Install Ollama: curl -fsSL https://ollama.ai/install.sh | sh
 # 2. Start Ollama: ollama serve
 # 3. Install a model: ollama pull qwen3:1.7b
-# 4. Copy config: cp examples/config-quality.yaml .claude-rag/config.yaml  
+# 4. Copy config: cp examples/config-quality.yaml .mini-rag/config.yaml  
 # 5. Index project: ./rag-mini index /path/to/project
 # 6. Enjoy comprehensive analysis: ./rag-mini explore /path/to/project
 #═══════════════════════════════════════════════════════════════════════

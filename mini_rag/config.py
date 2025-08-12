@@ -111,7 +111,7 @@ class ConfigManager:
     
     def __init__(self, project_path: Path):
         self.project_path = Path(project_path)
-        self.rag_dir = self.project_path / '.claude-rag'
+        self.rag_dir = self.project_path / '.mini-rag'
         self.config_path = self.rag_dir / 'config.yaml'
         
     def load_config(self) -> RAGConfig:

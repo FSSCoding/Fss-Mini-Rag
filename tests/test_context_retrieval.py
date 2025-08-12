@@ -4,8 +4,8 @@ Test script for adjacent chunk retrieval functionality.
 """
 
 from pathlib import Path
-from claude_rag.search import CodeSearcher
-from claude_rag.embeddings import CodeEmbedder
+from mini_rag.search import CodeSearcher
+from mini_rag.embeddings import CodeEmbedder
 
 def test_context_retrieval():
     """Test the new context retrieval functionality."""

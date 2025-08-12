@@ -87,7 +87,7 @@ The system automatically suggests improvements based on:
 ## 🛠️ **Manual Tuning Options**
 
 ### **Custom Configuration**
-Edit `.claude-rag/config.json` in your project:
+Edit `.mini-rag/config.json` in your project:
 ```json
 {
   "chunking": {

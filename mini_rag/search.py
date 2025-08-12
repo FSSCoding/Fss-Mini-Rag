@@ -96,7 +96,7 @@ class CodeSearcher:
             embedder: CodeEmbedder instance (creates one if not provided)
         """
         self.project_path = Path(project_path).resolve()
-        self.rag_dir = self.project_path / '.claude-rag'
+        self.rag_dir = self.project_path / '.mini-rag'
         self.embedder = embedder or CodeEmbedder()
         
         # Load configuration and initialize query expander

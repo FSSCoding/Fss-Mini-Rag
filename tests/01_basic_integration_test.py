@@ -12,10 +12,10 @@ if sys.platform == 'win32':
     os.environ['PYTHONUTF8'] = '1'
     sys.stdout.reconfigure(encoding='utf-8')
 
-from claude_rag.chunker import CodeChunker
-from claude_rag.indexer import ProjectIndexer
-from claude_rag.search import CodeSearcher
-from claude_rag.embeddings import CodeEmbedder
+from mini_rag.chunker import CodeChunker
+from mini_rag.indexer import ProjectIndexer
+from mini_rag.search import CodeSearcher
+from mini_rag.embeddings import CodeEmbedder
 
 def main():
     print("=" * 60)

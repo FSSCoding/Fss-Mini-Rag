@@ -12,12 +12,12 @@ if sys.platform == 'win32':
     os.environ['PYTHONUTF8'] = '1'
     sys.stdout.reconfigure(encoding='utf-8')
 
-from claude_rag.chunker import CodeChunker
-from claude_rag.indexer import ProjectIndexer
-from claude_rag.search import CodeSearcher
-from claude_rag.ollama_embeddings import OllamaEmbedder as CodeEmbedder
-from claude_rag.query_expander import QueryExpander
-from claude_rag.config import RAGConfig
+from mini_rag.chunker import CodeChunker
+from mini_rag.indexer import ProjectIndexer
+from mini_rag.search import CodeSearcher
+from mini_rag.ollama_embeddings import OllamaEmbedder as CodeEmbedder
+from mini_rag.query_expander import QueryExpander
+from mini_rag.config import RAGConfig
 
 def test_chunker():
     """Test that chunker creates chunks with all required metadata."""
@@ -137,7 +137,7 @@ class MyClass:
 ''')
         
         # Index the project with small chunk size for testing
-        from claude_rag.chunker import CodeChunker
+        from mini_rag.chunker import CodeChunker
         chunker = CodeChunker(min_chunk_size=1)
         indexer = ProjectIndexer(project_path, chunker=chunker)
         stats = indexer.index_project()
@@ -313,7 +313,7 @@ def test_server():
     
     # Just check if we can import and create server instance
     try:
-        from claude_rag.server import RAGServer
+        from mini_rag.server import RAGServer
         server = RAGServer(Path("."), port=7778)
         print("    Server can be instantiated")
         return True

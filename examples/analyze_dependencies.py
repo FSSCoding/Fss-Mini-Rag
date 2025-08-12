@@ -34,11 +34,11 @@ def find_imports_in_file(file_path):
 def analyze_dependencies():
     """Analyze all dependencies in the project."""
     project_root = Path(__file__).parent
-    claude_rag_dir = project_root / "claude_rag"
+    mini_rag_dir = project_root / "mini_rag"
     
     # Find all Python files
     python_files = []
-    for file_path in claude_rag_dir.glob("*.py"):
+    for file_path in mini_rag_dir.glob("*.py"):
         if file_path.name != "__pycache__":
             python_files.append(file_path)
     

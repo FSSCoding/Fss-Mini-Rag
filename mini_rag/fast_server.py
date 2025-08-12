@@ -8,7 +8,7 @@ Drop-in replacement for the original server with:
 - Comprehensive health checks and status monitoring
 - Enhanced error handling and recovery
 - Better indexing progress reporting
-- Claude-friendly status updates
+- Mini-RAG-friendly status updates
 """
 
 import json
@@ -206,7 +206,7 @@ class FastRAGServer:
     
     def _check_indexing_needed(self) -> bool:
         """Quick check if indexing is needed"""
-        rag_dir = self.project_path / '.claude-rag'
+        rag_dir = self.project_path / '.mini-rag'
         if not rag_dir.exists():
             return True
             
@@ -492,7 +492,7 @@ class FastRAGServer:
                 f"📁 Project: {self.project_path.name}\n"
                 f"🧠 Model: {getattr(self.embedder, 'model_name', 'default')}\n"
                 f"📊 Chunks Indexed: {self.status.health_checks.get('database', {}).get('chunks', 0)}\n\n"
-                f"[dim]Ready to serve Claude Code queries...[/dim]",
+                f"[dim]Ready to serve the development environment queries...[/dim]",
                 title="🚀 Server Status",
                 border_style="green"
             )
@@ -698,7 +698,7 @@ class FastRAGClient:
         except ConnectionRefusedError:
             return {
                 'success': False,
-                'error': 'RAG server not running. Start with: python -m claude_rag server',
+                'error': 'RAG server not running. Start with: python -m mini_rag server',
                 'error_type': 'connection_refused'
             }
         except socket.timeout:

@@ -44,7 +44,7 @@ class ProjectIndexer:
             max_workers: Number of parallel workers for indexing
         """
         self.project_path = Path(project_path).resolve()
-        self.rag_dir = self.project_path / '.claude-rag'
+        self.rag_dir = self.project_path / '.mini-rag'
         self.manifest_path = self.rag_dir / 'manifest.json'
         self.config_path = self.rag_dir / 'config.json'
         

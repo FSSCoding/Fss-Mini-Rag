@@ -47,7 +47,7 @@ chmod +x install_mini_rag.sh
 ./install_mini_rag.sh
 # Or install manually:
 pip3 install -r requirements.txt
-python3 -c "import claude_rag; print('✅ Installation successful')"
+python3 -c "import mini_rag; print('✅ Installation successful')"
 ```
 
 ---
@@ -253,12 +253,12 @@ python3 -c "import claude_rag; print('✅ Installation successful')"
 
 2. **Copy from working example:**
    ```bash
-   cp examples/config.yaml .claude-rag/config.yaml
+   cp examples/config.yaml .mini-rag/config.yaml
    ```
 
 3. **Reset to defaults:**
    ```bash
-   rm .claude-rag/config.yaml
+   rm .mini-rag/config.yaml
    # System will recreate with defaults
    ```
 
@@ -273,9 +273,9 @@ python3 -c "import claude_rag; print('✅ Installation successful')"
 2. **Check config location:**
    ```bash
    # Project-specific config:
-   /path/to/project/.claude-rag/config.yaml
+   /path/to/project/.mini-rag/config.yaml
    # Global config:
-   ~/.claude-rag/config.yaml
+   ~/.mini-rag/config.yaml
    ```
 
 3. **Force re-index after config changes:**
@@ -389,12 +389,12 @@ python3 -c "import claude_rag; print('✅ Installation successful')"
 
 **Test embeddings:**
 ```bash
-python3 -c "from claude_rag.ollama_embeddings import OllamaEmbedder; e=OllamaEmbedder(); print(e.get_embedding_info())"
+python3 -c "from mini_rag.ollama_embeddings import OllamaEmbedder; e=OllamaEmbedder(); print(e.get_embedding_info())"
 ```
 
 **Verify installation:**
 ```bash
-python3 -c "import claude_rag; print('✅ RAG system installed')"
+python3 -c "import mini_rag; print('✅ RAG system installed')"
 ```
 
 **Test Ollama connection:**
@@ -404,7 +404,7 @@ curl -s http://localhost:11434/api/tags | python3 -m json.tool
 
 **Check disk space:**
 ```bash
-df -h .claude-rag/  # Make sure you have space for index
+df -h .mini-rag/  # Make sure you have space for index
 ```
 
 ---
@@ -413,7 +413,7 @@ df -h .claude-rag/  # Make sure you have space for index
 
 1. **Start fresh:**
    ```bash
-   rm -rf .claude-rag/
+   rm -rf .mini-rag/
    ./rag-mini index /path/to/project
    ```
 
@@ -457,4 +457,4 @@ df -h .claude-rag/  # Make sure you have space for index
 - Experiment with config settings on test projects first
 - Use synthesis mode for quick answers, exploration for learning
 
-**Remember:** This is a learning tool! Don't be afraid to experiment and try different settings. The worst thing that can happen is you delete the `.claude-rag` directory and start over. 🚀
+**Remember:** This is a learning tool! Don't be afraid to experiment and try different settings. The worst thing that can happen is you delete the `.mini-rag` directory and start over. 🚀

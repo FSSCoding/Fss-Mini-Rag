@@ -15,11 +15,11 @@ import logging
 # Add the RAG system to the path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from claude_rag.indexer import ProjectIndexer
-from claude_rag.search import CodeSearcher
-from claude_rag.ollama_embeddings import OllamaEmbedder
-from claude_rag.llm_synthesizer import LLMSynthesizer
-from claude_rag.explorer import CodeExplorer
+from mini_rag.indexer import ProjectIndexer
+from mini_rag.search import CodeSearcher
+from mini_rag.ollama_embeddings import OllamaEmbedder
+from mini_rag.llm_synthesizer import LLMSynthesizer
+from mini_rag.explorer import CodeExplorer
 
 # Configure logging for user-friendly output
 logging.basicConfig(
@@ -36,7 +36,7 @@ def index_project(project_path: Path, force: bool = False):
         print(f"🚀 {action} {project_path.name}")
         
         # Quick pre-check
-        rag_dir = project_path / '.claude-rag'
+        rag_dir = project_path / '.mini-rag'
         if rag_dir.exists() and not force:
             print("   Checking for changes...")
         
@@ -65,7 +65,7 @@ def index_project(project_path: Path, force: bool = False):
             print(f"⚠️  {failed_count} files failed (check logs with --verbose)")
         
         # Quick tip for first-time users
-        if not (project_path / '.claude-rag' / 'last_search').exists():
+        if not (project_path / '.mini-rag' / 'last_search').exists():
             print(f"\n💡 Try: rag-mini search {project_path} \"your search here\"")
             
     except Exception as e:
@@ -86,7 +86,7 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
     """Search a project directory."""
     try:
         # Check if indexed first
-        rag_dir = project_path / '.claude-rag'
+        rag_dir = project_path / '.mini-rag'
         if not rag_dir.exists():
             print(f"❌ Project not indexed: {project_path.name}")
             print(f"   Run: rag-mini index {project_path}")
@@ -180,7 +180,7 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
         else:
             print("🔧 Common solutions:")
             print("   • Check project path exists and is readable")
-            print("   • Verify index isn't corrupted: delete .claude-rag/ and re-index")
+            print("   • Verify index isn't corrupted: delete .mini-rag/ and re-index")
             print("   • Try with a different project to test setup")
             print("   • Check available memory and disk space")
             print()
@@ -197,7 +197,7 @@ def status_check(project_path: Path):
         print()
         
         # Check project indexing status first
-        rag_dir = project_path / '.claude-rag'
+        rag_dir = project_path / '.mini-rag'
         if not rag_dir.exists():
             print("❌ Project not indexed")
             print(f"   Run: rag-mini index {project_path}")

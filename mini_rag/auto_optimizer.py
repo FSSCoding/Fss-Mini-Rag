@@ -16,7 +16,7 @@ class AutoOptimizer:
     
     def __init__(self, project_path: Path):
         self.project_path = project_path
-        self.rag_dir = project_path / '.claude-rag'
+        self.rag_dir = project_path / '.mini-rag'
         self.config_path = self.rag_dir / 'config.json'
         self.manifest_path = self.rag_dir / 'manifest.json'
     

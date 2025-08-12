@@ -15,8 +15,8 @@ Example: "authentication" becomes "authentication login user verification creden
 
 ## Usage
 ```python
-from claude_rag.query_expander import QueryExpander
-from claude_rag.config import RAGConfig
+from mini_rag.query_expander import QueryExpander
+from mini_rag.config import RAGConfig
 
 config = RAGConfig()
 expander = QueryExpander(config)

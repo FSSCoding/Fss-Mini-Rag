@@ -492,7 +492,7 @@ test_installation() {
     print_info "Testing basic functionality..."
     
     # Test import
-    if python3 -c "from claude_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('✅ Import successful')" 2>/dev/null; then
+    if python3 -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('✅ Import successful')" 2>/dev/null; then
         print_success "Python imports working"
     else
         print_error "Import test failed"
@@ -501,7 +501,7 @@ test_installation() {
     
     # Test embedding system
     if python3 -c "
-from claude_rag import CodeEmbedder
+from mini_rag import CodeEmbedder
 embedder = CodeEmbedder()
 info = embedder.get_embedding_info()
 print(f'✅ Embedding system: {info[\"method\"]}')

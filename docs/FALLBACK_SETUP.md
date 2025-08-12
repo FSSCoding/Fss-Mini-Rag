@@ -31,7 +31,7 @@ pip install -r requirements-full.txt
 
 ## 🔧 **Configuration**
 
-Edit `.claude-rag/config.json` in your project:
+Edit `.mini-rag/config.json` in your project:
 ```json
 {
   "embedding": {
@@ -45,7 +45,7 @@ Edit `.claude-rag/config.json` in your project:
 
 ## 📊 **Status Check**
 ```python
-from claude_rag.ollama_embeddings import OllamaEmbedder
+from mini_rag.ollama_embeddings import OllamaEmbedder
 
 embedder = OllamaEmbedder()
 status = embedder.get_status()

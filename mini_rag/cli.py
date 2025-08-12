@@ -1,5 +1,5 @@
 """
-Command-line interface for Claude RAG system.
+Command-line interface for Mini RAG system.
 Beautiful, intuitive, and highly effective.
 """
 
@@ -47,9 +47,9 @@ console = Console()
 @click.option('--quiet', '-q', is_flag=True, help='Suppress output')
 def cli(verbose: bool, quiet: bool):
     """
-    Claude RAG - Fast semantic code search that actually works.
+    Mini RAG - Fast semantic code search that actually works.
     
-    A local RAG system for improving Claude Code's grounding capabilities.
+    A local RAG system for improving the development environment's grounding capabilities.
     Indexes your codebase and enables lightning-fast semantic search.
     """
     if verbose:
@@ -71,10 +71,10 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
     """Initialize RAG index for a project."""
     project_path = Path(path).resolve()
     
-    console.print(f"\n[bold cyan]Initializing Claude RAG for:[/bold cyan] {project_path}\n")
+    console.print(f"\n[bold cyan]Initializing Mini RAG for:[/bold cyan] {project_path}\n")
     
     # Check if already initialized
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     force_reindex = force or reindex
     if rag_dir.exists() and not force_reindex:
         console.print("[yellow][/yellow]  Project already initialized!")
@@ -131,9 +131,9 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
         
         # Show how to use
         console.print("\n[bold]Next steps:[/bold]")
-        console.print("  • Search your code: [cyan]claude-rag search \"your query\"[/cyan]")
-        console.print("  • Watch for changes: [cyan]claude-rag watch[/cyan]")
-        console.print("  • View statistics: [cyan]claude-rag stats[/cyan]\n")
+        console.print("  • Search your code: [cyan]mini-rag search \"your query\"[/cyan]")
+        console.print("  • Watch for changes: [cyan]mini-rag watch[/cyan]")
+        console.print("  • View statistics: [cyan]mini-rag stats[/cyan]\n")
         
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
@@ -160,9 +160,9 @@ def search(query: str, path: str, top_k: int, type: tuple, lang: tuple, show_con
     project_path = Path(path).resolve()
     
     # Check if indexed
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'claude-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
         sys.exit(1)
     
     # Get performance monitor
@@ -258,7 +258,7 @@ def search(query: str, path: str, top_k: int, type: tuple, lang: tuple, show_con
         # Show performance summary
         if monitor:
             monitor.print_summary()
-            console.print("  • Check if files are indexed with 'claude-rag stats'")
+            console.print("  • Check if files are indexed with 'mini-rag stats'")
         
     except Exception as e:
         console.print(f"\n[bold red]Search error:[/bold red] {e}")
@@ -274,9 +274,9 @@ def stats(path: str):
     project_path = Path(path).resolve()
     
     # Check if indexed
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'claude-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
         sys.exit(1)
     
     try:
@@ -343,7 +343,7 @@ def debug_schema(path: str):
     project_path = Path(path).resolve()
     
     try:
-        rag_dir = project_path / '.claude-rag'
+        rag_dir = project_path / '.mini-rag'
         
         if not rag_dir.exists():
             console.print("[red]No RAG index found. Run 'init' first.[/red]")
@@ -406,10 +406,10 @@ def watch(path: str, delay: float, silent: bool):
     project_path = Path(path).resolve()
     
     # Check if indexed
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
         if not silent:
-            console.print("[red]Error:[/red] Project not indexed. Run 'claude-rag init' first.")
+            console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
         sys.exit(1)
     
     try:
@@ -532,9 +532,9 @@ def update(path: str):
     project_path = Path(path).resolve()
     
     # Check if indexed
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'claude-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
         sys.exit(1)
     
     try:
@@ -558,21 +558,21 @@ def update(path: str):
 @cli.command()
 @click.option('--show-code', '-c', is_flag=True, help='Show example code')
 def info(show_code: bool):
-    """Show information about Claude RAG."""
+    """Show information about Mini RAG."""
     # Create info panel
     info_text = """
-[bold cyan]Claude RAG[/bold cyan] - Local Semantic Code Search
+[bold cyan]Mini RAG[/bold cyan] - Local Semantic Code Search
 
 [bold]Features:[/bold]
 • Fast code indexing with AST-aware chunking
 • Semantic search using CodeBERT embeddings
 • Real-time file watching and incremental updates
 • Language-aware parsing for Python, JS, Go, and more
-• MCP integration for Claude Code
+• MCP integration for the development environment
 
 [bold]How it works:[/bold]
 1. Indexes your codebase into semantic chunks
-2. Stores vectors locally in .claude-rag/ directory
+2. Stores vectors locally in .mini-rag/ directory
 3. Enables natural language search across your code
 4. Updates automatically as you modify files
 
@@ -582,28 +582,28 @@ def info(show_code: bool):
 • Storage: ~200MB for 10k files
 """
     
-    panel = Panel(info_text, title="About Claude RAG", border_style="cyan")
+    panel = Panel(info_text, title="About Mini RAG", border_style="cyan")
     console.print(panel)
     
     if show_code:
         console.print("\n[bold]Example Usage:[/bold]\n")
         
         code = """# Initialize a project
-claude-rag init
+mini-rag init
 
 # Search for code
-claude-rag search "database connection"
-claude-rag search "auth middleware" --type function
+mini-rag search "database connection"
+mini-rag search "auth middleware" --type function
 
 # Find specific functions or classes
-claude-rag find-function connect_to_db
-claude-rag find-class UserModel
+mini-rag find-function connect_to_db
+mini-rag find-class UserModel
 
 # Watch for changes
-claude-rag watch
+mini-rag watch
 
 # Get statistics
-claude-rag stats"""
+mini-rag stats"""
         
         syntax = Syntax(code, "bash", theme="monokai")
         console.print(syntax)
@@ -619,9 +619,9 @@ def server(path: str, port: int):
     project_path = Path(path).resolve()
     
     # Check if indexed
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'claude-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
         sys.exit(1)
     
     try:
@@ -667,7 +667,7 @@ def status(path: str, port: int, discovery: bool):
     
     # Check index status
     console.print("\n[bold]🗂️ Index Status:[/bold]")
-    rag_dir = project_path / '.claude-rag'
+    rag_dir = project_path / '.mini-rag'
     if rag_dir.exists():
         try:
             indexer = ProjectIndexer(project_path)

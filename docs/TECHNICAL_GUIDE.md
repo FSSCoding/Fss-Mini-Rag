@@ -562,7 +562,7 @@ def load_configuration(self, project_path: Path) -> RAGConfig:
         config = self._merge_configs(config, global_config)
     
     # 3. Apply project-specific config
-    project_config_path = project_path / '.claude-rag' / 'config.yaml'
+    project_config_path = project_path / '.mini-rag' / 'config.yaml'
     if project_config_path.exists():
         project_config = self._load_yaml_config(project_config_path)
         config = self._merge_configs(config, project_config)
@@ -714,7 +714,7 @@ The system validates data integrity and can recover from corruption:
 def validate_index_integrity(self, project_path: Path) -> bool:
     """Validate that the index is consistent and complete."""
     try:
-        rag_dir = project_path / '.claude-rag'
+        rag_dir = project_path / '.mini-rag'
         
         # Check required files exist
         required_files = ['manifest.json', 'database.lance']
@@ -751,10 +751,10 @@ def validate_index_integrity(self, project_path: Path) -> bool:
 def repair_index(self, project_path: Path) -> bool:
     """Attempt to repair a corrupted index."""
     try:
-        rag_dir = project_path / '.claude-rag'
+        rag_dir = project_path / '.mini-rag'
         
         # Create backup of existing index
-        backup_dir = rag_dir.parent / f'.claude-rag-backup-{int(time.time())}'
+        backup_dir = rag_dir.parent / f'.mini-rag-backup-{int(time.time())}'
         shutil.copytree(rag_dir, backup_dir)
         
         # Attempt repair operations

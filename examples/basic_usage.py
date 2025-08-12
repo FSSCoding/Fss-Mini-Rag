@@ -5,7 +5,7 @@ Shows how to index a project and search it programmatically.
 """
 
 from pathlib import Path
-from claude_rag import ProjectIndexer, CodeSearcher, CodeEmbedder
+from mini_rag import ProjectIndexer, CodeSearcher, CodeEmbedder
 
 def main():
     # Example project path - change this to your project

@@ -17,7 +17,7 @@ from unittest.mock import patch, MagicMock
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from claude_rag.search import SearchResult, CodeSearcher
+from mini_rag.search import SearchResult, CodeSearcher
 
 
 class TestSmartRanking(unittest.TestCase):

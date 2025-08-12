@@ -1,4 +1,4 @@
-"""Main entry point for claude_rag module."""
+"""Main entry point for mini_rag module."""
 
 from .cli import cli
 

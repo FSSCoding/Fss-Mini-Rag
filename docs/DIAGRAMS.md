@@ -210,7 +210,7 @@ graph LR
     subgraph "Configuration Sources"
         Default[🏭 Built-in Defaults]
         Global[🌍 ~/.config/fss-mini-rag/config.yaml]
-        Project[📁 project/.claude-rag/config.yaml]
+        Project[📁 project/.mini-rag/config.yaml]
         Env[🔧 Environment Variables]
     end
     

@@ -16,11 +16,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from claude_rag.llm_synthesizer import LLMSynthesizer  
-    from claude_rag.explorer import CodeExplorer
-    from claude_rag.config import RAGConfig
-    from claude_rag.indexer import ProjectIndexer
-    from claude_rag.search import CodeSearcher
+    from mini_rag.llm_synthesizer import LLMSynthesizer  
+    from mini_rag.explorer import CodeExplorer
+    from mini_rag.config import RAGConfig
+    from mini_rag.indexer import ProjectIndexer
+    from mini_rag.search import CodeSearcher
 except ImportError as e:
     print(f"❌ Could not import RAG components: {e}")
     print("   This test requires the full RAG system to be installed")
@@ -251,7 +251,7 @@ def main():
     print("=" * 40)
     
     # Check if we're in the right environment
-    if not Path("claude_rag").exists():
+    if not Path("mini_rag").exists():
         print("❌ Tests must be run from the FSS-Mini-RAG root directory")
         sys.exit(1)
     

@@ -13,7 +13,7 @@
 - **Helpful error messages**: In `rag-mini.py`, errors like "❌ Project not indexed" include the solution: "Run: rag-mini index /path/to/project"
 
 ### **Excellent Code Organization**
-- **Clean module structure**: `claude_rag/` contains all the core code with logical names like `chunker.py`, `search.py`, `indexer.py`
+- **Clean module structure**: `mini_rag/` contains all the core code with logical names like `chunker.py`, `search.py`, `indexer.py`
 - **Single responsibility**: Each file does one main thing - the chunker chunks, the searcher searches, etc.
 - **Good naming**: Functions like `index_project()`, `search_project()`, `status_check()` are self-explanatory
 

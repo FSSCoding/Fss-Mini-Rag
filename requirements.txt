@@ -1,4 +1,4 @@
-# Lightweight Claude RAG - Ollama Edition
+# Lightweight Mini RAG - Ollama Edition
 # Removed: torch, transformers, sentence-transformers (5.2GB+ saved)
 
 # Core vector database and data handling

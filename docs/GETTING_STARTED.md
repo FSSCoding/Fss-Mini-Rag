@@ -41,7 +41,7 @@ pip install -r requirements-full.txt
 # Index any project directory
 ./rag-mini index /path/to/your/project
 
-# The system creates .claude-rag/ directory with:
+# The system creates .mini-rag/ directory with:
 # - config.json (settings)
 # - manifest.json (file tracking)  
 # - database.lance/ (vector database)
@@ -62,7 +62,7 @@ pip install -r requirements-full.txt
 
 ## Step 5: Customize Configuration
 
-Edit `project/.claude-rag/config.json`:
+Edit `project/.mini-rag/config.json`:
 
 ```json
 {
@@ -109,7 +109,7 @@ Then re-index to apply changes:
 ## Python API Usage
 
 ```python
-from claude_rag import ProjectIndexer, CodeSearcher, CodeEmbedder
+from mini_rag import ProjectIndexer, CodeSearcher, CodeEmbedder
 from pathlib import Path
 
 # Initialize
@@ -149,7 +149,7 @@ for i, result in enumerate(results, 1):
 
 ### File Watching
 ```python  
-from claude_rag import FileWatcher
+from mini_rag import FileWatcher
 
 # Watch for file changes and auto-update index
 watcher = FileWatcher(project_path, indexer)
@@ -160,7 +160,7 @@ watcher.start_watching()
 
 ### Custom Chunking
 ```python
-from claude_rag import CodeChunker
+from mini_rag import CodeChunker
 
 chunker = CodeChunker()
 
@@ -194,9 +194,9 @@ for chunk in chunks:
 
 ### For Troubleshooting
 - Check `./rag-mini status` to see what was indexed
-- Look at `.claude-rag/manifest.json` for file details
+- Look at `.mini-rag/manifest.json` for file details
 - Run with `--force` to completely rebuild index
-- Check logs in `.claude-rag/` directory for errors
+- Check logs in `.mini-rag/` directory for errors
 
 ## What's Next?
 

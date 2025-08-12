@@ -4,8 +4,8 @@
 import tempfile
 import shutil
 from pathlib import Path
-from claude_rag.indexer import ProjectIndexer
-from claude_rag.search import CodeSearcher
+from mini_rag.indexer import ProjectIndexer
+from mini_rag.search import CodeSearcher
 
 # Sample Python file with proper structure
 sample_code = '''"""
@@ -127,7 +127,7 @@ Markdown files are chunked by sections with:
 ### Basic Example
 
 ```python
-from claude_rag import ProjectIndexer
+from mini_rag import ProjectIndexer
 
 indexer = ProjectIndexer("/path/to/project")
 indexer.index_project()
@@ -138,7 +138,7 @@ indexer.index_project()
 You can customize the chunking behavior:
 
 ```python
-from claude_rag import CodeChunker
+from mini_rag import CodeChunker
 
 chunker = CodeChunker(
     max_chunk_size=1000,
