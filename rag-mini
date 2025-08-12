@@ -1,0 +1,343 @@
+#!/bin/bash
+# rag-mini - Unified FSS-Mini-RAG Entry Point
+# Intelligent routing based on user experience and intent
+
+set -e
+
+# Colors for better UX
+RED='\033[0;31m'
+GREEN='\033[0;32m' 
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ============================================================================
+# ENVIRONMENT SETUP - Handles finding/creating Python virtual environment
+# ============================================================================
+
+# Find Python executable - tries installed version first, then experimental auto-setup
+setup_environment() {
+    # Look for properly installed virtual environment
+    local installed_python="$SCRIPT_DIR/.venv/bin/python3"
+    
+    # Check if we have a working installation (normal case)
+    if [ -f "$installed_python" ] && "$installed_python" -c "import sys" >/dev/null 2>&1; then
+        echo "$installed_python"  # Return path to Python
+        return 0
+    fi
+    
+    # No installation found - try experimental auto-setup
+    show_experimental_warning
+    attempt_auto_setup || show_installation_help
+}
+
+# Show clear warning about experimental feature
+show_experimental_warning() {
+    echo -e "${YELLOW}⚠️  EXPERIMENTAL: Auto-setup mode${NC}" >&2
+    echo -e "${CYAN}This is a convenience feature that may not work on all systems.${NC}" >&2
+    echo -e "${CYAN}For reliable installation, please run: ${BOLD}./install_mini_rag.sh${NC}" >&2
+    echo "" >&2
+}
+
+# Try to automatically create virtual environment and install dependencies
+attempt_auto_setup() {
+    local venv_python="$SCRIPT_DIR/.venv/bin/python3"
+    
+    # Step 1: Create virtual environment
+    if ! command -v python3 >/dev/null; then
+        return 1  # No Python available
+    fi
+    
+    if ! python3 -m venv "$SCRIPT_DIR/.venv" >/dev/null 2>&1; then
+        return 1  # Virtual environment creation failed
+    fi
+    
+    echo -e "${GREEN}✅ Created virtual environment${NC}" >&2
+    
+    # Step 2: Install dependencies
+    if ! "$SCRIPT_DIR/.venv/bin/pip" install -r "$SCRIPT_DIR/requirements.txt" >/dev/null 2>&1; then
+        return 1  # Dependency installation failed
+    fi
+    
+    echo -e "${GREEN}✅ Installed dependencies${NC}" >&2
+    echo "$venv_python"  # Return path to new Python
+    return 0
+}
+
+# Show helpful installation instructions when auto-setup fails
+show_installation_help() {
+    echo -e "${RED}❌ Auto-setup failed${NC}" >&2
+    echo "" >&2
+    echo -e "${BOLD}Please run the proper installer:${NC}" >&2
+    echo "   ${CYAN}./install_mini_rag.sh${NC}" >&2
+    echo "" >&2
+    echo -e "${BOLD}Or manual setup:${NC}" >&2
+    echo "   python3 -m venv .venv" >&2
+    echo "   source .venv/bin/activate" >&2
+    echo "   pip install -r requirements.txt" >&2
+    echo "" >&2
+    echo -e "${YELLOW}Common issues and solutions:${NC}" >&2
+    echo "   • Missing python3-venv: sudo apt install python3-venv" >&2
+    echo "   • Network issues: Check internet connection" >&2
+    echo "   • Permission issues: Check folder write permissions" >&2
+    exit 1
+}
+
+# Get Python executable (this runs the setup if needed)
+PYTHON=$(setup_environment)
+
+# ============================================================================
+# HELP AND USER INTERFACE FUNCTIONS - Show information and guide users
+# ============================================================================
+
+# Show intelligent help based on arguments
+show_help() {
+    echo -e "${CYAN}${BOLD}FSS-Mini-RAG - Semantic Code Search${NC}"
+    echo ""
+    echo -e "${BOLD}Quick Start:${NC}"
+    echo "  rag-mini                      # Interactive interface (beginners)"
+    echo "  rag-mini index /path/to/project    # Index project (developers)"
+    echo "  rag-mini search /path \"query\"      # Search project (experts)"
+    echo ""
+    echo -e "${BOLD}Learning Path:${NC}"
+    echo "  rag-mini tutorial             # Interactive guided tutorial"
+    echo "  rag-mini demo                 # Quick demo with sample project"
+    echo "  rag-mini quick-start          # 2-minute setup + first search"
+    echo ""
+    echo -e "${BOLD}Main Commands:${NC}"
+    echo "  rag-mini index <project_path>      # Index project for search"
+    echo "  rag-mini search <project_path> <query>  # Search indexed project"
+    echo "  rag-mini status <project_path>     # Show project status"
+    echo ""
+    echo -e "${BOLD}Interfaces:${NC}"
+    echo "  rag-mini tui                  # Text user interface"
+    echo "  rag-mini cli                  # Advanced CLI features"
+    echo "  rag-mini server               # Start background server"
+    echo ""
+    echo -e "${BOLD}Help & Learning:${NC}"
+    echo "  rag-mini help                 # This help message"
+    echo "  rag-mini docs                 # Open documentation"
+    echo "  rag-mini examples             # Show usage examples"
+    echo ""
+    echo -e "${CYAN}New to RAG systems? Start with: ${BOLD}rag-mini tutorial${NC}"
+    echo -e "${CYAN}Just want to search? Run: ${BOLD}rag-mini${NC} (interactive mode)"
+}
+
+# Show usage examples
+show_examples() {
+    echo -e "${CYAN}${BOLD}FSS-Mini-RAG Usage Examples${NC}"
+    echo ""
+    echo -e "${BOLD}Find code by concept:${NC}"
+    echo "  rag-mini search ~/myproject \"user authentication\""
+    echo "  # Finds: login functions, auth middleware, session handling"
+    echo ""
+    echo -e "${BOLD}Natural language queries:${NC}"
+    echo "  rag-mini search ~/myproject \"error handling for database connections\""
+    echo "  # Finds: try/catch blocks, connection error handlers, retry logic"
+    echo ""
+    echo -e "${BOLD}Development workflow:${NC}"
+    echo "  rag-mini index ~/new-project              # Index once"
+    echo "  rag-mini search ~/new-project \"API endpoints\"   # Search as needed"
+    echo "  rag-mini status ~/new-project            # Check health"
+    echo ""
+    echo -e "${BOLD}Interactive mode (easiest):${NC}"
+    echo "  rag-mini                            # Menu-driven interface"
+    echo "  rag-mini tui                        # Same as above"
+    echo ""
+    echo -e "${BOLD}Advanced features:${NC}"
+    echo "  rag-mini cli search ~/project \"query\" --limit 20"
+    echo "  rag-mini cli similar ~/project \"def validate_input\""
+    echo "  rag-mini cli analyze ~/project          # Get optimization suggestions"
+}
+
+# Run interactive tutorial
+run_tutorial() {
+    echo -e "${CYAN}${BOLD}FSS-Mini-RAG Interactive Tutorial${NC}"
+    echo ""
+    echo "This tutorial will guide you through:"
+    echo "  1. Understanding what RAG systems do"
+    echo "  2. Indexing a sample project" 
+    echo "  3. Performing semantic searches"
+    echo "  4. Understanding results"
+    echo "  5. Advanced features"
+    echo ""
+    echo -n "Continue with tutorial? [Y/n]: "
+    read -r response
+    if [[ $response =~ ^[Nn]$ ]]; then
+        echo "Tutorial cancelled"
+        exit 0
+    fi
+    
+    # Launch TUI in tutorial mode
+    export RAG_TUTORIAL_MODE=1
+    "$PYTHON" "$SCRIPT_DIR/rag-tui.py" tutorial
+}
+
+# Quick demo with sample project
+run_demo() {
+    echo -e "${CYAN}${BOLD}FSS-Mini-RAG Quick Demo${NC}"
+    echo ""
+    echo "Demonstrating semantic search on this RAG system itself..."
+    echo ""
+    
+    # Index this project if not already indexed
+    if [ ! -d "$SCRIPT_DIR/.claude-rag" ]; then
+        echo "Indexing FSS-Mini-RAG system for demo..."
+        "$SCRIPT_DIR/rag-mini" index "$SCRIPT_DIR"
+        echo ""
+    fi
+    
+    echo -e "${BOLD}Demo searches:${NC}"
+    echo ""
+    
+    echo -e "${YELLOW}1. Finding embedding-related code:${NC}"
+    "$SCRIPT_DIR/rag-mini" search "$SCRIPT_DIR" "embedding system" --limit 3
+    echo ""
+    
+    echo -e "${YELLOW}2. Finding search functionality:${NC}"
+    "$SCRIPT_DIR/rag-mini" search "$SCRIPT_DIR" "semantic search implementation" --limit 3
+    echo ""
+    
+    echo -e "${YELLOW}3. Finding configuration code:${NC}"
+    "$SCRIPT_DIR/rag-mini" search "$SCRIPT_DIR" "YAML configuration" --limit 3
+    echo ""
+    
+    echo -e "${GREEN}Demo complete! Try your own searches:${NC}"
+    echo "  rag-mini search $SCRIPT_DIR \"your query here\""
+}
+
+# Quick start workflow
+run_quick_start() {
+    echo -e "${CYAN}${BOLD}FSS-Mini-RAG Quick Start${NC}"
+    echo ""
+    echo "Let's get you searching in 2 minutes!"
+    echo ""
+    
+    # Get project path
+    echo -n "Enter path to project you want to search: "
+    read -r project_path
+    
+    if [ -z "$project_path" ]; then
+        echo "No path provided - using current directory"
+        project_path="."
+    fi
+    
+    # Expand path
+    project_path=$(realpath "$project_path")
+    
+    if [ ! -d "$project_path" ]; then
+        echo -e "${RED}❌ Directory not found: $project_path${NC}"
+        exit 1
+    fi
+    
+    echo ""
+    echo -e "${BOLD}Step 1: Indexing project...${NC}"
+    "$SCRIPT_DIR/rag-mini" index "$project_path"
+    
+    echo ""
+    echo -e "${BOLD}Step 2: Try a search!${NC}"
+    echo -n "Enter search query (e.g., 'user authentication', 'error handling'): "
+    read -r query
+    
+    if [ -n "$query" ]; then
+        echo ""
+        echo -e "${BOLD}Step 3: Search results:${NC}"
+        "$SCRIPT_DIR/rag-mini" search "$project_path" "$query"
+        
+        echo ""
+        echo -e "${GREEN}✅ Quick start complete!${NC}"
+        echo ""
+        echo -e "${BOLD}What's next?${NC}"
+        echo "  • Try different search queries: rag-mini search \"$project_path\" \"your query\""
+        echo "  • Use the TUI interface: rag-mini tui"
+        echo "  • Learn advanced features: rag-mini help"
+    fi
+}
+
+# Open documentation
+open_docs() {
+    echo -e "${CYAN}${BOLD}FSS-Mini-RAG Documentation${NC}"
+    echo ""
+    echo -e "${BOLD}Available documentation:${NC}"
+    echo "  • README.md - Main overview and quick start"
+    echo "  • docs/TECHNICAL_GUIDE.md - How the system works"
+    echo "  • docs/TUI_GUIDE.md - Complete TUI walkthrough"
+    echo "  • docs/GETTING_STARTED.md - Step-by-step setup"
+    echo ""
+    
+    if command -v less >/dev/null; then
+        echo -n "View README now? [Y/n]: "
+        read -r response
+        if [[ ! $response =~ ^[Nn]$ ]]; then
+            less "$SCRIPT_DIR/README.md"
+        fi
+    else
+        echo "To read documentation:"
+        echo "  cat README.md"
+        echo "  cat docs/TECHNICAL_GUIDE.md"
+    fi
+}
+
+# ============================================================================
+# MAIN PROGRAM - Route commands to appropriate functions
+# ============================================================================
+
+# Detect user intent and route appropriately
+main() {
+    case "${1:-}" in
+        "")
+            # No arguments - launch interactive TUI
+            exec "$PYTHON" "$SCRIPT_DIR/rag-tui.py"
+            ;;
+        "help"|"--help"|"-h")
+            show_help
+            ;;
+        "examples")
+            show_examples
+            ;;
+        "tutorial")
+            run_tutorial
+            ;;
+        "demo")
+            run_demo
+            ;;
+        "quick-start"|"quickstart")
+            run_quick_start
+            ;;
+        "docs"|"documentation")
+            open_docs
+            ;;
+        "tui")
+            # Explicit TUI request
+            exec "$PYTHON" "$SCRIPT_DIR/rag-tui.py"
+            ;;
+        "cli")
+            # Advanced CLI features
+            shift
+            exec "$SCRIPT_DIR/rag-mini-enhanced" "$@"
+            ;;
+        "server")
+            # Start server mode
+            shift
+            exec "$PYTHON" "$SCRIPT_DIR/claude_rag/server.py" "$@"
+            ;;
+        "index"|"search"|"status")
+            # Direct CLI commands
+            exec "$SCRIPT_DIR/rag-mini" "$@"
+            ;;
+        *)
+            # Unknown command - show help
+            echo -e "${RED}❌ Unknown command: $1${NC}"
+            echo ""
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

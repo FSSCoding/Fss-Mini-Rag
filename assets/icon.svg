@@ -1,0 +1,35 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#e3f2fd" stroke="#1976d2" stroke-width="4"/>
+  
+  <!-- Search magnifying glass -->
+  <circle cx="48" cy="48" r="18" fill="none" stroke="#1976d2" stroke-width="4"/>
+  <line x1="62" y1="62" x2="76" y2="76" stroke="#1976d2" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Code brackets -->
+  <path d="M20 35 L10 45 L20 55" fill="none" stroke="#4caf50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M108 35 L118 45 L108 55" fill="none" stroke="#4caf50" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Neural network dots -->
+  <circle cx="85" cy="25" r="3" fill="#ff9800"/>
+  <circle cx="100" cy="35" r="3" fill="#ff9800"/>
+  <circle cx="90" cy="45" r="3" fill="#ff9800"/>
+  <circle cx="105" cy="55" r="3" fill="#ff9800"/>
+  
+  <!-- Connection lines -->
+  <line x1="85" y1="25" x2="100" y2="35" stroke="#ff9800" stroke-width="2" opacity="0.7"/>
+  <line x1="100" y1="35" x2="90" y2="45" stroke="#ff9800" stroke-width="2" opacity="0.7"/>
+  <line x1="90" y1="45" x2="105" y2="55" stroke="#ff9800" stroke-width="2" opacity="0.7"/>
+  
+  <!-- Text elements -->
+  <rect x="15" y="75" width="25" height="3" fill="#666" rx="1"/>
+  <rect x="15" y="82" width="35" height="3" fill="#666" rx="1"/>
+  <rect x="15" y="89" width="20" height="3" fill="#666" rx="1"/>
+  
+  <rect x="60" y="85" width="30" height="3" fill="#2196f3" rx="1"/>
+  <rect x="60" y="92" width="25" height="3" fill="#2196f3" rx="1"/>
+  <rect x="60" y="99" width="35" height="3" fill="#2196f3" rx="1"/>
+  
+  <!-- "RAG" text -->
+  <text x="64" y="118" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1976d2">RAG</text>
+</svg>

@@ -1,0 +1,43 @@
+# FSS-Mini-RAG Configuration
+# Edit this file to customize indexing and search behavior
+# See docs/GETTING_STARTED.md for detailed explanations
+
+# Text chunking settings
+chunking:
+  max_size: 2000      # Maximum characters per chunk
+  min_size: 150       # Minimum characters per chunk
+  strategy: semantic  # 'semantic' (language-aware) or 'fixed'
+
+# Large file streaming settings
+streaming:
+  enabled: true
+  threshold_bytes: 1048576  # Files larger than this use streaming (1MB)
+
+# File processing settings
+files:
+  min_file_size: 50        # Skip files smaller than this
+  exclude_patterns:
+    - "node_modules/**"
+    - ".git/**"
+    - "__pycache__/**"
+    - "*.pyc"
+    - ".venv/**"
+    - "venv/**"
+    - "build/**"
+    - "dist/**"
+  include_patterns:
+    - "**/*"                  # Include all files by default
+
+# Embedding generation settings
+embedding:
+  preferred_method: ollama     # 'ollama', 'ml', 'hash', or 'auto'
+  ollama_model: nomic-embed-text
+  ollama_host: localhost:11434
+  ml_model: sentence-transformers/all-MiniLM-L6-v2
+  batch_size: 32               # Embeddings processed per batch
+
+# Search behavior settings
+search:
+  default_limit: 10           # Default number of results
+  enable_bm25: true             # Enable keyword matching boost
+  similarity_threshold: 0.1        # Minimum similarity score

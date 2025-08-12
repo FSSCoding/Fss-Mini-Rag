@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+"""
+rag-mini - FSS-Mini-RAG Command Line Interface
+
+A lightweight, portable RAG system for semantic code search.
+Usage: rag-mini <command> <project_path> [options]
+"""
+
+import sys
+import argparse
+from pathlib import Path
+import json
+import logging
+
+# Add the RAG system to the path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from claude_rag.indexer import ProjectIndexer
+from claude_rag.search import CodeSearcher
+from claude_rag.ollama_embeddings import OllamaEmbedder
+
+# Configure logging for user-friendly output
+logging.basicConfig(
+    level=logging.WARNING,  # Only show warnings and errors by default
+    format='%(levelname)s: %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def index_project(project_path: Path, force: bool = False):
+    """Index a project directory."""
+    try:
+        # Show what's happening
+        action = "Re-indexing" if force else "Indexing"
+        print(f"🚀 {action} {project_path.name}")
+        
+        # Quick pre-check
+        rag_dir = project_path / '.claude-rag'
+        if rag_dir.exists() and not force:
+            print("   Checking for changes...")
+        
+        indexer = ProjectIndexer(project_path)
+        result = indexer.index_project(force_reindex=force)
+        
+        # Show results with context
+        files_count = result.get('files_indexed', 0)
+        chunks_count = result.get('chunks_created', 0)
+        time_taken = result.get('time_taken', 0)
+        
+        if files_count == 0:
+            print("✅ Index up to date - no changes detected")
+        else:
+            print(f"✅ Indexed {files_count} files in {time_taken:.1f}s")
+            print(f"   Created {chunks_count} chunks")
+            
+            # Show efficiency
+            if time_taken > 0:
+                speed = files_count / time_taken
+                print(f"   Speed: {speed:.1f} files/sec")
+        
+        # Show warnings if any
+        failed_count = result.get('files_failed', 0)
+        if failed_count > 0:
+            print(f"⚠️  {failed_count} files failed (check logs with --verbose)")
+        
+        # Quick tip for first-time users
+        if not (project_path / '.claude-rag' / 'last_search').exists():
+            print(f"\n💡 Try: rag-mini search {project_path} \"your search here\"")
+            
+    except Exception as e:
+        print(f"❌ Indexing failed: {e}")
+        print(f"   Use --verbose for details")
+        sys.exit(1)
+
+def search_project(project_path: Path, query: str, limit: int = 5):
+    """Search a project directory."""
+    try:
+        # Check if indexed first
+        rag_dir = project_path / '.claude-rag'
+        if not rag_dir.exists():
+            print(f"❌ Project not indexed: {project_path.name}")
+            print(f"   Run: rag-mini index {project_path}")
+            sys.exit(1)
+        
+        print(f"🔍 Searching \"{query}\" in {project_path.name}")
+        searcher = CodeSearcher(project_path)
+        results = searcher.search(query, top_k=limit)
+        
+        if not results:
+            print("❌ No results found")
+            print("\n💡 Try:")
+            print("   • Broader search terms")
+            print("   • Check spelling")
+            print("   • Use concepts: \"authentication\" instead of \"auth_handler\"")
+            return
+            
+        print(f"✅ Found {len(results)} results:")
+        print()
+        
+        for i, result in enumerate(results, 1):
+            # Clean up file path display
+            rel_path = result.file_path.relative_to(project_path) if result.file_path.is_absolute() else result.file_path
+            
+            print(f"{i}. {rel_path}")
+            print(f"   Score: {result.score:.3f}")
+            
+            # Show line info if available
+            if hasattr(result, 'start_line') and result.start_line:
+                print(f"   Lines: {result.start_line}-{result.end_line}")
+            
+            # Show content preview  
+            if hasattr(result, 'name') and result.name:
+                print(f"   Context: {result.name}")
+            
+            # Show full content with proper formatting
+            print(f"   Content:")
+            content_lines = result.content.strip().split('\n')
+            for line in content_lines[:10]:  # Show up to 10 lines
+                print(f"     {line}")
+            
+            if len(content_lines) > 10:
+                print(f"     ... ({len(content_lines) - 10} more lines)")
+                print(f"     Use --verbose or rag-mini-enhanced for full context")
+            
+            print()
+        
+        # Save last search for potential enhancements
+        try:
+            (rag_dir / 'last_search').write_text(query)
+        except:
+            pass  # Don't fail if we can't save
+            
+    except Exception as e:
+        print(f"❌ Search failed: {e}")
+        if "not indexed" in str(e).lower():
+            print(f"   Run: rag-mini index {project_path}")
+        else:
+            print("   Use --verbose for details")
+        sys.exit(1)
+
+def status_check(project_path: Path):
+    """Show status of RAG system."""
+    try:
+        print(f"📊 Status for {project_path.name}")
+        print()
+        
+        # Check project indexing status first
+        rag_dir = project_path / '.claude-rag'
+        if not rag_dir.exists():
+            print("❌ Project not indexed")
+            print(f"   Run: rag-mini index {project_path}")
+            print()
+        else:
+            manifest = rag_dir / 'manifest.json'
+            if manifest.exists():
+                try:
+                    with open(manifest) as f:
+                        data = json.load(f)
+                    
+                    file_count = data.get('file_count', 0)
+                    chunk_count = data.get('chunk_count', 0)
+                    indexed_at = data.get('indexed_at', 'Never')
+                    
+                    print("✅ Project indexed")
+                    print(f"   Files: {file_count}")
+                    print(f"   Chunks: {chunk_count}")
+                    print(f"   Last update: {indexed_at}")
+                    
+                    # Show average chunks per file
+                    if file_count > 0:
+                        avg_chunks = chunk_count / file_count
+                        print(f"   Avg chunks/file: {avg_chunks:.1f}")
+                    
+                    print()
+                except Exception:
+                    print("⚠️  Index exists but manifest unreadable")
+                    print()
+            else:
+                print("⚠️  Index directory exists but incomplete")
+                print(f"   Try: rag-mini index {project_path} --force")
+                print()
+        
+        # Check embedding system status
+        print("🧠 Embedding System:")
+        try:
+            embedder = OllamaEmbedder()
+            emb_info = embedder.get_embedding_info()
+            method = emb_info.get('method', 'unknown')
+            
+            if method == 'ollama':
+                print("   ✅ Ollama (high quality)")
+            elif method == 'ml':
+                print("   ✅ ML fallback (good quality)")
+            elif method == 'hash':
+                print("   ⚠️  Hash fallback (basic quality)")
+            else:
+                print(f"   ❓ Unknown method: {method}")
+                
+            # Show additional details if available
+            if 'model' in emb_info:
+                print(f"   Model: {emb_info['model']}")
+                
+        except Exception as e:
+            print(f"   ❌ Status check failed: {e}")
+            
+        # Show last search if available
+        last_search_file = rag_dir / 'last_search' if rag_dir.exists() else None
+        if last_search_file and last_search_file.exists():
+            try:
+                last_query = last_search_file.read_text().strip()
+                print(f"\n🔍 Last search: \"{last_query}\"")
+            except:
+                pass
+            
+    except Exception as e:
+        print(f"❌ Status check failed: {e}")
+        sys.exit(1)
+
+def main():
+    """Main CLI interface."""
+    parser = argparse.ArgumentParser(
+        description="FSS-Mini-RAG - Lightweight semantic code search",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  rag-mini index /path/to/project          # Index a project
+  rag-mini search /path/to/project "query" # Search indexed project
+  rag-mini status /path/to/project         # Show status
+        """
+    )
+    
+    parser.add_argument('command', choices=['index', 'search', 'status'],
+                       help='Command to execute')
+    parser.add_argument('project_path', type=Path,
+                       help='Path to project directory (REQUIRED)')
+    parser.add_argument('query', nargs='?',
+                       help='Search query (for search command)')
+    parser.add_argument('--force', action='store_true',
+                       help='Force reindex all files')
+    parser.add_argument('--limit', type=int, default=5,
+                       help='Maximum number of search results')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Enable verbose logging')
+    
+    args = parser.parse_args()
+    
+    # Set logging level
+    if args.verbose:
+        logging.getLogger().setLevel(logging.INFO)
+    
+    # Validate project path
+    if not args.project_path.exists():
+        print(f"❌ Project path does not exist: {args.project_path}")
+        sys.exit(1)
+        
+    if not args.project_path.is_dir():
+        print(f"❌ Project path is not a directory: {args.project_path}")
+        sys.exit(1)
+    
+    # Execute command
+    if args.command == 'index':
+        index_project(args.project_path, args.force)
+    elif args.command == 'search':
+        if not args.query:
+            print("❌ Search query required")
+            sys.exit(1)
+        search_project(args.project_path, args.query, args.limit)
+    elif args.command == 'status':
+        status_check(args.project_path)
+
+if __name__ == '__main__':
+    main()

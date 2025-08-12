@@ -1,0 +1,216 @@
+"""
+Configuration management for FSS-Mini-RAG.
+Handles loading, saving, and validation of YAML config files.
+"""
+
+import yaml
+import logging
+from pathlib import Path
+from typing import Dict, Any, Optional
+from dataclasses import dataclass, asdict
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ChunkingConfig:
+    """Configuration for text chunking."""
+    max_size: int = 2000
+    min_size: int = 150
+    strategy: str = "semantic"  # "semantic" or "fixed"
+
+
+@dataclass
+class StreamingConfig:
+    """Configuration for large file streaming."""
+    enabled: bool = True
+    threshold_bytes: int = 1048576  # 1MB
+
+
+@dataclass
+class FilesConfig:
+    """Configuration for file processing."""
+    min_file_size: int = 50
+    exclude_patterns: list = None
+    include_patterns: list = None
+    
+    def __post_init__(self):
+        if self.exclude_patterns is None:
+            self.exclude_patterns = [
+                "node_modules/**",
+                ".git/**", 
+                "__pycache__/**",
+                "*.pyc",
+                ".venv/**",
+                "venv/**",
+                "build/**",
+                "dist/**"
+            ]
+        if self.include_patterns is None:
+            self.include_patterns = ["**/*"]  # Include everything by default
+
+
+@dataclass
+class EmbeddingConfig:
+    """Configuration for embedding generation."""
+    preferred_method: str = "ollama"  # "ollama", "ml", "hash", "auto"
+    ollama_model: str = "nomic-embed-text"
+    ollama_host: str = "localhost:11434"
+    ml_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    batch_size: int = 32
+
+
+@dataclass
+class SearchConfig:
+    """Configuration for search behavior."""
+    default_limit: int = 10
+    enable_bm25: bool = True
+    similarity_threshold: float = 0.1
+
+
+@dataclass
+class RAGConfig:
+    """Main RAG system configuration."""
+    chunking: ChunkingConfig = None
+    streaming: StreamingConfig = None  
+    files: FilesConfig = None
+    embedding: EmbeddingConfig = None
+    search: SearchConfig = None
+    
+    def __post_init__(self):
+        if self.chunking is None:
+            self.chunking = ChunkingConfig()
+        if self.streaming is None:
+            self.streaming = StreamingConfig()
+        if self.files is None:
+            self.files = FilesConfig()
+        if self.embedding is None:
+            self.embedding = EmbeddingConfig()
+        if self.search is None:
+            self.search = SearchConfig()
+
+
+class ConfigManager:
+    """Manages configuration loading, saving, and validation."""
+    
+    def __init__(self, project_path: Path):
+        self.project_path = Path(project_path)
+        self.rag_dir = self.project_path / '.claude-rag'
+        self.config_path = self.rag_dir / 'config.yaml'
+        
+    def load_config(self) -> RAGConfig:
+        """Load configuration from YAML file or create default."""
+        if not self.config_path.exists():
+            logger.info(f"No config found at {self.config_path}, creating default")
+            config = RAGConfig()
+            self.save_config(config)
+            return config
+            
+        try:
+            with open(self.config_path, 'r') as f:
+                data = yaml.safe_load(f)
+                
+            if not data:
+                logger.warning("Empty config file, using defaults")
+                return RAGConfig()
+                
+            # Convert nested dicts back to dataclass instances
+            config = RAGConfig()
+            
+            if 'chunking' in data:
+                config.chunking = ChunkingConfig(**data['chunking'])
+            if 'streaming' in data:
+                config.streaming = StreamingConfig(**data['streaming'])
+            if 'files' in data:
+                config.files = FilesConfig(**data['files'])
+            if 'embedding' in data:
+                config.embedding = EmbeddingConfig(**data['embedding'])
+            if 'search' in data:
+                config.search = SearchConfig(**data['search'])
+                
+            return config
+            
+        except Exception as e:
+            logger.error(f"Failed to load config from {self.config_path}: {e}")
+            logger.info("Using default configuration")
+            return RAGConfig()
+    
+    def save_config(self, config: RAGConfig):
+        """Save configuration to YAML file with comments."""
+        try:
+            self.rag_dir.mkdir(exist_ok=True)
+            
+            # Convert to dict for YAML serialization
+            config_dict = asdict(config)
+            
+            # Create YAML content with comments
+            yaml_content = self._create_yaml_with_comments(config_dict)
+            
+            with open(self.config_path, 'w') as f:
+                f.write(yaml_content)
+                
+            logger.info(f"Configuration saved to {self.config_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save config to {self.config_path}: {e}")
+    
+    def _create_yaml_with_comments(self, config_dict: Dict[str, Any]) -> str:
+        """Create YAML content with helpful comments."""
+        yaml_lines = [
+            "# FSS-Mini-RAG Configuration",
+            "# Edit this file to customize indexing and search behavior",
+            "# See docs/GETTING_STARTED.md for detailed explanations",
+            "",
+            "# Text chunking settings",
+            "chunking:",
+            f"  max_size: {config_dict['chunking']['max_size']}      # Maximum characters per chunk",
+            f"  min_size: {config_dict['chunking']['min_size']}       # Minimum characters per chunk", 
+            f"  strategy: {config_dict['chunking']['strategy']}    # 'semantic' (language-aware) or 'fixed'",
+            "",
+            "# Large file streaming settings", 
+            "streaming:",
+            f"  enabled: {str(config_dict['streaming']['enabled']).lower()}",
+            f"  threshold_bytes: {config_dict['streaming']['threshold_bytes']}  # Files larger than this use streaming (1MB)",
+            "",
+            "# File processing settings",
+            "files:",
+            f"  min_file_size: {config_dict['files']['min_file_size']}        # Skip files smaller than this",
+            "  exclude_patterns:",
+        ]
+        
+        for pattern in config_dict['files']['exclude_patterns']:
+            yaml_lines.append(f"    - \"{pattern}\"")
+        
+        yaml_lines.extend([
+            "  include_patterns:",
+            "    - \"**/*\"                  # Include all files by default",
+            "",
+            "# Embedding generation settings",
+            "embedding:",
+            f"  preferred_method: {config_dict['embedding']['preferred_method']}     # 'ollama', 'ml', 'hash', or 'auto'",
+            f"  ollama_model: {config_dict['embedding']['ollama_model']}",
+            f"  ollama_host: {config_dict['embedding']['ollama_host']}",
+            f"  ml_model: {config_dict['embedding']['ml_model']}",
+            f"  batch_size: {config_dict['embedding']['batch_size']}               # Embeddings processed per batch",
+            "",
+            "# Search behavior settings", 
+            "search:",
+            f"  default_limit: {config_dict['search']['default_limit']}           # Default number of results",
+            f"  enable_bm25: {str(config_dict['search']['enable_bm25']).lower()}             # Enable keyword matching boost",
+            f"  similarity_threshold: {config_dict['search']['similarity_threshold']}        # Minimum similarity score",
+        ])
+        
+        return '\n'.join(yaml_lines)
+    
+    def update_config(self, **kwargs) -> RAGConfig:
+        """Update specific configuration values."""
+        config = self.load_config()
+        
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+            else:
+                logger.warning(f"Unknown config key: {key}")
+        
+        self.save_config(config)
+        return config

@@ -1,0 +1,167 @@
+#!/bin/bash
+# rag-mini-enhanced - FSS-Mini-RAG with smart features
+# Enhanced version with intelligent defaults and better UX
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+
+# Check if venv exists
+if [ ! -f "$PYTHON" ]; then
+    echo "❌ Virtual environment not found at $SCRIPT_DIR/.venv"
+    exit 1
+fi
+
+# Enhanced search with smart features
+smart_search() {
+    local project_path="$1"
+    local query="$2"
+    local limit="${3:-5}"
+    
+    # Smart query enhancement
+    enhanced_query="$query"
+    
+    # Add context clues based on query type
+    if [[ "$query" =~ ^[A-Z][a-zA-Z]*$ ]]; then
+        # Looks like a class name
+        enhanced_query="class $query OR function $query OR def $query"
+    elif [[ "$query" =~ [a-z_]+\(\) ]]; then
+        # Looks like a function call
+        func_name="${query%()}"
+        enhanced_query="def $func_name OR function $func_name"
+    fi
+    
+    echo "🔍 Smart search: '$enhanced_query' in $project_path"
+    "$PYTHON" "$SCRIPT_DIR/rag-mini.py" search "$project_path" "$enhanced_query" --limit "$limit"
+    
+    # Show related suggestions
+    echo ""
+    echo "💡 Try also:"
+    echo "   rag-mini-enhanced context '$project_path' '$query'  # Show surrounding code"
+    echo "   rag-mini-enhanced similar '$project_path' '$query'  # Find similar patterns"
+}
+
+# Context-aware search
+context_search() {
+    local project_path="$1"
+    local query="$2"
+    
+    echo "📖 Context search for: '$query'"
+    "$PYTHON" "$SCRIPT_DIR/rag-mini.py" search "$project_path" "$query" --limit 3
+    
+    # TODO: Add context expansion here
+    echo "   (Context expansion not yet implemented)"
+}
+
+# Similar pattern search
+similar_search() {
+    local project_path="$1"
+    local query="$2"
+    
+    echo "🔄 Finding similar patterns to: '$query'"
+    # Use semantic search with pattern-focused terms
+    pattern_query="similar to $query OR like $query OR pattern $query"
+    "$PYTHON" "$SCRIPT_DIR/rag-mini.py" search "$project_path" "$pattern_query" --limit 5
+}
+
+# Smart indexing with optimizations
+smart_index() {
+    local project_path="$1"
+    local force="$2"
+    
+    echo "🧠 Smart indexing: $project_path"
+    
+    # Check if we can optimize first
+    if [ -f "$project_path/.claude-rag/manifest.json" ]; then
+        echo "📊 Analyzing current index for optimization..."
+        "$PYTHON" "$SCRIPT_DIR/smart_config_suggestions.py" "$project_path/.claude-rag/manifest.json"
+        echo ""
+    fi
+    
+    # Run indexing
+    if [ "$force" = "--force" ]; then
+        "$PYTHON" "$SCRIPT_DIR/rag-mini.py" index "$project_path" --force
+    else
+        "$PYTHON" "$SCRIPT_DIR/rag-mini.py" index "$project_path"
+    fi
+}
+
+# Enhanced status with recommendations
+smart_status() {
+    local project_path="$1"
+    
+    "$PYTHON" "$SCRIPT_DIR/rag-mini.py" status "$project_path"
+    
+    # Add smart recommendations
+    if [ -f "$project_path/.claude-rag/manifest.json" ]; then
+        echo ""
+        echo "🎯 Quick Recommendations:"
+        
+        # Count files vs chunks ratio
+        files=$(jq -r '.file_count // 0' "$project_path/.claude-rag/manifest.json")
+        chunks=$(jq -r '.chunk_count // 0' "$project_path/.claude-rag/manifest.json")
+        
+        if [ "$files" -gt 0 ]; then
+            ratio=$(echo "scale=1; $chunks / $files" | bc -l 2>/dev/null || echo "1.5")
+            
+            if (( $(echo "$ratio < 1.2" | bc -l 2>/dev/null || echo 0) )); then
+                echo "   💡 Low chunk ratio ($ratio) - consider smaller chunk sizes"
+            elif (( $(echo "$ratio > 3" | bc -l 2>/dev/null || echo 0) )); then
+                echo "   💡 High chunk ratio ($ratio) - consider larger chunk sizes"
+            else
+                echo "   ✅ Good chunk ratio ($ratio chunks/file)"
+            fi
+        fi
+        
+        echo "   💡 Run 'rag-mini-enhanced analyze $project_path' for detailed suggestions"
+    fi
+}
+
+# Show usage
+show_usage() {
+    echo "FSS-Mini-RAG Enhanced - Smart semantic code search"
+    echo ""
+    echo "Usage:"
+    echo "  rag-mini-enhanced <command> <project_path> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  index <path> [--force]     Smart indexing with optimizations"
+    echo "  search <path> <query>      Enhanced semantic search"
+    echo "  context <path> <query>     Context-aware search" 
+    echo "  similar <path> <query>     Find similar code patterns"
+    echo "  status <path>              Status with recommendations"
+    echo "  analyze <path>             Deep analysis and suggestions"
+    echo ""
+    echo "Examples:"
+    echo "  rag-mini-enhanced search /project 'user authentication'"
+    echo "  rag-mini-enhanced context /project 'login()'"
+    echo "  rag-mini-enhanced similar /project 'def process_data'"
+}
+
+# Main dispatch
+case "$1" in
+    "index")
+        smart_index "$2" "$3"
+        ;;
+    "search")
+        smart_search "$2" "$3" "$4"
+        ;;
+    "context")
+        context_search "$2" "$3"
+        ;;
+    "similar")
+        similar_search "$2" "$3"
+        ;;
+    "status")
+        smart_status "$2"
+        ;;
+    "analyze")
+        if [ -f "$2/.claude-rag/manifest.json" ]; then
+            "$PYTHON" "$SCRIPT_DIR/smart_config_suggestions.py" "$2/.claude-rag/manifest.json"
+        else
+            echo "❌ No index found. Run 'rag-mini-enhanced index $2' first"
+        fi
+        ;;
+    *)
+        show_usage
+        ;;
+esac

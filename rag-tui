@@ -1,0 +1,22 @@
+#!/bin/bash
+# rag-tui - FSS-Mini-RAG Text User Interface
+# Simple, educational interface for beginners
+
+set -e
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+
+# Check if virtual environment exists
+if [ ! -f "$PYTHON" ]; then
+    echo "❌ Virtual environment not found at $SCRIPT_DIR/.venv"
+    echo ""
+    echo "🔧 To fix this:"
+    echo "   1. Run: ./install_mini_rag.sh"
+    echo "   2. Or manually: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+    exit 1
+fi
+
+# Launch TUI
+exec "$PYTHON" "$SCRIPT_DIR/rag-tui.py" "$@"
