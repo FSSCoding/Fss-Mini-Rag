@@ -32,6 +32,7 @@ disable in CLI for maximum speed.
 
 import logging
 import re
+import threading
 from typing import List, Optional
 import requests
 from .config import RAGConfig
@@ -51,6 +52,7 @@ class QueryExpander:
         
         # Cache for expanded queries to avoid repeated API calls
         self._cache = {}
+        self._cache_lock = threading.RLock()  # Thread-safe cache access
     
     def _ensure_initialized(self):
         """Lazy initialization with LLM warmup."""
@@ -84,9 +86,10 @@ class QueryExpander:
             
         self._ensure_initialized()
             
-        # Check cache first
-        if query in self._cache:
-            return self._cache[query]
+        # Check cache first (thread-safe)
+        with self._cache_lock:
+            if query in self._cache:
+                return self._cache[query]
         
         # Don't expand very short queries or obvious keywords
         if len(query.split()) <= 1 or len(query) <= 3:
@@ -95,8 +98,12 @@ class QueryExpander:
         try:
             expanded = self._llm_expand_query(query)
             if expanded and expanded != query:
-                # Cache the result
-                self._cache[query] = expanded
+                # Cache the result (thread-safe)
+                with self._cache_lock:
+                    self._cache[query] = expanded
+                    # Prevent cache from growing too large
+                    if len(self._cache) % 100 == 0:  # Check every 100 entries
+                        self._manage_cache_size()
                 logger.info(f"Expanded query: '{query}' → '{expanded}'")
                 return expanded
             
@@ -227,8 +234,19 @@ Expanded query:"""
         return clean_response
     
     def clear_cache(self):
-        """Clear the expansion cache."""
-        self._cache.clear()
+        """Clear the expansion cache (thread-safe)."""
+        with self._cache_lock:
+            self._cache.clear()
+    
+    def _manage_cache_size(self, max_size: int = 1000):
+        """Keep cache from growing too large (prevents memory leaks)."""
+        with self._cache_lock:
+            if len(self._cache) > max_size:
+                # Remove oldest half of cache entries (simple LRU approximation)
+                items = list(self._cache.items())
+                keep_count = max_size // 2
+                self._cache = dict(items[-keep_count:])
+                logger.debug(f"Cache trimmed from {len(items)} to {len(self._cache)} entries")
     
     def is_available(self) -> bool:
         """Check if query expansion is available."""

@@ -1,0 +1,72 @@
+# 🚀 BEGINNER CONFIG - Simple & Reliable
+# Perfect for newcomers who want everything to "just work"
+# Copy this to your project: cp examples/config-beginner.yaml /path/to/project/.claude-rag/config.yaml
+
+#═══════════════════════════════════════════════════════════════════════
+# ✨ BEGINNER-FRIENDLY SETTINGS - No overwhelming options!
+#═══════════════════════════════════════════════════════════════════════
+
+# 📝 How to split your code files (keep it simple)
+chunking:
+  max_size: 2000          # Good size for most code (about 50 lines)
+  min_size: 150           # Skip tiny fragments
+  strategy: semantic      # Smart splitting (respects functions/classes)
+
+# 🌊 Handle large files without crashing
+streaming:
+  enabled: true           # Always keep this on
+  threshold_bytes: 1048576  # 1MB - good for most computers
+
+# 📁 Which files to include
+files:
+  min_file_size: 50       # Skip empty/tiny files
+  
+  # 🚫 Skip these folders (saves time and storage)
+  exclude_patterns:
+    - "node_modules/**"   # JavaScript packages
+    - ".git/**"          # Git history
+    - "__pycache__/**"   # Python cache
+    - "*.pyc"           # Python bytecode
+    - ".venv/**"        # Python virtual environments
+    - "build/**"        # Build artifacts
+    - "dist/**"         # Distribution files
+  
+  include_patterns:
+    - "**/*"             # Everything else
+
+# 🧠 Embeddings (the "AI fingerprints" of your code)
+embedding:
+  preferred_method: auto   # Try best method, fall back if needed - SAFEST
+  batch_size: 32          # Good balance of speed and memory usage
+
+# 🔍 Search behavior  
+search:
+  default_limit: 10       # Show 10 results (good starting point)
+  enable_bm25: true       # Find exact word matches too
+  similarity_threshold: 0.1  # Pretty permissive (shows more results)
+  expand_queries: false   # Keep it simple for now
+
+# 🤖 AI explanations (optional but helpful)
+llm:
+  synthesis_model: auto         # Pick best available model
+  enable_synthesis: false       # Turn on manually with --synthesize
+  synthesis_temperature: 0.3    # Factual answers
+  cpu_optimized: true          # Good for computers without fancy graphics cards
+  enable_thinking: true        # Shows reasoning (great for learning!)
+  max_expansion_terms: 6       # Keep expansions focused
+
+#═══════════════════════════════════════════════════════════════════════
+# 🎯 WHAT THIS CONFIG DOES:
+# 
+# ✅ Works reliably across different systems
+# ✅ Good performance on modest hardware  
+# ✅ Balanced search results (not too few, not too many)
+# ✅ Safe defaults that won't crash your computer
+# ✅ AI features available but not overwhelming
+# 
+# 🚀 TO GET STARTED:
+# 1. Copy this file to your project: .claude-rag/config.yaml
+# 2. Index your project: ./rag-mini index /path/to/project
+# 3. Search: ./rag-mini search /path/to/project "your query"
+# 4. Try AI: ./rag-mini search /path/to/project "your query" --synthesize
+#═══════════════════════════════════════════════════════════════════════

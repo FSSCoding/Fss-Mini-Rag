@@ -1,0 +1,105 @@
+# ⚡ FAST CONFIG - Maximum Speed
+# When you need quick results and don't mind slightly lower quality
+# Perfect for: large projects, frequent searches, older computers
+
+#═══════════════════════════════════════════════════════════════════════
+# 🚀 SPEED-OPTIMIZED SETTINGS - Everything tuned for performance!
+#═══════════════════════════════════════════════════════════════════════
+
+# 📝 Chunking optimized for speed
+chunking:
+  max_size: 1500          # Smaller chunks = faster processing
+  min_size: 100           # More aggressive minimum
+  strategy: fixed         # Simple splitting (faster than semantic)
+
+# 🌊 More aggressive streaming for memory efficiency
+streaming:
+  enabled: true
+  threshold_bytes: 512000  # 512KB - process big files in smaller chunks
+
+# 📁 File filtering optimized for speed
+files:
+  min_file_size: 100      # Skip more tiny files
+  
+  # 🚫 Aggressive exclusions for speed
+  exclude_patterns:
+    - "node_modules/**"
+    - ".git/**"
+    - "__pycache__/**"
+    - "*.pyc"
+    - ".venv/**"
+    - "venv/**"  
+    - "build/**"
+    - "dist/**"
+    - "*.min.js"          # Skip minified files
+    - "*.min.css"         # Skip minified CSS
+    - "*.log"             # Skip log files
+    - "*.tmp"             # Skip temp files
+    - "target/**"         # Rust/Java build dirs
+    - ".next/**"          # Next.js build dir
+    - ".nuxt/**"          # Nuxt build dir
+  
+  include_patterns:
+    - "**/*.py"           # Focus on common code files only
+    - "**/*.js" 
+    - "**/*.ts"
+    - "**/*.jsx"
+    - "**/*.tsx"
+    - "**/*.java"
+    - "**/*.cpp"
+    - "**/*.c"
+    - "**/*.h"
+    - "**/*.rs"
+    - "**/*.go"
+    - "**/*.php"
+    - "**/*.rb"
+    - "**/*.md"
+
+# 🧠 Fastest embedding method
+embedding:
+  preferred_method: hash   # Instant embeddings (lower quality but very fast)
+  batch_size: 64          # Larger batches for efficiency
+
+# 🔍 Search optimized for speed
+search:
+  default_limit: 5        # Fewer results = faster display
+  enable_bm25: false      # Skip keyword matching for speed
+  similarity_threshold: 0.2  # Higher threshold = fewer results to process
+  expand_queries: false   # No query expansion (much faster)
+
+# 🤖 Minimal AI for speed
+llm:
+  synthesis_model: qwen3:0.6b    # Smallest/fastest model
+  enable_synthesis: false        # Only use when explicitly requested
+  synthesis_temperature: 0.1     # Fast, factual responses
+  cpu_optimized: true           # Use lightweight models
+  enable_thinking: false        # Skip thinking process for speed
+  max_expansion_terms: 4        # Shorter expansions
+
+#═══════════════════════════════════════════════════════════════════════
+# ⚡ WHAT THIS CONFIG PRIORITIZES:
+# 
+# 🚀 Indexing speed - get up and running quickly
+# 🚀 Search speed - results in milliseconds  
+# 🚀 Memory efficiency - won't slow down your computer
+# 🚀 CPU efficiency - good for older/slower machines
+# 🚀 Storage efficiency - smaller index files
+# 
+# ⚖️ TRADE-OFFS:
+# ⚠️  Lower search quality (might miss some relevant results)
+# ⚠️  Less context in results (smaller chunks)
+# ⚠️  No query expansion (might need more specific search terms)
+# ⚠️  Basic embeddings (hash-based, not semantic)
+# 
+# 🎯 PERFECT FOR:
+# • Large codebases (>10k files)
+# • Older computers with limited resources
+# • When you know exactly what you're looking for
+# • Frequent, quick lookups
+# • CI/CD environments where speed matters
+# 
+# 🚀 TO USE THIS CONFIG:
+# 1. Copy to project: cp examples/config-fast.yaml .claude-rag/config.yaml
+# 2. Index: ./rag-mini index /path/to/project
+# 3. Enjoy lightning-fast searches! ⚡
+#═══════════════════════════════════════════════════════════════════════

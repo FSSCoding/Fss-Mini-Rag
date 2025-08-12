@@ -1,0 +1,111 @@
+# 💎 QUALITY CONFIG - Best Possible Results  
+# When you want the highest quality search and AI responses
+# Perfect for: learning new codebases, research, complex analysis
+
+#═══════════════════════════════════════════════════════════════════════
+# 🎯 QUALITY-OPTIMIZED SETTINGS - Everything tuned for best results!
+#═══════════════════════════════════════════════════════════════════════
+
+# 📝 Chunking for maximum context and quality
+chunking:
+  max_size: 3000          # Larger chunks = more context per result
+  min_size: 200           # Ensure substantial content per chunk
+  strategy: semantic      # Smart splitting that respects code structure
+
+# 🌊 Conservative streaming (favor quality over speed)
+streaming:
+  enabled: true
+  threshold_bytes: 2097152  # 2MB - less aggressive chunking
+
+# 📁 Comprehensive file inclusion
+files:
+  min_file_size: 20       # Include even small files (might contain important info)
+  
+  # 🎯 Minimal exclusions (include more content)
+  exclude_patterns:
+    - "node_modules/**"   # Still skip these (too much noise)
+    - ".git/**"          # Git history not useful for code search
+    - "__pycache__/**"   # Python bytecode
+    - "*.pyc"
+    - ".venv/**"
+    - "build/**"         # Compiled artifacts
+    - "dist/**"
+    # Note: We keep logs, docs, configs that might have useful context
+  
+  include_patterns:
+    - "**/*"             # Include everything not explicitly excluded
+
+# 🧠 Best embedding quality
+embedding:
+  preferred_method: ollama  # Highest quality embeddings (needs Ollama)
+  ollama_model: nomic-embed-text  # Excellent code understanding
+  ml_model: sentence-transformers/all-MiniLM-L6-v2  # Good fallback
+  batch_size: 16          # Smaller batches for stability
+
+# 🔍 Search optimized for comprehensive results
+search:
+  default_limit: 15       # More results to choose from
+  enable_bm25: true       # Use both semantic and keyword matching
+  similarity_threshold: 0.05  # Very permissive (show more possibilities)
+  expand_queries: true    # Automatic query expansion for better recall
+
+# 🤖 High-quality AI analysis
+llm:
+  synthesis_model: auto         # Use best available model
+  enable_synthesis: true        # AI explanations by default
+  synthesis_temperature: 0.4    # Good balance of accuracy and insight
+  cpu_optimized: false         # Use powerful models if available
+  enable_thinking: true        # Show detailed reasoning process
+  max_expansion_terms: 10      # Comprehensive query expansion
+
+#═══════════════════════════════════════════════════════════════════════
+# 💎 WHAT THIS CONFIG MAXIMIZES:
+# 
+# 🎯 Search comprehensiveness - find everything relevant
+# 🎯 Result context - larger chunks with more information
+# 🎯 AI explanation quality - detailed, thoughtful analysis
+# 🎯 Query understanding - automatic expansion and enhancement
+# 🎯 Semantic accuracy - best embedding models available
+# 
+# ⚖️ TRADE-OFFS:
+# ⏳ Slower indexing (larger chunks, better embeddings)
+# ⏳ Slower searching (query expansion, more results)
+# 💾 More storage space (larger index, more files included)
+# 🧠 More memory usage (larger batches, bigger models)
+# ⚡ Higher CPU/GPU usage (better models)
+# 
+# 🎯 PERFECT FOR:
+# • Learning new, complex codebases
+# • Research and analysis tasks  
+# • When you need to understand WHY code works a certain way
+# • Finding subtle connections and patterns
+# • Code review and security analysis
+# • Academic or professional research
+# 
+# 💻 REQUIREMENTS:
+# • Ollama installed and running (ollama serve)
+# • At least one language model (ollama pull qwen3:1.7b)
+# • Decent computer specs (4GB+ RAM recommended)
+# • Patience for thorough analysis 😊
+# 
+# 🚀 TO USE THIS CONFIG:
+# 1. Install Ollama: curl -fsSL https://ollama.ai/install.sh | sh
+# 2. Start Ollama: ollama serve
+# 3. Install a model: ollama pull qwen3:1.7b
+# 4. Copy config: cp examples/config-quality.yaml .claude-rag/config.yaml  
+# 5. Index project: ./rag-mini index /path/to/project
+# 6. Enjoy comprehensive analysis: ./rag-mini explore /path/to/project
+#═══════════════════════════════════════════════════════════════════════
+
+# 🧪 ADVANCED QUALITY TUNING (optional):
+# 
+# For even better results, try these model combinations:
+# • ollama pull nomic-embed-text:latest  (best embeddings)
+# • ollama pull qwen3:1.7b              (good general model)
+# • ollama pull llama3.2                (excellent for analysis)
+# 
+# Or adjust these settings for your specific needs:
+# • similarity_threshold: 0.3   (more selective results)
+# • max_size: 4000             (even more context per result)  
+# • enable_thinking: false     (hide reasoning, show just answers)
+# • synthesis_temperature: 0.2 (more conservative AI responses)

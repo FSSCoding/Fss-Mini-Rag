@@ -1,55 +1,145 @@
-# FSS-Mini-RAG Configuration
-# Edit this file to customize indexing and search behavior
-# See docs/GETTING_STARTED.md for detailed explanations
+# FSS-Mini-RAG Configuration - Beginner-Friendly Edition
+# 
+# 🎯 QUICK START PRESETS:
+# - Keep defaults for most cases (recommended for beginners)  
+# - For large projects (>10k files): increase max_size to 3000
+# - For faster search: set similarity_threshold to 0.2
+# - For better results: enable expand_queries (but slower search)
 
-# Text chunking settings
+#═════════════════════════════════════════════════════════════════════════════════
+# 📝 CHUNKING: How we break up your code files for searching
+#═════════════════════════════════════════════════════════════════════════════════
+# Think of chunks as "bite-sized pieces" of your code that the system can search through.
+# Smaller chunks = more precise results but might miss context
+# Larger chunks = more context but might be less precise
+
 chunking:
-  max_size: 2000      # Maximum characters per chunk
-  min_size: 150       # Minimum characters per chunk
-  strategy: semantic  # 'semantic' (language-aware) or 'fixed'
+  max_size: 2000           # Maximum characters per chunk (2000 = ~50 lines of code)
+                          # 💡 ADJUST IF: Getting results that are too narrow/broad
+                          # Small projects: 1500 | Large projects: 3000 | Detailed analysis: 4000
+  
+  min_size: 150           # Minimum characters per chunk (150 = ~4-5 lines)
+                          # ⚠️ Don't go below 100 or you'll get fragments
+  
+  strategy: semantic      # How to split files into chunks
+                          # 'semantic': Smart splitting (respects functions, classes) - RECOMMENDED
+                          # 'fixed': Simple splitting (just cuts at size limits) - faster but less intelligent
 
-# Large file streaming settings
+#═════════════════════════════════════════════════════════════════════════════════
+# 🌊 STREAMING: How we handle really big files  
+#═════════════════════════════════════════════════════════════════════════════════
+# Large files (like minified CSS or huge data files) get processed in smaller batches
+# to prevent your computer from running out of memory
+
 streaming:
-  enabled: true
-  threshold_bytes: 1048576  # Files larger than this use streaming (1MB)
+  enabled: true                    # Always keep this true - prevents memory crashes
+  threshold_bytes: 1048576        # Files larger than 1MB use streaming (1MB = 1048576 bytes)
+                                  # 💡 ADJUST IF: Low memory computer = 512000 | High memory = 2097152
 
-# File processing settings
+#═════════════════════════════════════════════════════════════════════════════════
+# 📁 FILES: Which files to include/exclude from indexing
+#═════════════════════════════════════════════════════════════════════════════════
+
 files:
-  min_file_size: 50        # Skip files smaller than this
+  min_file_size: 50              # Skip tiny files (50 bytes = ~1 line of code)
+                                 # 💡 REASON: Tiny files usually aren't useful for searching
+  
+  # 🚫 EXCLUDE PATTERNS: Files/folders we always skip (saves time and space)
   exclude_patterns:
-    - "node_modules/**"
-    - ".git/**"
-    - "__pycache__/**"
-    - "*.pyc"
-    - ".venv/**"
-    - "venv/**"
-    - "build/**"
-    - "dist/**"
+    - "node_modules/**"          # JavaScript dependencies (huge and not your code)
+    - ".git/**"                  # Git history (not useful for code search)
+    - "__pycache__/**"           # Python bytecode (generated files)
+    - "*.pyc"                    # More Python bytecode
+    - ".venv/**"                 # Python virtual environments
+    - "venv/**"                  # More virtual environments  
+    - "build/**"                 # Compiled output (not source code)
+    - "dist/**"                  # Distribution files
+    # 💡 ADD YOUR OWN: Add patterns like "logs/**" or "*.tmp"
+  
   include_patterns:
-    - "**/*"                  # Include all files by default
+    - "**/*"                     # Include everything else by default
+                                 # 💡 CUSTOMIZE: Could be ["**/*.py", "**/*.js"] for only Python/JS
 
-# Embedding generation settings
+#═════════════════════════════════════════════════════════════════════════════════
+# 🧠 EMBEDDINGS: How we turn your code into searchable "vectors" 
+#═════════════════════════════════════════════════════════════════════════════════
+# Embeddings are like "fingerprints" of your code that help find similar content
+# Don't worry about the technical details - the defaults work great!
+
 embedding:
-  preferred_method: ollama     # 'ollama', 'ml', 'hash', or 'auto'
-  ollama_model: nomic-embed-text
-  ollama_host: localhost:11434
-  ml_model: sentence-transformers/all-MiniLM-L6-v2
-  batch_size: 32               # Embeddings processed per batch
+  preferred_method: ollama         # Which system to use for creating embeddings
+                                  # 'ollama': Best quality (needs Ollama installed) - RECOMMENDED
+                                  # 'ml': Good quality (downloads models automatically)  
+                                  # 'hash': Basic quality (works without internet)
+                                  # 'auto': Try ollama, fall back to ml, then hash - SAFEST CHOICE
+  
+  ollama_model: nomic-embed-text   # Which Ollama model to use (this one is excellent)
+  ollama_host: localhost:11434     # Where to find Ollama (don't change unless you know why)
+  
+  ml_model: sentence-transformers/all-MiniLM-L6-v2  # Backup model (small and fast)
+  
+  batch_size: 32                   # How many chunks to process at once
+                                  # 💡 ADJUST IF: Slow computer = 16 | Fast computer = 64
 
-# Search behavior settings
+#═════════════════════════════════════════════════════════════════════════════════
+# 🔍 SEARCH: How the system finds and ranks results
+#═════════════════════════════════════════════════════════════════════════════════
+
 search:
-  default_limit: 10           # Default number of results
-  enable_bm25: true             # Enable keyword matching boost
-  similarity_threshold: 0.1        # Minimum similarity score
-  expand_queries: false         # Enable automatic query expansion (TUI auto-enables)
+  default_limit: 10                # How many search results to show by default
+                                  # 💡 MORE RESULTS: 15-20 | FASTER SEARCH: 5-8
+  
+  enable_bm25: true               # Also use keyword matching (like Google search)
+                                  # 💡 EFFECT: Finds exact word matches even if semantically different
+                                  # Keep true unless getting too many irrelevant results
+  
+  similarity_threshold: 0.1       # Minimum "similarity score" to show results (0.0-1.0)
+                                  # 💡 HIGHER = fewer but more relevant results
+                                  # Picky: 0.3 | Balanced: 0.1 | Show everything: 0.05
+  
+  expand_queries: false           # Automatically add related search terms
+                                  # 💡 EFFECT: "auth" becomes "auth authentication login user"
+                                  # Better results but slower - TUI enables this automatically
 
-# LLM synthesis and query expansion settings
+#═════════════════════════════════════════════════════════════════════════════════
+# 🤖 LLM: Settings for the AI that explains and synthesizes results
+#═════════════════════════════════════════════════════════════════════════════════
+# The LLM (Large Language Model) reads your search results and explains them in plain English
+
 llm:
-  ollama_host: localhost:11434
-  synthesis_model: auto    # 'auto' prefers qwen3:0.6b for CPU efficiency
-  expansion_model: auto     # Usually same as synthesis_model  
-  max_expansion_terms: 8        # Maximum terms to add to queries
-  enable_synthesis: false       # Enable synthesis by default
-  synthesis_temperature: 0.3      # LLM temperature for analysis
-  cpu_optimized: true      # Prefer ultra-lightweight models for CPU-only systems
-  enable_thinking: true    # Enable thinking mode for Qwen3 models (production: true, testing: false)
+  ollama_host: localhost:11434     # Where to find Ollama (don't change unless you know why)
+  
+  synthesis_model: auto           # Which AI model to use for explanations
+                                  # 'auto': Picks best available model - RECOMMENDED
+                                  # 'qwen3:0.6b': Ultra-fast, good for CPU-only computers
+                                  # 'llama3.2': Slower but more detailed explanations
+  
+  expansion_model: auto           # Model for query expansion (usually same as synthesis)
+  
+  max_expansion_terms: 8          # How many extra terms to add to expanded queries
+                                  # 💡 MORE TERMS = broader search but potentially less focused
+  
+  enable_synthesis: false         # Turn on AI explanations by default
+                                  # 💡 SET TO TRUE: If you want every search to include explanations
+                                  # (You can always use --synthesize flag when you want it)
+  
+  synthesis_temperature: 0.3      # How "creative" the AI explanations are (0.0-1.0)
+                                  # 💡 Lower = more factual | Higher = more creative
+                                  # Code analysis: 0.1-0.3 | Creative writing: 0.7-0.9
+  
+  cpu_optimized: true            # Prefer lightweight models for computers without graphics cards
+                                  # 💡 DISABLE IF: You have a powerful GPU and want highest quality
+  
+  enable_thinking: true          # Let AI "think out loud" for complex questions
+                                  # 💡 EFFECT: Shows reasoning process, better for learning/debugging
+
+#═════════════════════════════════════════════════════════════════════════════════
+# 🎯 QUICK TROUBLESHOOTING:
+# 
+# Search returns nothing? → Lower similarity_threshold to 0.05
+# Search too slow? → Set expand_queries: false and batch_size: 16  
+# Results not detailed enough? → Increase max_size to 3000
+# Getting weird fragments? → Check min_size is at least 150
+# AI not working? → Make sure Ollama is running: `ollama serve`
+# Out of memory errors? → Decrease batch_size to 16 and lower threshold_bytes
+#═════════════════════════════════════════════════════════════════════════════════

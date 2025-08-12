@@ -350,6 +350,10 @@ class OllamaEmbedder:
         if len(file_contents) <= 2:
             return self._batch_embed_sequential(file_contents)
         
+        # For very large batches, use chunked processing to prevent memory issues
+        if len(file_contents) > 500:  # Process in chunks to manage memory
+            return self._batch_embed_chunked(file_contents, max_workers)
+        
         return self._batch_embed_concurrent(file_contents, max_workers)
     
     def _batch_embed_sequential(self, file_contents: List[dict]) -> List[dict]:
@@ -395,6 +399,35 @@ class OllamaEmbedder:
         # Sort by original index and extract results
         indexed_results.sort(key=lambda x: x[0])
         return [result for _, result in indexed_results]
+    
+    def _batch_embed_chunked(self, file_contents: List[dict], max_workers: int, chunk_size: int = 200) -> List[dict]:
+        """
+        Process very large batches in smaller chunks to prevent memory issues.
+        This is important for beginners who might try to index huge projects.
+        """
+        results = []
+        total_chunks = len(file_contents)
+        
+        # Process in chunks
+        for i in range(0, len(file_contents), chunk_size):
+            chunk = file_contents[i:i + chunk_size]
+            
+            # Log progress for large operations
+            if total_chunks > chunk_size:
+                chunk_num = i // chunk_size + 1
+                total_chunk_count = (total_chunks + chunk_size - 1) // chunk_size
+                logger.info(f"Processing chunk {chunk_num}/{total_chunk_count} ({len(chunk)} files)")
+            
+            # Process this chunk using concurrent method
+            chunk_results = self._batch_embed_concurrent(chunk, max_workers)
+            results.extend(chunk_results)
+            
+            # Brief pause between chunks to prevent overwhelming the system
+            if i + chunk_size < len(file_contents):
+                import time
+                time.sleep(0.1)  # 100ms pause between chunks
+        
+        return results
     
     def get_embedding_dim(self) -> int:
         """Return the dimension of embeddings produced by this model."""

@@ -70,7 +70,16 @@ def index_project(project_path: Path, force: bool = False):
             
     except Exception as e:
         print(f"❌ Indexing failed: {e}")
-        print(f"   Use --verbose for details")
+        print()
+        print("🔧 Common solutions:")
+        print("   • Check if path exists and you have read permissions")
+        print("   • Ensure Python dependencies are installed: pip install -r requirements.txt")
+        print("   • Try with smaller project first to test setup")
+        print("   • Check available disk space for index files")
+        print()
+        print("📚 For detailed help:")
+        print(f"   ./rag-mini index {project_path} --verbose")
+        print("   Or see: docs/TROUBLESHOOTING.md")
         sys.exit(1)
 
 def search_project(project_path: Path, query: str, limit: int = 10, synthesize: bool = False):
@@ -89,10 +98,18 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
         
         if not results:
             print("❌ No results found")
-            print("\n💡 Try:")
-            print("   • Broader search terms")
-            print("   • Check spelling")
-            print("   • Use concepts: \"authentication\" instead of \"auth_handler\"")
+            print()
+            print("🔧 Quick fixes to try:")
+            print("   • Use broader terms: \"login\" instead of \"authenticate_user_session\"")
+            print("   • Try concepts: \"database query\" instead of specific function names")
+            print("   • Check spelling and try simpler words")
+            print("   • Search for file types: \"python class\" or \"javascript function\"")
+            print()
+            print("⚙️ Configuration adjustments:")
+            print(f"   • Lower threshold: ./rag-mini search {project_path} \"{query}\" --threshold 0.05")
+            print("   • More results: add --limit 20")
+            print()
+            print("📚 Need help? See: docs/TROUBLESHOOTING.md")
             return
             
         print(f"✅ Found {len(results)} results:")
@@ -154,10 +171,23 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
             
     except Exception as e:
         print(f"❌ Search failed: {e}")
+        print()
+        
         if "not indexed" in str(e).lower():
-            print(f"   Run: rag-mini index {project_path}")
+            print("🔧 Solution:")
+            print(f"   ./rag-mini index {project_path}")
+            print()
         else:
-            print("   Use --verbose for details")
+            print("🔧 Common solutions:")
+            print("   • Check project path exists and is readable")
+            print("   • Verify index isn't corrupted: delete .claude-rag/ and re-index")
+            print("   • Try with a different project to test setup")
+            print("   • Check available memory and disk space")
+            print()
+            print("📚 Get detailed error info:")
+            print(f"   ./rag-mini search {project_path} \"{query}\" --verbose")
+            print("   Or see: docs/TROUBLESHOOTING.md")
+            print()
         sys.exit(1)
 
 def status_check(project_path: Path):
