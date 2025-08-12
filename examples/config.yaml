@@ -41,3 +41,13 @@ search:
   default_limit: 10           # Default number of results
   enable_bm25: true             # Enable keyword matching boost
   similarity_threshold: 0.1        # Minimum similarity score
+  expand_queries: false         # Enable automatic query expansion (TUI auto-enables)
+
+# LLM synthesis and query expansion settings
+llm:
+  ollama_host: localhost:11434
+  synthesis_model: auto    # 'auto', 'qwen3:1.7b', etc.
+  expansion_model: auto     # Usually same as synthesis_model
+  max_expansion_terms: 8        # Maximum terms to add to queries
+  enable_synthesis: false       # Enable synthesis by default
+  synthesis_temperature: 0.3      # LLM temperature for analysis

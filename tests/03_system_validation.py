@@ -15,7 +15,9 @@ if sys.platform == 'win32':
 from claude_rag.chunker import CodeChunker
 from claude_rag.indexer import ProjectIndexer
 from claude_rag.search import CodeSearcher
-from claude_rag.embeddings import CodeEmbedder
+from claude_rag.ollama_embeddings import OllamaEmbedder as CodeEmbedder
+from claude_rag.query_expander import QueryExpander
+from claude_rag.config import RAGConfig
 
 def test_chunker():
     """Test that chunker creates chunks with all required metadata."""
@@ -319,6 +321,63 @@ def test_server():
         print(f"    Server error: {e}")
         return False
 
+def test_new_features():
+    """Test new features: query expansion and smart ranking."""
+    print("\n5. Testing New Features (Query Expansion & Smart Ranking)...")
+    
+    try:
+        # Test configuration loading
+        config = RAGConfig()
+        print(f"    ✅ Configuration loaded successfully")
+        print(f"       Query expansion enabled: {config.search.expand_queries}")
+        print(f"       Max expansion terms: {config.llm.max_expansion_terms}")
+        
+        # Test query expander (will use mock if Ollama unavailable)
+        expander = QueryExpander(config)
+        test_query = "authentication"
+        
+        if expander.is_available():
+            expanded = expander.expand_query(test_query)
+            print(f"    ✅ Query expansion working: '{test_query}' → '{expanded}'")
+        else:
+            print(f"    ⚠️  Query expansion offline (Ollama not available)")
+            # Test that it still returns original query
+            expanded = expander.expand_query(test_query)
+            if expanded == test_query:
+                print(f"    ✅ Graceful degradation working: returns original query")
+            else:
+                print(f"    ❌ Error: should return original query when offline")
+                return False
+        
+        # Test smart ranking (this always works as it's zero-overhead)
+        print("    🧮 Testing smart ranking...")
+        
+        # Create a simple test to verify the method exists and can be called
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create a simple test project
+            test_file = temp_path / "README.md"
+            test_file.write_text("# Test Project\nThis is a test README file.")
+            
+            try:
+                searcher = CodeSearcher(temp_path)
+                # Test that the _smart_rerank method exists
+                if hasattr(searcher, '_smart_rerank'):
+                    print("    ✅ Smart ranking method available")
+                    return True
+                else:
+                    print("    ❌ Smart ranking method not found")
+                    return False
+                    
+            except Exception as e:
+                print(f"    ❌ Smart ranking test failed: {e}")
+                return False
+        
+    except Exception as e:
+        print(f"    ❌ New features test failed: {e}")
+        return False
+
 def main():
     """Run all integration tests."""
     print("=" * 50)
@@ -329,7 +388,8 @@ def main():
         "Chunker": test_chunker(),
         "Indexer": test_indexer_storage(), 
         "Search": test_search_integration(),
-        "Server": test_server()
+        "Server": test_server(),
+        "New Features": test_new_features()
     }
     
     print("\n" + "=" * 50)

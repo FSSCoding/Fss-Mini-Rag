@@ -306,6 +306,8 @@ class SimpleTUI:
             from claude_rag.search import CodeSearcher
             
             searcher = CodeSearcher(self.project_path)
+            # Enable query expansion in TUI for better results
+            searcher.config.search.expand_queries = True
             results = searcher.search(query, top_k=limit)
             
             if not results:
