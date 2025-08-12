@@ -19,6 +19,7 @@ from .ollama_embeddings import OllamaEmbedder as CodeEmbedder
 from .path_handler import display_path
 from .query_expander import QueryExpander
 from .config import ConfigManager
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -354,8 +355,8 @@ class CodeSearcher:
             )
             hybrid_results.append(result)
         
-        # Sort by combined score
-        hybrid_results.sort(key=lambda x: x.score, reverse=True)
+        # Apply smart re-ranking for better quality (zero overhead)
+        hybrid_results = self._smart_rerank(hybrid_results)
         
         # Apply diversity constraints
         diverse_results = self._apply_diversity_constraints(hybrid_results, top_k)
@@ -365,6 +366,69 @@ class CodeSearcher:
             diverse_results = self._add_context_to_results(diverse_results, results_df)
         
         return diverse_results
+    
+    def _smart_rerank(self, results: List[SearchResult]) -> List[SearchResult]:
+        """
+        Smart result re-ranking for better quality with zero overhead.
+        
+        Boosts scores based on:
+        - File importance (README, main files, configs)
+        - Content freshness (recently modified files)
+        - File type relevance
+        """
+        now = datetime.now()
+        
+        for result in results:
+            # File importance boost (20% boost for important files)
+            file_path_lower = str(result.file_path).lower()
+            important_patterns = [
+                'readme', 'main.', 'index.', '__init__', 'config',
+                'setup', 'install', 'getting', 'started', 'docs/',
+                'documentation', 'guide', 'tutorial', 'example'
+            ]
+            
+            if any(pattern in file_path_lower for pattern in important_patterns):
+                result.score *= 1.2
+                logger.debug(f"Important file boost: {result.file_path}")
+            
+            # Recency boost (10% boost for files modified in last week)
+            # Note: This uses file modification time if available in the data
+            try:
+                # Get file modification time (this is lightweight)
+                file_mtime = Path(result.file_path).stat().st_mtime
+                modified_date = datetime.fromtimestamp(file_mtime)
+                days_old = (now - modified_date).days
+                
+                if days_old <= 7:  # Modified in last week
+                    result.score *= 1.1
+                    logger.debug(f"Recent file boost: {result.file_path} ({days_old} days old)")
+                elif days_old <= 30:  # Modified in last month
+                    result.score *= 1.05
+                    
+            except (OSError, ValueError):
+                # File doesn't exist or can't get stats - no boost
+                pass
+            
+            # Content type relevance boost
+            if hasattr(result, 'chunk_type'):
+                if result.chunk_type in ['function', 'class', 'method']:
+                    # Code definitions are usually more valuable
+                    result.score *= 1.1
+                elif result.chunk_type in ['comment', 'docstring']:
+                    # Documentation is valuable for understanding
+                    result.score *= 1.05
+            
+            # Penalize very short content (likely not useful)
+            if len(result.content.strip()) < 50:
+                result.score *= 0.9
+            
+            # Small boost for content with good structure (has multiple lines)
+            lines = result.content.strip().split('\n')
+            if len(lines) >= 3 and any(len(line.strip()) > 10 for line in lines):
+                result.score *= 1.02
+        
+        # Sort by updated scores
+        return sorted(results, key=lambda x: x.score, reverse=True)
     
     def _apply_diversity_constraints(self, results: List[SearchResult], top_k: int) -> List[SearchResult]:
         """

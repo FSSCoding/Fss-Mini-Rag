@@ -66,7 +66,7 @@ class SearchConfig:
     default_limit: int = 10
     enable_bm25: bool = True
     similarity_threshold: float = 0.1
-    expand_queries: bool = True  # Enable automatic query expansion
+    expand_queries: bool = False  # Enable automatic query expansion
 
 
 @dataclass 

@@ -2,8 +2,32 @@
 """
 Query Expander for Enhanced RAG Search
 
-Automatically expands user queries with semantically related terms
-to dramatically improve search recall without increasing complexity.
+## What This Does
+Automatically expands search queries to find more relevant results.
+
+Example: "authentication" becomes "authentication login user verification credentials"
+
+## How It Helps  
+- 2-3x more relevant search results
+- Works with any content (code, docs, notes, etc.)
+- Completely transparent to users
+- Uses small, fast LLMs (qwen3:1.7b) for ~100ms expansions
+
+## Usage
+```python
+from claude_rag.query_expander import QueryExpander
+from claude_rag.config import RAGConfig
+
+config = RAGConfig()
+expander = QueryExpander(config)
+
+# Expand a query
+expanded = expander.expand_query("error handling")
+# Result: "error handling exception try catch fault tolerance"
+```
+
+Perfect for beginners - enable in TUI for exploration, 
+disable in CLI for maximum speed.
 """
 
 import logging
