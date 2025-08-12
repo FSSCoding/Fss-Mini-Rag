@@ -27,11 +27,11 @@ class SynthesisResult:
 class LLMSynthesizer:
     """Synthesizes RAG search results using Ollama LLMs."""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = None, enable_thinking: bool = True):
+    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = None, enable_thinking: bool = False):
         self.ollama_url = ollama_url.rstrip('/')
         self.available_models = []
         self.model = model
-        self.enable_thinking = enable_thinking
+        self.enable_thinking = enable_thinking  # Default False for synthesis mode
         self._initialized = False
         
     def _get_available_models(self) -> List[str]:

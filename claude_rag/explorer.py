@@ -68,6 +68,13 @@ class CodeExplorer:
         
     def start_exploration_session(self) -> bool:
         """Start a new exploration session."""
+        
+        # Check if we should restart the model for optimal thinking
+        model_restart_needed = self._check_model_restart_needed()
+        if model_restart_needed:
+            if not self._handle_model_restart():
+                print("⚠️  Continuing with current model (quality may be reduced)")
+        
         if not self.synthesizer.is_available():
             print("❌ LLM service unavailable. Please check Ollama is running.")
             return False
@@ -346,6 +353,75 @@ Think carefully about the relationships between code components and how they ans
         self.current_session = None
         
         return summary + "\n\n✅ Exploration session ended."
+    
+    def _check_model_restart_needed(self) -> bool:
+        """Check if model restart would improve thinking quality."""
+        try:
+            # Simple heuristic: if we can detect the model was recently used 
+            # with <no_think>, suggest restart for better thinking quality
+            
+            # Test with a simple thinking prompt to see response quality
+            test_response = self.synthesizer._call_ollama(
+                "Think briefly: what is 2+2?", 
+                temperature=0.1, 
+                disable_thinking=False
+            )
+            
+            if test_response:
+                # If response is suspiciously short or shows signs of no-think behavior
+                if len(test_response.strip()) < 10 or "4" == test_response.strip():
+                    return True
+                    
+        except Exception:
+            pass
+            
+        return False
+    
+    def _handle_model_restart(self) -> bool:
+        """Handle user confirmation and model restart."""
+        try:
+            print("\n🤔 To ensure best thinking quality, exploration mode works best with a fresh model.")
+            print(f"   Currently running: {self.synthesizer.model}")
+            print("\n💡 Stop current model and restart for optimal exploration? (y/N): ", end="", flush=True)
+            
+            response = input().strip().lower()
+            
+            if response in ['y', 'yes']:
+                print("\n🔄 Stopping current model...")
+                
+                # Use ollama stop command for clean model restart
+                import subprocess
+                try:
+                    subprocess.run([
+                        "ollama", "stop", self.synthesizer.model
+                    ], timeout=10, capture_output=True)
+                    
+                    print("✅ Model stopped successfully.")
+                    print("🚀 Exploration mode will restart the model with thinking enabled...")
+                    
+                    # Reset synthesizer initialization to force fresh start
+                    self.synthesizer._initialized = False
+                    return True
+                    
+                except subprocess.TimeoutExpired:
+                    print("⚠️  Model stop timed out, continuing anyway...")
+                    return False
+                except FileNotFoundError:
+                    print("⚠️  'ollama' command not found, continuing with current model...")
+                    return False
+                except Exception as e:
+                    print(f"⚠️  Error stopping model: {e}")
+                    return False
+            else:
+                print("📝 Continuing with current model...")
+                return False
+                
+        except KeyboardInterrupt:
+            print("\n📝 Continuing with current model...")
+            return False
+        except EOFError:
+            print("\n📝 Continuing with current model...")
+            return False
 
 # Quick test function
 def test_explorer():

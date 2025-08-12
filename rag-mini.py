@@ -134,6 +134,12 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
                 synthesis = synthesizer.synthesize_search_results(query, results, project_path)
                 print()
                 print(synthesizer.format_synthesis_output(synthesis, query))
+                
+                # Add guidance for deeper analysis
+                if synthesis.confidence < 0.7 or any(word in query.lower() for word in ['why', 'how', 'explain', 'debug']):
+                    print("\n💡 Want deeper analysis with reasoning?")
+                    print(f"   Try: rag-mini explore {project_path}")
+                    print("   Exploration mode enables thinking and remembers conversation context.")
             else:
                 print("❌ LLM synthesis unavailable")
                 print("   • Ensure Ollama is running: ollama serve")
