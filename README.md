@@ -1,15 +1,19 @@
-# FSS-Mini-RAG
-
-![FSS-Mini-RAG Logo](assets/Fss_Mini_Rag.png)
+# FSS-Mini-RAG <img src="assets/Fss_Mini_Rag.png" alt="FSS-Mini-RAG Logo" width="40" height="40">
 
 > **A lightweight, educational RAG system that actually works**  
 > *Built for beginners who want results, and developers who want to understand how RAG really works*
+
+## Demo
+
+![FSS-Mini-RAG Demo](recordings/fss-mini-rag-demo-20250812_161410.gif)
+
+*See it in action: index a project and search semantically in seconds*
 
 ## How It Works
 
 ```mermaid
 graph LR
-    Files[📁 Your Code] --> Index[🔍 Index]
+    Files[📁 Your Code/Documents] --> Index[🔍 Index]
     Index --> Chunks[✂️ Smart Chunks]
     Chunks --> Embeddings[🧠 Semantic Vectors]
     Embeddings --> Database[(💾 Vector DB)]
@@ -108,7 +112,9 @@ That's it. No external dependencies, no configuration required, no PhD in comput
 ./rag-mini status ~/new-project            # Check index health
 ```
 
-*Ready to try semantic search with synthesis and exploration modes? Follow the quick start below!*
+![FSS-Mini-RAG Search Demo](recordings/fss-mini-rag-demo-20250812_160725.gif)
+
+*Advanced usage: semantic search with synthesis and exploration modes*
 
 ## Installation Options
 
