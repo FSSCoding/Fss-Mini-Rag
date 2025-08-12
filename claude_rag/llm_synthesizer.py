@@ -8,10 +8,19 @@ Takes raw search results and generates coherent, contextual summaries.
 
 import json
 import logging
+import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import requests
 from pathlib import Path
+
+try:
+    from .llm_safeguards import ModelRunawayDetector, SafeguardConfig, get_optimal_ollama_parameters
+except ImportError:
+    # Graceful fallback if safeguards not available
+    ModelRunawayDetector = None
+    SafeguardConfig = None
+    get_optimal_ollama_parameters = lambda x: {}
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +42,12 @@ class LLMSynthesizer:
         self.model = model
         self.enable_thinking = enable_thinking  # Default False for synthesis mode
         self._initialized = False
+        
+        # Initialize safeguards
+        if ModelRunawayDetector:
+            self.safeguard_detector = ModelRunawayDetector(SafeguardConfig())
+        else:
+            self.safeguard_detector = None
         
     def _get_available_models(self) -> List[str]:
         """Get list of available Ollama models."""
@@ -129,7 +144,9 @@ class LLMSynthesizer:
         return len(self.available_models) > 0
     
     def _call_ollama(self, prompt: str, temperature: float = 0.3, disable_thinking: bool = False) -> Optional[str]:
-        """Make a call to Ollama API."""
+        """Make a call to Ollama API with safeguards."""
+        start_time = time.time()
+        
         try:
             # Use the best available model
             model_to_use = self.model
@@ -147,26 +164,46 @@ class LLMSynthesizer:
                 if not final_prompt.endswith(" <no_think>"):
                     final_prompt += " <no_think>"
             
+            # Get optimal parameters for this model
+            optimal_params = get_optimal_ollama_parameters(model_to_use)
+            
             payload = {
                 "model": model_to_use,
                 "prompt": final_prompt,
                 "stream": False,
                 "options": {
                     "temperature": temperature,
-                    "top_p": 0.9,
-                    "top_k": 40
+                    "top_p": optimal_params.get("top_p", 0.9),
+                    "top_k": optimal_params.get("top_k", 40),
+                    "num_ctx": optimal_params.get("num_ctx", 32768),
+                    "num_predict": optimal_params.get("num_predict", 2000),
+                    "repeat_penalty": optimal_params.get("repeat_penalty", 1.1),
+                    "presence_penalty": optimal_params.get("presence_penalty", 1.0)
                 }
             }
             
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
                 json=payload,
-                timeout=30
+                timeout=65  # Slightly longer than safeguard timeout
             )
             
             if response.status_code == 200:
                 result = response.json()
-                return result.get('response', '').strip()
+                raw_response = result.get('response', '').strip()
+                
+                # Apply safeguards to check response quality
+                if self.safeguard_detector and raw_response:
+                    is_valid, issue_type, explanation = self.safeguard_detector.check_response_quality(
+                        raw_response, prompt[:100], start_time  # First 100 chars of prompt for context
+                    )
+                    
+                    if not is_valid:
+                        logger.warning(f"Safeguard triggered: {issue_type}")
+                        # Return a safe explanation instead of the problematic response
+                        return self._create_safeguard_response(issue_type, explanation, prompt)
+                
+                return raw_response
             else:
                 logger.error(f"Ollama API error: {response.status_code}")
                 return None
@@ -174,6 +211,24 @@ class LLMSynthesizer:
         except Exception as e:
             logger.error(f"Ollama call failed: {e}")
             return None
+    
+    def _create_safeguard_response(self, issue_type: str, explanation: str, original_prompt: str) -> str:
+        """Create a helpful response when safeguards are triggered."""
+        return f"""⚠️ Model Response Issue Detected
+
+{explanation}
+
+**Original query context:** {original_prompt[:200]}{'...' if len(original_prompt) > 200 else ''}
+
+**What happened:** The AI model encountered a common issue with small language models and was prevented from giving a problematic response.
+
+**Your options:**
+1. **Try again**: Ask the same question (often resolves itself)
+2. **Rephrase**: Make your question more specific or break it into parts  
+3. **Use exploration mode**: `rag-mini explore` for complex questions
+4. **Different approach**: Try synthesis mode: `--synthesize` for simpler responses
+
+This is normal with smaller AI models and helps ensure you get quality responses."""
     
     def synthesize_search_results(self, query: str, results: List[Any], project_path: Path) -> SynthesisResult:
         """Synthesize search results into a coherent summary."""
