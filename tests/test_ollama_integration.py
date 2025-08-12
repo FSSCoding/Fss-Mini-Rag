@@ -68,7 +68,7 @@ class TestOllamaIntegration(unittest.TestCase):
                     if len(models) > 5:
                         print(f"      ... and {len(models)-5} more")
                 else:
-                    print("   ⚠️  No models found. Install with: ollama pull qwen3:1.7b")
+                    print("   ⚠️  No models found. Install with: ollama pull qwen3:4b")
                 
                 self.assertTrue(True)
             else:
@@ -146,7 +146,7 @@ class TestOllamaIntegration(unittest.TestCase):
         if not synthesizer.is_available():
             self.fail(
                 "❌ No LLM models available.\n"
-                "   💡 Install a model like: ollama pull qwen3:1.7b"
+                "   💡 Install a model like: ollama pull qwen3:4b"
             )
         
         print(f"   ✅ Found {len(synthesizer.available_models)} LLM models")
@@ -426,7 +426,7 @@ def run_troubleshooting():
     print("💡 Common Solutions:")
     print("   • Install Ollama: https://ollama.ai/download")
     print("   • Start server: ollama serve")
-    print("   • Install models: ollama pull qwen3:1.7b")
+    print("   • Install models: ollama pull qwen3:4b")
     print("   • Install embedding model: ollama pull nomic-embed-text")
     print()
     print("📚 For more help, see docs/QUERY_EXPANSION.md")

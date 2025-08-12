@@ -165,7 +165,9 @@ python3 -c "import mini_rag; print('✅ Installation successful')"
 
 2. **Try different model:**
    ```bash
-   ollama pull qwen3:1.7b  # Good balance of speed/quality
+   ollama pull qwen3:4b     # Recommended: excellent quality
+   ollama pull qwen3:1.7b   # Still very good, faster
+   ollama pull qwen3:0.6b   # Surprisingly good for CPU-only
    ```
 
 3. **Use synthesis mode instead of exploration:**

@@ -50,7 +50,7 @@ def main():
     print("   • Check docs/QUERY_EXPANSION.md for setup help")
     print("   • Ensure Ollama is installed: https://ollama.ai/download")
     print("   • Start Ollama server: ollama serve")
-    print("   • Install models: ollama pull qwen3:1.7b")
+    print("   • Install models: ollama pull qwen3:4b")
 
 def run_test(test_file):
     """Run a specific test file."""

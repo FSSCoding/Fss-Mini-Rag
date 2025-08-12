@@ -787,4 +787,36 @@ def repair_index(self, project_path: Path) -> bool:
         return False
 ```
 
+## LLM Model Selection & Performance
+
+### Model Recommendations by Use Case
+
+FSS-Mini-RAG works well with various LLM sizes because our rich context and guided prompts help small models perform excellently:
+
+**Recommended (Best Balance):**
+- **qwen3:4b** - Excellent quality, good performance
+- **qwen3:4b:q8_0** - High-precision quantized version for production
+
+**Still Excellent (Faster/CPU-friendly):**
+- **qwen3:1.7b** - Very good results, faster responses
+- **qwen3:0.6b** - Surprisingly good considering size (522MB)
+
+### Why Small Models Work Well Here
+
+Small models can produce excellent results in RAG systems because:
+
+1. **Rich Context**: Our chunking provides substantial context around each match
+2. **Guided Prompts**: Well-structured prompts give models a clear "runway" to continue
+3. **Specific Domain**: Code analysis is more predictable than general conversation
+
+Without good context, small models tend to get lost and produce erratic output. But with RAG's rich context and focused prompts, even the 0.6B model can provide meaningful analysis.
+
+### Quantization Benefits
+
+For production deployments, consider quantized models like `qwen3:4b:q8_0`:
+- **Q8_0**: 8-bit quantization with minimal quality loss
+- **Smaller memory footprint**: ~50% reduction vs full precision
+- **Better CPU performance**: Faster inference on CPU-only systems
+- **Production ready**: Maintains analysis quality while improving efficiency
+
 This technical guide provides the deep implementation details that developers need to understand, modify, and extend the system, while keeping the main README focused on getting users started quickly.

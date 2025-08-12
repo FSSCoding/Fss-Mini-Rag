@@ -514,7 +514,7 @@ class SimpleTUI:
             from mini_rag.ollama_embeddings import OllamaEmbedder
             
             embedder = OllamaEmbedder()
-            info = embedder.get_embedding_info()
+            info = embedder.get_status()
             
             print("🧠 Embedding System:")
             method = info.get('method', 'unknown')

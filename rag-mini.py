@@ -117,7 +117,12 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
         
         for i, result in enumerate(results, 1):
             # Clean up file path display
-            rel_path = result.file_path.relative_to(project_path) if result.file_path.is_absolute() else result.file_path
+            file_path = Path(result.file_path)
+            try:
+                rel_path = file_path.relative_to(project_path)
+            except ValueError:
+                # If relative_to fails, just show the basename
+                rel_path = file_path.name
             
             print(f"{i}. {rel_path}")
             print(f"   Score: {result.score:.3f}")
@@ -236,7 +241,7 @@ def status_check(project_path: Path):
         print("🧠 Embedding System:")
         try:
             embedder = OllamaEmbedder()
-            emb_info = embedder.get_embedding_info()
+            emb_info = embedder.get_status()
             method = emb_info.get('method', 'unknown')
             
             if method == 'ollama':
