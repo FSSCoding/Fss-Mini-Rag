@@ -47,14 +47,42 @@ class QueryExpander:
         self.model = config.llm.expansion_model
         self.max_terms = config.llm.max_expansion_terms
         self.enabled = config.search.expand_queries
+        self._initialized = False
         
         # Cache for expanded queries to avoid repeated API calls
         self._cache = {}
+    
+    def _ensure_initialized(self):
+        """Lazy initialization with LLM warmup."""
+        if self._initialized:
+            return
+            
+        # Warm up LLM if enabled and available
+        if self.enabled:
+            try:
+                model = self._select_expansion_model()
+                if model:
+                    requests.post(
+                        f"{self.ollama_url}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": "testing, just say 'hi' <no_think>",
+                            "stream": False,
+                            "options": {"temperature": 0.1, "max_tokens": 5}
+                        },
+                        timeout=5
+                    )
+            except:
+                pass  # Warmup failure is non-critical
+                
+        self._initialized = True
     
     def expand_query(self, query: str) -> str:
         """Expand a search query with related terms."""
         if not self.enabled or not query.strip():
             return query
+            
+        self._ensure_initialized()
             
         # Check cache first
         if query in self._cache:
@@ -207,6 +235,7 @@ Expanded query:"""
         if not self.enabled:
             return False
             
+        self._ensure_initialized()
         try:
             response = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
             return response.status_code == 200

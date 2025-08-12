@@ -27,10 +27,12 @@ class SynthesisResult:
 class LLMSynthesizer:
     """Synthesizes RAG search results using Ollama LLMs."""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = None):
+    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = None, enable_thinking: bool = True):
         self.ollama_url = ollama_url.rstrip('/')
-        self.available_models = self._get_available_models()
-        self.model = model or self._select_best_model()
+        self.available_models = []
+        self.model = model
+        self.enable_thinking = enable_thinking
+        self._initialized = False
         
     def _get_available_models(self) -> List[str]:
         """Get list of available Ollama models."""
@@ -102,11 +104,31 @@ class LLMSynthesizer:
         logger.warning(f"Using fallback model: {fallback}")
         return fallback
     
+    def _ensure_initialized(self):
+        """Lazy initialization with LLM warmup."""
+        if self._initialized:
+            return
+            
+        # Load available models
+        self.available_models = self._get_available_models()
+        if not self.model:
+            self.model = self._select_best_model()
+            
+        # Warm up LLM with minimal request (ignores response)
+        if self.available_models:
+            try:
+                self._call_ollama("testing, just say 'hi'", temperature=0.1, disable_thinking=True)
+            except:
+                pass  # Warmup failure is non-critical
+                
+        self._initialized = True
+    
     def is_available(self) -> bool:
         """Check if Ollama is available and has models."""
+        self._ensure_initialized()
         return len(self.available_models) > 0
     
-    def _call_ollama(self, prompt: str, temperature: float = 0.3) -> Optional[str]:
+    def _call_ollama(self, prompt: str, temperature: float = 0.3, disable_thinking: bool = False) -> Optional[str]:
         """Make a call to Ollama API."""
         try:
             # Use the best available model
@@ -119,9 +141,15 @@ class LLMSynthesizer:
                     logger.error("No Ollama models available")
                     return None
                     
+            # Handle thinking mode for Qwen3 models
+            final_prompt = prompt
+            if not self.enable_thinking or disable_thinking:
+                if not final_prompt.endswith(" <no_think>"):
+                    final_prompt += " <no_think>"
+            
             payload = {
                 "model": model_to_use,
-                "prompt": prompt,
+                "prompt": final_prompt,
                 "stream": False,
                 "options": {
                     "temperature": temperature,
@@ -150,6 +178,7 @@ class LLMSynthesizer:
     def synthesize_search_results(self, query: str, results: List[Any], project_path: Path) -> SynthesisResult:
         """Synthesize search results into a coherent summary."""
         
+        self._ensure_initialized()
         if not self.is_available():
             return SynthesisResult(
                 summary="LLM synthesis unavailable (Ollama not running or no models)",

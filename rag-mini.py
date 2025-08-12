@@ -19,6 +19,7 @@ from claude_rag.indexer import ProjectIndexer
 from claude_rag.search import CodeSearcher
 from claude_rag.ollama_embeddings import OllamaEmbedder
 from claude_rag.llm_synthesizer import LLMSynthesizer
+from claude_rag.explorer import CodeExplorer
 
 # Configure logging for user-friendly output
 logging.basicConfig(
@@ -231,6 +232,77 @@ def status_check(project_path: Path):
         print(f"❌ Status check failed: {e}")
         sys.exit(1)
 
+def explore_interactive(project_path: Path):
+    """Interactive exploration mode with thinking and context memory."""
+    try:
+        explorer = CodeExplorer(project_path)
+        
+        if not explorer.start_exploration_session():
+            sys.exit(1)
+        
+        print("\n🤔 Ask your first question about the codebase:")
+        
+        while True:
+            try:
+                # Get user input
+                question = input("\n> ").strip()
+                
+                # Handle exit commands
+                if question.lower() in ['quit', 'exit', 'q']:
+                    print("\n" + explorer.end_session())
+                    break
+                
+                # Handle empty input
+                if not question:
+                    print("Please enter a question or 'quit' to exit.")
+                    continue
+                
+                # Special commands
+                if question.lower() in ['help', 'h']:
+                    print("""
+🧠 EXPLORATION MODE HELP:
+  • Ask any question about the codebase
+  • I remember our conversation for follow-up questions
+  • Use 'why', 'how', 'explain' for detailed reasoning
+  • Type 'summary' to see session overview
+  • Type 'quit' or 'exit' to end session
+  
+💡 Example questions:
+  • "How does authentication work?"
+  • "Why is this function slow?"
+  • "Explain the database connection logic"
+  • "What are the security concerns here?"
+""")
+                    continue
+                
+                if question.lower() == 'summary':
+                    print("\n" + explorer.get_session_summary())
+                    continue
+                
+                # Process the question
+                print("\n🔍 Analyzing...")
+                response = explorer.explore_question(question)
+                
+                if response:
+                    print(f"\n{response}")
+                else:
+                    print("❌ Sorry, I couldn't process that question. Please try again.")
+                
+            except KeyboardInterrupt:
+                print(f"\n\n{explorer.end_session()}")
+                break
+            except EOFError:
+                print(f"\n\n{explorer.end_session()}")
+                break
+            except Exception as e:
+                print(f"❌ Error processing question: {e}")
+                print("Please try again or type 'quit' to exit.")
+        
+    except Exception as e:
+        print(f"❌ Failed to start exploration mode: {e}")
+        print("Make sure the project is indexed first: rag-mini index <project>")
+        sys.exit(1)
+
 def main():
     """Main CLI interface."""
     parser = argparse.ArgumentParser(
@@ -241,11 +313,12 @@ Examples:
   rag-mini index /path/to/project              # Index a project
   rag-mini search /path/to/project "query"     # Search indexed project  
   rag-mini search /path/to/project "query" -s  # Search with LLM synthesis
+  rag-mini explore /path/to/project            # Interactive exploration mode
   rag-mini status /path/to/project             # Show status
         """
     )
     
-    parser.add_argument('command', choices=['index', 'search', 'status'],
+    parser.add_argument('command', choices=['index', 'search', 'explore', 'status'],
                        help='Command to execute')
     parser.add_argument('project_path', type=Path,
                        help='Path to project directory (REQUIRED)')
@@ -283,6 +356,8 @@ Examples:
             print("❌ Search query required")
             sys.exit(1)
         search_project(args.project_path, args.query, args.limit, args.synthesize)
+    elif args.command == 'explore':
+        explore_interactive(args.project_path)
     elif args.command == 'status':
         status_check(args.project_path)
 

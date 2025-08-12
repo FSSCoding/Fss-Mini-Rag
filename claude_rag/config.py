@@ -78,6 +78,7 @@ class LLMConfig:
     max_expansion_terms: int = 8   # Maximum additional terms to add
     enable_synthesis: bool = False # Enable by default when --synthesize used
     synthesis_temperature: float = 0.3
+    enable_thinking: bool = True  # Enable thinking mode for Qwen3 models (production: True, testing: toggle)
 
 
 @dataclass

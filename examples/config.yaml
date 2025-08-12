@@ -52,3 +52,4 @@ llm:
   enable_synthesis: false       # Enable synthesis by default
   synthesis_temperature: 0.3      # LLM temperature for analysis
   cpu_optimized: true      # Prefer ultra-lightweight models for CPU-only systems
+  enable_thinking: true    # Enable thinking mode for Qwen3 models (production: true, testing: false)
