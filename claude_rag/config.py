@@ -66,6 +66,18 @@ class SearchConfig:
     default_limit: int = 10
     enable_bm25: bool = True
     similarity_threshold: float = 0.1
+    expand_queries: bool = True  # Enable automatic query expansion
+
+
+@dataclass 
+class LLMConfig:
+    """Configuration for LLM synthesis and query expansion."""
+    ollama_host: str = "localhost:11434"
+    synthesis_model: str = "auto"  # "auto", "qwen3:1.7b", "qwen2.5:1.5b", etc.
+    expansion_model: str = "auto"  # Usually same as synthesis_model
+    max_expansion_terms: int = 8   # Maximum additional terms to add
+    enable_synthesis: bool = False # Enable by default when --synthesize used
+    synthesis_temperature: float = 0.3
 
 
 @dataclass
@@ -76,6 +88,7 @@ class RAGConfig:
     files: FilesConfig = None
     embedding: EmbeddingConfig = None
     search: SearchConfig = None
+    llm: LLMConfig = None
     
     def __post_init__(self):
         if self.chunking is None:
@@ -88,6 +101,8 @@ class RAGConfig:
             self.embedding = EmbeddingConfig()
         if self.search is None:
             self.search = SearchConfig()
+        if self.llm is None:
+            self.llm = LLMConfig()
 
 
 class ConfigManager:
@@ -198,6 +213,16 @@ class ConfigManager:
             f"  default_limit: {config_dict['search']['default_limit']}           # Default number of results",
             f"  enable_bm25: {str(config_dict['search']['enable_bm25']).lower()}             # Enable keyword matching boost",
             f"  similarity_threshold: {config_dict['search']['similarity_threshold']}        # Minimum similarity score",
+            f"  expand_queries: {str(config_dict['search']['expand_queries']).lower()}          # Enable automatic query expansion",
+            "",
+            "# LLM synthesis and query expansion settings",
+            "llm:",
+            f"  ollama_host: {config_dict['llm']['ollama_host']}",
+            f"  synthesis_model: {config_dict['llm']['synthesis_model']}    # 'auto', 'qwen3:1.7b', etc.",
+            f"  expansion_model: {config_dict['llm']['expansion_model']}     # Usually same as synthesis_model",
+            f"  max_expansion_terms: {config_dict['llm']['max_expansion_terms']}        # Maximum terms to add to queries",
+            f"  enable_synthesis: {str(config_dict['llm']['enable_synthesis']).lower()}       # Enable synthesis by default",
+            f"  synthesis_temperature: {config_dict['llm']['synthesis_temperature']}      # LLM temperature for analysis",
         ])
         
         return '\n'.join(yaml_lines)

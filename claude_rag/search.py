@@ -17,6 +17,8 @@ from collections import defaultdict
 
 from .ollama_embeddings import OllamaEmbedder as CodeEmbedder
 from .path_handler import display_path
+from .query_expander import QueryExpander
+from .config import ConfigManager
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -95,6 +97,11 @@ class CodeSearcher:
         self.project_path = Path(project_path).resolve()
         self.rag_dir = self.project_path / '.claude-rag'
         self.embedder = embedder or CodeEmbedder()
+        
+        # Load configuration and initialize query expander
+        config_manager = ConfigManager(project_path)
+        self.config = config_manager.load_config()
+        self.query_expander = QueryExpander(self.config)
         
         # Initialize database connection
         self.db = None
@@ -264,8 +271,14 @@ class CodeSearcher:
         if not self.table:
             raise RuntimeError("Database not connected")
         
-        # Embed the query for semantic search
-        query_embedding = self.embedder.embed_query(query)
+        # Expand query for better recall (if enabled)
+        expanded_query = self.query_expander.expand_query(query)
+        
+        # Use original query for display but expanded query for search
+        search_query = expanded_query if expanded_query != query else query
+        
+        # Embed the expanded query for semantic search
+        query_embedding = self.embedder.embed_query(search_query)
         
         # Ensure query is a numpy array of float32
         if not isinstance(query_embedding, np.ndarray):
@@ -299,8 +312,8 @@ class CodeSearcher:
         
         # Calculate BM25 scores if available
         if self.bm25:
-            # Tokenize query for BM25
-            query_tokens = query.lower().split()
+            # Tokenize expanded query for BM25
+            query_tokens = search_query.lower().split()
             
             # Get BM25 scores for all chunks in results
             bm25_scores = {}
