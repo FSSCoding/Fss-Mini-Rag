@@ -148,10 +148,10 @@ Expanded query:"""
                 data = response.json()
                 available = [model['name'] for model in data.get('models', [])]
                 
-                # Prefer fast, efficient models for query expansion
+                # Prefer ultra-fast, efficient models for query expansion (CPU-friendly)
                 expansion_preferences = [
-                    "qwen3:1.7b", "qwen3:0.6b", "qwen2.5:1.5b", 
-                    "llama3.2:1b", "llama3.2:3b", "gemma2:2b"
+                    "qwen3:0.6b", "qwen3:1.7b", "qwen2.5:1.5b", 
+                    "llama3.2:1b", "gemma2:2b", "llama3.2:3b"
                 ]
                 
                 for preferred in expansion_preferences:

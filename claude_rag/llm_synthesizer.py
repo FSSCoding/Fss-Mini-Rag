@@ -48,11 +48,14 @@ class LLMSynthesizer:
         if not self.available_models:
             return "qwen2.5:1.5b"  # Fallback preference
         
-        # Modern model preference ranking (best to acceptable)
-        # Prioritize: Qwen3 > Qwen2.5 > Mistral > Llama3.2 > Others
+        # Modern model preference ranking (CPU-friendly first)
+        # Prioritize: Ultra-efficient > Standard efficient > Larger models
         model_rankings = [
-            # Qwen3 models (newest, most efficient) - prefer standard versions
-            "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "qwen3:8b",
+            # Ultra-efficient models (perfect for CPU-only systems)
+            "qwen3:0.6b", "qwen3:1.7b", "llama3.2:1b", 
+            
+            # Standard efficient models
+            "qwen2.5:1.5b", "qwen3:3b", "qwen3:4b",
             
             # Qwen2.5 models (excellent performance/size ratio)
             "qwen2.5-coder:1.5b", "qwen2.5:1.5b", "qwen2.5:3b", "qwen2.5-coder:3b",
