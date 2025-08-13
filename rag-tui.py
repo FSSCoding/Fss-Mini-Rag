@@ -278,8 +278,37 @@ class SimpleTUI:
         print(f"Project: {self.project_path.name}")
         print()
         
-        # Get search query
-        query = self.get_input("Enter search query", "").strip()
+        # Show sample questions for beginners
+        print("💡 Not sure what to search for? Try these sample questions:")
+        print()
+        sample_questions = [
+            "authentication logic",
+            "error handling", 
+            "API endpoints",
+            "configuration settings",
+            "database connection",
+            "user management"
+        ]
+        
+        for i, question in enumerate(sample_questions[:3], 1):
+            print(f"   {i}. {question}")
+        print("   4. Enter your own question")
+        print()
+        
+        # Let user choose a sample or enter their own
+        choice_str = self.get_input("Choose a number (1-4) or press Enter for custom", "4")
+        
+        try:
+            choice = int(choice_str)
+            if 1 <= choice <= 3:
+                query = sample_questions[choice - 1]
+                print(f"Selected: '{query}'")
+                print()
+            else:
+                query = self.get_input("Enter your search query", "").strip()
+        except ValueError:
+            query = self.get_input("Enter your search query", "").strip()
+            
         if not query:
             return
         
@@ -354,6 +383,38 @@ class SimpleTUI:
                 if len(results) > 1:
                     print("💡 To see more context or specific results:")
                     print(f"   Run: ./rag-mini search {self.project_path} \"{query}\" --verbose")
+                
+                # Suggest follow-up questions based on the search
+                print()
+                print("🔍 Suggested follow-up searches:")
+                follow_up_questions = self.generate_follow_up_questions(query, results)
+                for i, question in enumerate(follow_up_questions, 1):
+                    print(f"   {i}. {question}")
+                
+                # Ask if they want to run a follow-up search
+                print()
+                choice = input("Run a follow-up search? Enter number (1-3) or press Enter to continue: ").strip()
+                if choice.isdigit() and 1 <= int(choice) <= len(follow_up_questions):
+                    # Recursive search with the follow-up question
+                    follow_up_query = follow_up_questions[int(choice) - 1]
+                    print(f"\nSearching for: '{follow_up_query}'")
+                    print("=" * 50)
+                    # Run another search
+                    follow_results = searcher.search(follow_up_query, top_k=5)
+                    
+                    if follow_results:
+                        print(f"✅ Found {len(follow_results)} follow-up results:")
+                        print()
+                        for i, result in enumerate(follow_results[:3], 1):  # Show top 3
+                            try:
+                                rel_path = result.file_path.relative_to(self.project_path)
+                            except:
+                                rel_path = result.file_path
+                            print(f"{i}. {rel_path} (Score: {result.score:.3f})")
+                            print(f"   {result.content.strip()[:100]}...")
+                            print()
+                    else:
+                        print("❌ No follow-up results found")
                     print(f"   Or: ./rag-mini-enhanced context {self.project_path} \"{query}\"")
                     print()
             
@@ -363,6 +424,45 @@ class SimpleTUI:
         
         print()
         input("Press Enter to continue...")
+    
+    def generate_follow_up_questions(self, original_query: str, results) -> List[str]:
+        """Generate contextual follow-up questions based on search results."""
+        # Simple pattern-based follow-up generation
+        follow_ups = []
+        
+        # Based on original query patterns
+        query_lower = original_query.lower()
+        
+        if "auth" in query_lower or "login" in query_lower:
+            follow_ups.extend(["password validation", "session management", "user permissions"])
+        elif "error" in query_lower or "exception" in query_lower:
+            follow_ups.extend(["error logging", "exception handling", "error messages"])
+        elif "api" in query_lower or "endpoint" in query_lower:
+            follow_ups.extend(["API documentation", "request validation", "response formatting"])
+        elif "database" in query_lower or "db" in query_lower:
+            follow_ups.extend(["database schema", "query optimization", "connection pooling"])
+        elif "config" in query_lower or "setting" in query_lower:
+            follow_ups.extend(["configuration files", "environment variables", "default values"])
+        else:
+            # Generic follow-ups
+            follow_ups.extend(["implementation details", "error handling", "configuration"])
+        
+        # Based on file types found in results
+        if results:
+            file_extensions = set()
+            for result in results[:3]:  # Check first 3 results
+                ext = result.file_path.suffix.lower()
+                file_extensions.add(ext)
+            
+            if '.py' in file_extensions:
+                follow_ups.append("Python imports")
+            if '.js' in file_extensions:
+                follow_ups.append("JavaScript functions")
+            if '.md' in file_extensions:
+                follow_ups.append("documentation examples")
+        
+        # Return top 3 unique follow-ups
+        return list(dict.fromkeys(follow_ups))[:3]
     
     def explore_interactive(self):
         """Interactive exploration interface with thinking mode."""
@@ -681,6 +781,12 @@ class SimpleTUI:
                 rag_dir = self.project_path / '.mini-rag'
                 status = "✅ Indexed" if rag_dir.exists() else "❌ Not indexed"
                 print(f"📁 Current project: {self.project_path.name} ({status})")
+                print()
+            else:
+                # Show beginner tips when no project selected
+                print("🎯 Welcome to FSS-Mini-RAG!")
+                print("   Search through code, documents, emails, notes - anything text-based!")
+                print("   Start by selecting a project directory below.")
                 print()
             
             options = [

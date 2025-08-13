@@ -549,33 +549,123 @@ show_completion() {
     read -r run_test
     if [[ ! $run_test =~ ^[Nn]$ ]]; then
         run_quick_test
+        echo ""
+        show_beginner_guidance
+    else
+        show_beginner_guidance
     fi
 }
 
-# Run quick test
+# Create sample project for testing
+create_sample_project() {
+    local sample_dir="$SCRIPT_DIR/.sample_test"
+    rm -rf "$sample_dir"
+    mkdir -p "$sample_dir"
+    
+    # Create a few small sample files
+    cat > "$sample_dir/README.md" << 'EOF'
+# Sample Project
+
+This is a sample project for testing FSS-Mini-RAG search capabilities.
+
+## Features
+
+- User authentication system
+- Document processing
+- Search functionality
+- Email integration
+EOF
+
+    cat > "$sample_dir/auth.py" << 'EOF'
+# Authentication module
+def login_user(username, password):
+    """Handle user login with password validation"""
+    if validate_credentials(username, password):
+        create_session(username)
+        return True
+    return False
+
+def validate_credentials(username, password):
+    """Check username and password against database"""
+    # Database validation logic here
+    return check_password_hash(username, password)
+EOF
+
+    cat > "$sample_dir/search.py" << 'EOF'
+# Search functionality
+def semantic_search(query, documents):
+    """Perform semantic search across document collection"""
+    embeddings = generate_embeddings(query)
+    results = find_similar_documents(embeddings, documents)
+    return rank_results(results)
+
+def generate_embeddings(text):
+    """Generate vector embeddings for text"""
+    # Embedding generation logic
+    return process_with_model(text)
+EOF
+
+    echo "$sample_dir"
+}
+
+# Run quick test with sample data
 run_quick_test() {
     print_header "Quick Test"
     
-    print_info "Testing on this project directory..."
-    echo "This will index the FSS-Mini-RAG system itself as a test."
+    print_info "Creating small sample project for testing..."
+    local sample_dir=$(create_sample_project)
+    echo "Sample project created with 3 files for fast testing."
     echo ""
     
-    # Index this project
-    if ./rag-mini index "$SCRIPT_DIR"; then
-        print_success "Indexing completed"
+    # Index the sample project (much faster)
+    print_info "Indexing sample project (this should be fast)..."
+    if ./rag-mini index "$sample_dir" --quiet; then
+        print_success "Sample project indexed successfully"
         
-        # Try a search
         echo ""
-        print_info "Testing search functionality..."
-        ./rag-mini search "$SCRIPT_DIR" "embedding system" --limit 3
+        print_info "Testing search with sample queries..."
+        echo -e "${BLUE}Running search: 'user authentication'${NC}"
+        ./rag-mini search "$sample_dir" "user authentication" --limit 2
         
         echo ""
         print_success "Test completed successfully!"
-        echo -e "${CYAN}You can now use FSS-Mini-RAG on your own projects.${NC}"
+        echo -e "${CYAN}Ready to use FSS-Mini-RAG on your own projects!${NC}"
+        
+        # Offer beginner guidance
+        echo ""
+        echo -e "${YELLOW}💡 Beginner Tip:${NC} Try the interactive mode with pre-made questions"
+        echo "   Run: ./rag-tui for guided experience"
+        
+        # Clean up sample
+        rm -rf "$sample_dir"
     else
-        print_error "Test failed"
-        echo "Check the error messages above for troubleshooting."
+        print_error "Sample test failed"
+        echo "This might indicate an issue with the installation."
+        rm -rf "$sample_dir"
     fi
+}
+
+# Show beginner-friendly first steps
+show_beginner_guidance() {
+    print_header "Getting Started - Your First Search"
+    
+    echo -e "${CYAN}FSS-Mini-RAG is ready! Here's how to start:${NC}"
+    echo ""
+    echo -e "${GREEN}🎯 For Beginners (Recommended):${NC}"
+    echo "   ./rag-tui"
+    echo "   ↳ Interactive interface with sample questions"
+    echo ""
+    echo -e "${BLUE}💻 For Developers:${NC}"
+    echo "   ./rag-mini index /path/to/your/project"
+    echo "   ./rag-mini search /path/to/your/project \"your question\""
+    echo ""
+    echo -e "${YELLOW}📚 What can you search for?${NC}"
+    echo "   • Code: \"authentication logic\", \"error handling\", \"API endpoints\""
+    echo "   • Docs: \"installation guide\", \"configuration options\"
+    echo "   • Your own files: emails, notes, research documents"
+    echo ""
+    echo -e "${CYAN}💡 Pro tip:${NC} You can drag ANY text-based documents into a folder"
+    echo "   and search through them - emails, notes, research, chat logs!"
 }
 
 # Main installation flow
