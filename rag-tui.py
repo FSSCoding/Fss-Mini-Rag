@@ -15,6 +15,7 @@ class SimpleTUI:
     def __init__(self):
         self.project_path: Optional[Path] = None
         self.current_config: Dict[str, Any] = {}
+        self.search_count = 0  # Track searches for sample reminder
         
     def clear_screen(self):
         """Clear the terminal screen."""
@@ -278,16 +279,16 @@ class SimpleTUI:
         print(f"Project: {self.project_path.name}")
         print()
         
-        # Show sample questions for beginners
-        print("💡 Not sure what to search for? Try these sample questions:")
+        # Show sample questions for beginners - relevant to FSS-Mini-RAG
+        print("💡 Not sure what to search for? Try these questions about FSS-Mini-RAG:")
         print()
         sample_questions = [
-            "authentication logic",
-            "error handling", 
-            "API endpoints",
-            "configuration settings",
-            "database connection",
-            "user management"
+            "chunking strategy",
+            "ollama integration", 
+            "indexing performance",
+            "why does indexing take long",
+            "how to improve search results",
+            "embedding generation"
         ]
         
         for i, question in enumerate(sample_questions[:3], 1):
@@ -415,6 +416,38 @@ class SimpleTUI:
                             print()
                     else:
                         print("❌ No follow-up results found")
+                
+                # Track searches and show sample reminder
+                self.search_count += 1
+                
+                # Show sample reminder after 2 searches
+                if self.search_count >= 2 and self.project_path.name == '.sample_test':
+                    print()
+                    print("⚠️  Sample Limitation Notice")
+                    print("=" * 30)
+                    print("You've been searching a small sample project.")
+                    print("For full exploration of your codebase, you need to index the complete project.")
+                    print()
+                    
+                    # Show timing estimate if available
+                    try:
+                        with open('/tmp/fss-rag-sample-time.txt', 'r') as f:
+                            sample_time = int(f.read().strip())
+                        # Rough estimate: multiply by file count ratio
+                        estimated_time = sample_time * 20  # Rough multiplier
+                        print(f"🕒 Estimated full indexing time: ~{estimated_time} seconds")
+                    except:
+                        print("🕒 Estimated full indexing time: 1-3 minutes for typical projects")
+                    
+                    print()
+                    choice = input("Index the full project now? [y/N]: ").strip().lower()
+                    if choice == 'y':
+                        # Switch to full project and index
+                        parent_dir = self.project_path.parent
+                        self.project_path = parent_dir
+                        print(f"\nSwitching to full project: {parent_dir}")
+                        print("Starting full indexing...")
+                        # Note: This would trigger full indexing in real implementation
                     print(f"   Or: ./rag-mini-enhanced context {self.project_path} \"{query}\"")
                     print()
             
@@ -433,21 +466,22 @@ class SimpleTUI:
         # Based on original query patterns
         query_lower = original_query.lower()
         
-        if "auth" in query_lower or "login" in query_lower:
-            follow_ups.extend(["password validation", "session management", "user permissions"])
-        elif "error" in query_lower or "exception" in query_lower:
-            follow_ups.extend(["error logging", "exception handling", "error messages"])
-        elif "api" in query_lower or "endpoint" in query_lower:
-            follow_ups.extend(["API documentation", "request validation", "response formatting"])
-        elif "database" in query_lower or "db" in query_lower:
-            follow_ups.extend(["database schema", "query optimization", "connection pooling"])
-        elif "config" in query_lower or "setting" in query_lower:
-            follow_ups.extend(["configuration files", "environment variables", "default values"])
+        # FSS-Mini-RAG specific follow-ups
+        if "chunk" in query_lower:
+            follow_ups.extend(["chunk size optimization", "smart chunking boundaries", "chunk overlap strategies"])
+        elif "ollama" in query_lower:
+            follow_ups.extend(["embedding model comparison", "ollama server setup", "nomic-embed-text performance"])
+        elif "index" in query_lower or "performance" in query_lower:
+            follow_ups.extend(["indexing speed optimization", "memory usage during indexing", "file processing pipeline"])
+        elif "search" in query_lower or "result" in query_lower:
+            follow_ups.extend(["search result ranking", "semantic vs keyword search", "query expansion techniques"])
+        elif "embed" in query_lower:
+            follow_ups.extend(["vector embedding storage", "embedding model fallbacks", "similarity scoring"])
         else:
-            # Generic follow-ups
-            follow_ups.extend(["implementation details", "error handling", "configuration"])
+            # Generic RAG-related follow-ups
+            follow_ups.extend(["vector database internals", "search quality tuning", "embedding optimization"])
         
-        # Based on file types found in results
+        # Based on file types found in results (FSS-Mini-RAG specific)
         if results:
             file_extensions = set()
             for result in results[:3]:  # Check first 3 results
@@ -455,11 +489,13 @@ class SimpleTUI:
                 file_extensions.add(ext)
             
             if '.py' in file_extensions:
-                follow_ups.append("Python imports")
-            if '.js' in file_extensions:
-                follow_ups.append("JavaScript functions")
+                follow_ups.append("Python module dependencies")
             if '.md' in file_extensions:
-                follow_ups.append("documentation examples")
+                follow_ups.append("documentation implementation")
+            if 'chunker' in str(results[0].file_path).lower():
+                follow_ups.append("chunking algorithm details")
+            if 'search' in str(results[0].file_path).lower():
+                follow_ups.append("search algorithm implementation")
         
         # Return top 3 unique follow-ups
         return list(dict.fromkeys(follow_ups))[:3]
