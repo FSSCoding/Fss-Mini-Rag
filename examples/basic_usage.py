@@ -50,7 +50,7 @@ def main():
     print("\n4. Example searches:")
     for query in queries:
         print(f"\n   Query: '{query}'")
-        results = searcher.search(query, limit=3)
+        results = searcher.search(query, top_k=3)
         
         if results:
             for i, result in enumerate(results, 1):

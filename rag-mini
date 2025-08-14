@@ -112,6 +112,7 @@ show_help() {
     echo -e "${BOLD}Main Commands:${NC}"
     echo "  rag-mini index <project_path>      # Index project for search"
     echo "  rag-mini search <project_path> <query>  # Search indexed project"
+    echo "  rag-mini explore <project_path>    # Interactive exploration with AI"
     echo "  rag-mini status <project_path>     # Show project status"
     echo ""
     echo -e "${BOLD}Interfaces:${NC}"
@@ -324,9 +325,9 @@ main() {
         "server")
             # Start server mode
             shift
-            exec "$PYTHON" "$SCRIPT_DIR/claude_rag/server.py" "$@"
+            exec "$PYTHON" "$SCRIPT_DIR/mini_rag/fast_server.py" "$@"
             ;;
-        "index"|"search"|"status")
+        "index"|"search"|"explore"|"status")
             # Direct CLI commands - call Python script
             exec "$PYTHON" "$SCRIPT_DIR/rag-mini.py" "$@"
             ;;

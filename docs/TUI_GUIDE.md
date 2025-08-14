@@ -154,7 +154,7 @@ That's it! The TUI will guide you through everything.
 - **chunking.strategy** - Smart (semantic) vs simple (fixed size)
 - **files.exclude_patterns** - Skip certain files/directories
 - **embedding.preferred_method** - AI model preference
-- **search.default_limit** - How many results to show
+- **search.default_top_k** - How many results to show
 
 **Interactive Options**:
 - **[V]iew config** - See full configuration file

@@ -118,7 +118,7 @@ def index_project(project_path: Path, force: bool = False):
         print("   Or see: docs/TROUBLESHOOTING.md")
         sys.exit(1)
 
-def search_project(project_path: Path, query: str, limit: int = 10, synthesize: bool = False):
+def search_project(project_path: Path, query: str, top_k: int = 10, synthesize: bool = False):
     """Search a project directory."""
     try:
         # Check if indexed first
@@ -130,7 +130,7 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
         
         print(f"🔍 Searching \"{query}\" in {project_path.name}")
         searcher = CodeSearcher(project_path)
-        results = searcher.search(query, top_k=limit)
+        results = searcher.search(query, top_k=top_k)
         
         if not results:
             print("❌ No results found")
@@ -143,7 +143,7 @@ def search_project(project_path: Path, query: str, limit: int = 10, synthesize: 
             print()
             print("⚙️ Configuration adjustments:")
             print(f"   • Lower threshold: ./rag-mini search {project_path} \"{query}\" --threshold 0.05")
-            print("   • More results: add --limit 20")
+            print("   • More results: add --top-k 20")
             print()
             print("📚 Need help? See: docs/TROUBLESHOOTING.md")
             return
@@ -310,14 +310,14 @@ def status_check(project_path: Path):
         sys.exit(1)
 
 def explore_interactive(project_path: Path):
-    """Interactive exploration mode with thinking and context memory."""
+    """Interactive exploration mode with thinking and context memory for any documents."""
     try:
         explorer = CodeExplorer(project_path)
         
         if not explorer.start_exploration_session():
             sys.exit(1)
         
-        print("\n🤔 Ask your first question about the codebase:")
+        print(f"\n🤔 Ask your first question about {project_path.name}:")
         
         while True:
             try:
@@ -357,7 +357,8 @@ def explore_interactive(project_path: Path):
                     continue
                 
                 # Process the question
-                print("\n🔍 Analyzing...")
+                print(f"\n🔍 Searching {project_path.name}...")
+                print("🧠 Thinking with AI model...")
                 response = explorer.explore_question(question)
                 
                 if response:
@@ -382,6 +383,13 @@ def explore_interactive(project_path: Path):
 
 def main():
     """Main CLI interface."""
+    # Check virtual environment
+    try:
+        from mini_rag.venv_checker import check_and_warn_venv
+        check_and_warn_venv("rag-mini.py", force_exit=False)
+    except ImportError:
+        pass  # If venv checker can't be imported, continue anyway
+    
     parser = argparse.ArgumentParser(
         description="FSS-Mini-RAG - Lightweight semantic code search",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -403,8 +411,8 @@ Examples:
                        help='Search query (for search command)')
     parser.add_argument('--force', action='store_true',
                        help='Force reindex all files')
-    parser.add_argument('--limit', type=int, default=10,
-                       help='Maximum number of search results')
+    parser.add_argument('--top-k', '--limit', type=int, default=10, dest='top_k',
+                       help='Maximum number of search results (top-k)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     parser.add_argument('--synthesize', '-s', action='store_true',
@@ -432,7 +440,7 @@ Examples:
         if not args.query:
             print("❌ Search query required")
             sys.exit(1)
-        search_project(args.project_path, args.query, args.limit, args.synthesize)
+        search_project(args.project_path, args.query, args.top_k, args.synthesize)
     elif args.command == 'explore':
         explore_interactive(args.project_path)
     elif args.command == 'status':

@@ -218,6 +218,11 @@ class FastRAGServer:
         # Quick file count check
         try:
             import lancedb
+        except ImportError:
+            # If LanceDB not available, assume index is empty and needs creation
+            return True
+        
+        try:
             db = lancedb.connect(rag_dir)
             if 'code_vectors' not in db.table_names():
                 return True

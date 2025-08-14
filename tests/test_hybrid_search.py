@@ -2,6 +2,13 @@
 """
 Test and benchmark the hybrid BM25 + semantic search system.
 Shows performance metrics and search quality comparisons.
+
+⚠️  IMPORTANT: This test requires the virtual environment to be activated:
+    source .venv/bin/activate
+    PYTHONPATH=. python tests/test_hybrid_search.py
+
+Or run directly with venv:
+    source .venv/bin/activate && PYTHONPATH=. python tests/test_hybrid_search.py
 """
 
 import time
@@ -16,7 +23,7 @@ from rich.syntax import Syntax
 from rich.progress import track
 
 from mini_rag.search import CodeSearcher, SearchResult
-from mini_rag.embeddings import CodeEmbedder
+from mini_rag.ollama_embeddings import OllamaEmbedder as CodeEmbedder
 
 console = Console()
 
@@ -40,7 +47,7 @@ class SearchTester:
         if 'error' not in stats:
             console.print(f"[dim]Index contains {stats['total_chunks']} chunks from {stats['unique_files']} files[/dim]\n")
     
-    def run_query(self, query: str, limit: int = 10, 
+    def run_query(self, query: str, top_k: int = 10, 
                   semantic_only: bool = False,
                   bm25_only: bool = False) -> Dict[str, Any]:
         """Run a single query and return metrics."""
@@ -60,7 +67,7 @@ class SearchTester:
         start = time.time()
         results = self.searcher.search(
             query=query,
-            limit=limit,
+            top_k=top_k,
             semantic_weight=semantic_weight,
             bm25_weight=bm25_weight
         )
@@ -76,10 +83,10 @@ class SearchTester:
             'avg_score': sum(r.score for r in results) / len(results) if results else 0,
         }
     
-    def compare_search_modes(self, query: str, limit: int = 5):
+    def compare_search_modes(self, query: str, top_k: int = 5):
         """Compare results across different search modes."""
         console.print(f"\n[bold cyan]Query:[/bold cyan] '{query}'")
-        console.print(f"[dim]Top {limit} results per mode[/dim]\n")
+        console.print(f"[dim]Top {top_k} results per mode[/dim]\n")
         
         # Run searches in all modes
         modes = [
@@ -90,7 +97,7 @@ class SearchTester:
         
         all_results = {}
         for mode_name, semantic_only, bm25_only in modes:
-            result = self.run_query(query, limit, semantic_only, bm25_only)
+            result = self.run_query(query, top_k, semantic_only, bm25_only)
             all_results[mode_name] = result
         
         # Create comparison table
@@ -191,7 +198,7 @@ class SearchTester:
         for test_case in test_queries:
             console.rule(f"\n[cyan]{test_case['description']}[/cyan]")
             console.print(f"[dim]{test_case['expected']}[/dim]")
-            self.compare_search_modes(test_case['query'], limit=3)
+            self.compare_search_modes(test_case['query'], top_k=3)
             time.sleep(0.5)  # Brief pause between tests
     
     def benchmark_performance(self, num_queries: int = 50):
@@ -268,7 +275,7 @@ class SearchTester:
         
         # Query that might return many results from same files
         query = "function implementation code search"
-        results = self.searcher.search(query, limit=20)
+        results = self.searcher.search(query, top_k=20)
         
         # Analyze diversity
         file_counts = {}

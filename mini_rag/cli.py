@@ -52,6 +52,10 @@ def cli(verbose: bool, quiet: bool):
     A local RAG system for improving the development environment's grounding capabilities.
     Indexes your codebase and enables lightning-fast semantic search.
     """
+    # Check virtual environment
+    from .venv_checker import check_and_warn_venv
+    check_and_warn_venv("rag-mini", force_exit=False)
+    
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     elif quiet:
@@ -350,7 +354,12 @@ def debug_schema(path: str):
             return
         
         # Connect to database
-        import lancedb
+        try:
+            import lancedb
+        except ImportError:
+            console.print("[red]LanceDB not available. Install with: pip install lancedb pyarrow[/red]")
+            return
+        
         db = lancedb.connect(rag_dir)
         
         if "code_vectors" not in db.table_names():

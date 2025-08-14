@@ -36,12 +36,13 @@ class SynthesisResult:
 class LLMSynthesizer:
     """Synthesizes RAG search results using Ollama LLMs."""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = None, enable_thinking: bool = False):
+    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = None, enable_thinking: bool = False, config=None):
         self.ollama_url = ollama_url.rstrip('/')
         self.available_models = []
         self.model = model
         self.enable_thinking = enable_thinking  # Default False for synthesis mode
         self._initialized = False
+        self.config = config  # For accessing model rankings
         
         # Initialize safeguards
         if ModelRunawayDetector:
@@ -61,60 +62,36 @@ class LLMSynthesizer:
         return []
     
     def _select_best_model(self) -> str:
-        """Select the best available model based on modern performance rankings."""
+        """Select the best available model based on configuration rankings."""
         if not self.available_models:
             return "qwen2.5:1.5b"  # Fallback preference
         
-        # Modern model preference ranking (CPU-friendly first)
-        # Prioritize: Ultra-efficient > Standard efficient > Larger models
-        model_rankings = [
-            # Recommended model (excellent quality)
-            "qwen3:4b",
-            
-            # Ultra-efficient models (perfect for CPU-only systems)
-            "qwen3:0.6b", "qwen3:1.7b", "llama3.2:1b", 
-            
-            # Standard efficient models
-            "qwen2.5:1.5b", "qwen3:3b",
-            
-            # Qwen2.5 models (excellent performance/size ratio)
-            "qwen2.5-coder:1.5b", "qwen2.5:1.5b", "qwen2.5:3b", "qwen2.5-coder:3b",
-            "qwen2.5:7b", "qwen2.5-coder:7b",
-            
-            # Qwen2 models (older but still good)
-            "qwen2:1.5b", "qwen2:3b", "qwen2:7b",
-            
-            # Mistral models (good quality, reasonable size)
-            "mistral:7b", "mistral-nemo", "mistral-small",
-            
-            # Llama3.2 models (decent but larger)
-            "llama3.2:1b", "llama3.2:3b", "llama3.2", "llama3.2:8b",
-            
-            # Fallback to other Llama models
-            "llama3.1:8b", "llama3:8b", "llama3", 
-            
-            # Other decent models
-            "gemma2:2b", "gemma2:9b", "phi3:3.8b", "phi3.5",
-        ]
+        # Get model rankings from config or use defaults
+        if self.config and hasattr(self.config, 'llm') and hasattr(self.config.llm, 'model_rankings'):
+            model_rankings = self.config.llm.model_rankings
+        else:
+            # Fallback rankings if no config
+            model_rankings = [
+                "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "llama3.2:1b", 
+                "qwen2.5:1.5b", "qwen3:3b", "qwen2.5-coder:1.5b"
+            ]
         
-        # Find first available model from our ranked list
+        # Find first available model from our ranked list (exact matches first)
         for preferred_model in model_rankings:
             for available_model in self.available_models:
-                # Match model names (handle version tags)
-                available_base = available_model.split(':')[0].lower()
-                preferred_base = preferred_model.split(':')[0].lower()
+                # Exact match first (e.g., "qwen3:1.7b" matches "qwen3:1.7b")
+                if preferred_model.lower() == available_model.lower():
+                    logger.info(f"Selected exact match model: {available_model}")
+                    return available_model
                 
-                if preferred_base in available_base or available_base in preferred_base:
-                    # Additional size filtering - prefer smaller models
-                    if any(size in available_model.lower() for size in ['1b', '1.5b', '2b', '3b']):
-                        logger.info(f"Selected efficient model: {available_model}")
-                        return available_model
-                    elif any(size in available_model.lower() for size in ['7b', '8b']):
-                        # Only use larger models if no smaller ones available
-                        logger.info(f"Selected larger model: {available_model}")
-                        return available_model
-                    elif ':' not in available_model:
-                        # Handle models without explicit size tags
+                # Partial match with version handling (e.g., "qwen3:1.7b" matches "qwen3:1.7b-q8_0")
+                preferred_parts = preferred_model.lower().split(':')
+                available_parts = available_model.lower().split(':')
+                
+                if len(preferred_parts) >= 2 and len(available_parts) >= 2:
+                    if (preferred_parts[0] == available_parts[0] and 
+                        preferred_parts[1] in available_parts[1]):
+                        logger.info(f"Selected version match model: {available_model}")
                         return available_model
         
         # If no preferred models found, use first available
@@ -132,12 +109,8 @@ class LLMSynthesizer:
         if not self.model:
             self.model = self._select_best_model()
             
-        # Warm up LLM with minimal request (ignores response)
-        if self.available_models:
-            try:
-                self._call_ollama("testing, just say 'hi'", temperature=0.1, disable_thinking=True)
-            except:
-                pass  # Warmup failure is non-critical
+        # Skip warmup - models are fast enough and warmup causes delays
+        # Warmup removed to eliminate startup delays and unwanted model calls
                 
         self._initialized = True
     
@@ -146,7 +119,7 @@ class LLMSynthesizer:
         self._ensure_initialized()
         return len(self.available_models) > 0
     
-    def _call_ollama(self, prompt: str, temperature: float = 0.3, disable_thinking: bool = False) -> Optional[str]:
+    def _call_ollama(self, prompt: str, temperature: float = 0.3, disable_thinking: bool = False, use_streaming: bool = False) -> Optional[str]:
         """Make a call to Ollama API with safeguards."""
         start_time = time.time()
         
@@ -163,27 +136,54 @@ class LLMSynthesizer:
                     
             # Handle thinking mode for Qwen3 models
             final_prompt = prompt
-            if not self.enable_thinking or disable_thinking:
+            use_thinking = self.enable_thinking and not disable_thinking
+            
+            # For non-thinking mode, add <no_think> tag for Qwen3
+            if not use_thinking and "qwen3" in model_to_use.lower():
                 if not final_prompt.endswith(" <no_think>"):
                     final_prompt += " <no_think>"
             
-            # Get optimal parameters for this model
+            # Get optimal parameters for this model  
             optimal_params = get_optimal_ollama_parameters(model_to_use)
+            
+            # Qwen3-specific optimal parameters based on research
+            if "qwen3" in model_to_use.lower():
+                if use_thinking:
+                    # Thinking mode: Temperature=0.6, TopP=0.95, TopK=20, PresencePenalty=1.5
+                    qwen3_temp = 0.6
+                    qwen3_top_p = 0.95
+                    qwen3_top_k = 20
+                    qwen3_presence = 1.5
+                else:
+                    # Non-thinking mode: Temperature=0.7, TopP=0.8, TopK=20, PresencePenalty=1.5  
+                    qwen3_temp = 0.7
+                    qwen3_top_p = 0.8
+                    qwen3_top_k = 20
+                    qwen3_presence = 1.5
+            else:
+                qwen3_temp = temperature
+                qwen3_top_p = optimal_params.get("top_p", 0.9)
+                qwen3_top_k = optimal_params.get("top_k", 40)
+                qwen3_presence = optimal_params.get("presence_penalty", 1.0)
             
             payload = {
                 "model": model_to_use,
                 "prompt": final_prompt,
-                "stream": False,
+                "stream": use_streaming,
                 "options": {
-                    "temperature": temperature,
-                    "top_p": optimal_params.get("top_p", 0.9),
-                    "top_k": optimal_params.get("top_k", 40),
-                    "num_ctx": optimal_params.get("num_ctx", 32768),
+                    "temperature": qwen3_temp,
+                    "top_p": qwen3_top_p,
+                    "top_k": qwen3_top_k,
+                    "num_ctx": 32000,  # Critical: Qwen3 context length (32K token limit)
                     "num_predict": optimal_params.get("num_predict", 2000),
                     "repeat_penalty": optimal_params.get("repeat_penalty", 1.1),
-                    "presence_penalty": optimal_params.get("presence_penalty", 1.0)
+                    "presence_penalty": qwen3_presence
                 }
             }
+            
+            # Handle streaming with early stopping
+            if use_streaming:
+                return self._handle_streaming_with_early_stop(payload, model_to_use, use_thinking, start_time)
             
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
@@ -193,7 +193,18 @@ class LLMSynthesizer:
             
             if response.status_code == 200:
                 result = response.json()
+                
+                # All models use standard response format
+                # Qwen3 thinking tokens are embedded in the response content itself as <think>...</think>
                 raw_response = result.get('response', '').strip()
+                
+                # Log thinking content for Qwen3 debugging
+                if "qwen3" in model_to_use.lower() and use_thinking and "<think>" in raw_response:
+                    thinking_start = raw_response.find("<think>")
+                    thinking_end = raw_response.find("</think>")
+                    if thinking_start != -1 and thinking_end != -1:
+                        thinking_content = raw_response[thinking_start+7:thinking_end]
+                        logger.info(f"Qwen3 thinking: {thinking_content[:100]}...")
                 
                 # Apply safeguards to check response quality
                 if self.safeguard_detector and raw_response:
@@ -203,8 +214,8 @@ class LLMSynthesizer:
                     
                     if not is_valid:
                         logger.warning(f"Safeguard triggered: {issue_type}")
-                        # Return a safe explanation instead of the problematic response
-                        return self._create_safeguard_response(issue_type, explanation, prompt)
+                        # Preserve original response but add safeguard warning
+                        return self._create_safeguard_response_with_content(issue_type, explanation, raw_response)
                 
                 return raw_response
             else:
@@ -232,6 +243,119 @@ class LLMSynthesizer:
 4. **Different approach**: Try synthesis mode: `--synthesize` for simpler responses
 
 This is normal with smaller AI models and helps ensure you get quality responses."""
+
+    def _create_safeguard_response_with_content(self, issue_type: str, explanation: str, original_response: str) -> str:
+        """Create a response that preserves the original content but adds a safeguard warning."""
+        
+        # For Qwen3, extract the actual response (after thinking)
+        actual_response = original_response
+        if "<think>" in original_response and "</think>" in original_response:
+            thinking_end = original_response.find("</think>")
+            if thinking_end != -1:
+                actual_response = original_response[thinking_end + 8:].strip()
+        
+        # If we have useful content, preserve it with a warning
+        if len(actual_response.strip()) > 20:
+            return f"""⚠️ **Response Quality Warning** ({issue_type})
+
+{explanation}
+
+---
+
+**AI Response (use with caution):**
+
+{actual_response}
+
+---
+
+💡 **Note**: This response may have quality issues. Consider rephrasing your question or trying exploration mode for better results."""
+        else:
+            # If content is too short or problematic, use the original safeguard response
+            return f"""⚠️ Model Response Issue Detected
+
+{explanation}
+
+**What happened:** The AI model encountered a common issue with small language models.
+
+**Your options:**
+1. **Try again**: Ask the same question (often resolves itself)
+2. **Rephrase**: Make your question more specific or break it into parts  
+3. **Use exploration mode**: `rag-mini explore` for complex questions
+
+This is normal with smaller AI models and helps ensure you get quality responses."""
+
+    def _handle_streaming_with_early_stop(self, payload: dict, model_name: str, use_thinking: bool, start_time: float) -> Optional[str]:
+        """Handle streaming response with intelligent early stopping."""
+        import json
+        
+        try:
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json=payload,
+                stream=True,
+                timeout=65
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Ollama API error: {response.status_code}")
+                return None
+            
+            full_response = ""
+            word_buffer = []
+            repetition_window = 30  # Check last 30 words for repetition (more context)
+            stop_threshold = 0.8    # Stop only if 80% of recent words are repetitive (very permissive)
+            min_response_length = 100  # Don't early stop until we have at least 100 chars
+            
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        chunk_data = json.loads(line.decode('utf-8'))
+                        chunk_text = chunk_data.get('response', '')
+                        
+                        if chunk_text:
+                            full_response += chunk_text
+                            
+                            # Add words to buffer for repetition detection
+                            new_words = chunk_text.split()
+                            word_buffer.extend(new_words)
+                            
+                            # Keep only recent words in buffer
+                            if len(word_buffer) > repetition_window:
+                                word_buffer = word_buffer[-repetition_window:]
+                            
+                            # Check for repetition patterns after we have enough words AND content
+                            if len(word_buffer) >= repetition_window and len(full_response) >= min_response_length:
+                                unique_words = set(word_buffer)
+                                repetition_ratio = 1 - (len(unique_words) / len(word_buffer))
+                                
+                                # Early stop only if repetition is EXTREMELY high (80%+)
+                                if repetition_ratio > stop_threshold:
+                                    logger.info(f"Early stopping due to repetition: {repetition_ratio:.2f}")
+                                    
+                                    # Add a gentle completion to the response
+                                    if not full_response.strip().endswith(('.', '!', '?')):
+                                        full_response += "..."
+                                    
+                                    # Send stop signal to model (attempt to gracefully stop)
+                                    try:
+                                        stop_payload = {"model": model_name, "stop": True}
+                                        requests.post(f"{self.ollama_url}/api/generate", json=stop_payload, timeout=2)
+                                    except:
+                                        pass  # If stop fails, we already have partial response
+                                    
+                                    break
+                        
+                        if chunk_data.get('done', False):
+                            break
+                            
+                    except json.JSONDecodeError:
+                        continue
+            
+            return full_response.strip()
+            
+        except Exception as e:
+            logger.error(f"Streaming with early stop failed: {e}")
+            return None
     
     def synthesize_search_results(self, query: str, results: List[Any], project_path: Path) -> SynthesisResult:
         """Synthesize search results into a coherent summary."""

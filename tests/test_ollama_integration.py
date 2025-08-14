@@ -403,9 +403,9 @@ class TestOllamaIntegration(unittest.TestCase):
         
         # Check search config  
         self.assertIsNotNone(self.config.search)
-        self.assertGreater(self.config.search.default_limit, 0)
+        self.assertGreater(self.config.search.default_top_k, 0)
         print(f"   ✅ Search config valid")
-        print(f"      Default limit: {self.config.search.default_limit}")
+        print(f"      Default top-k: {self.config.search.default_top_k}")
         print(f"      Query expansion: {self.config.search.expand_queries}")
 
 

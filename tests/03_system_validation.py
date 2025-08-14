@@ -244,7 +244,7 @@ def compute_median(numbers):
         searcher = CodeSearcher(project_path)
         
         # Test BM25 integration
-        results = searcher.search("multiply numbers", limit=5, 
+        results = searcher.search("multiply numbers", top_k=5, 
                                  semantic_weight=0.3, bm25_weight=0.7)
         
         if results:
@@ -283,7 +283,7 @@ def compute_median(numbers):
                     print(f"   - No parent chunk")
                     
                 # Test include_context in search
-                results_with_context = searcher.search("add", include_context=True, limit=2)
+                results_with_context = searcher.search("add", include_context=True, top_k=2)
                 if results_with_context:
                     print(f"   Found {len(results_with_context)} results with context")
                     for r in results_with_context:

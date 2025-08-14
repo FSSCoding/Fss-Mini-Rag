@@ -421,7 +421,7 @@ def _create_vector_table(self, chunks: List[CodeChunk], embeddings: np.ndarray):
     
     return table
 
-def vector_search(self, query_embedding: np.ndarray, limit: int) -> List[SearchResult]:
+def vector_search(self, query_embedding: np.ndarray, top_k: int) -> List[SearchResult]:
     """Fast vector similarity search."""
     table = self.db.open_table("chunks")
     
@@ -794,12 +794,12 @@ def repair_index(self, project_path: Path) -> bool:
 FSS-Mini-RAG works well with various LLM sizes because our rich context and guided prompts help small models perform excellently:
 
 **Recommended (Best Balance):**
-- **qwen3:4b** - Excellent quality, good performance
-- **qwen3:4b:q8_0** - High-precision quantized version for production
+- **qwen3:1.7b** - Excellent quality with fast performance (default priority)
+- **qwen3:0.6b** - Surprisingly good for CPU-only systems (522MB)
 
-**Still Excellent (Faster/CPU-friendly):**
-- **qwen3:1.7b** - Very good results, faster responses
-- **qwen3:0.6b** - Surprisingly good considering size (522MB)
+**Still Excellent (Slower but highest quality):**
+- **qwen3:4b** - Highest quality, slower responses
+- **qwen3:4b:q8_0** - High-precision quantized version for production
 
 ### Why Small Models Work Well Here
 
@@ -813,7 +813,7 @@ Without good context, small models tend to get lost and produce erratic output. 
 
 ### Quantization Benefits
 
-For production deployments, consider quantized models like `qwen3:4b:q8_0`:
+For production deployments, consider quantized models like `qwen3:1.7b:q8_0` or `qwen3:4b:q8_0`:
 - **Q8_0**: 8-bit quantization with minimal quality loss
 - **Smaller memory footprint**: ~50% reduction vs full precision
 - **Better CPU performance**: Faster inference on CPU-only systems

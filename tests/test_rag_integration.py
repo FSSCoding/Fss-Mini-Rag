@@ -1,11 +1,31 @@
 #!/usr/bin/env python3
-"""Test RAG system integration with smart chunking."""
+"""
+Test RAG system integration with smart chunking.
+
+⚠️  IMPORTANT: This test requires the virtual environment to be activated:
+    source .venv/bin/activate
+    PYTHONPATH=. python tests/test_rag_integration.py
+
+Or run directly with venv:
+    source .venv/bin/activate && PYTHONPATH=. python tests/test_rag_integration.py
+"""
 
 import tempfile
 import shutil
+import os
 from pathlib import Path
 from mini_rag.indexer import ProjectIndexer
 from mini_rag.search import CodeSearcher
+
+# Check if virtual environment is activated
+def check_venv():
+    if 'VIRTUAL_ENV' not in os.environ:
+        print("⚠️  WARNING: Virtual environment not detected!")
+        print("   This test requires the virtual environment to be activated.")
+        print("   Run: source .venv/bin/activate && PYTHONPATH=. python tests/test_rag_integration.py")
+        print("   Continuing anyway...\n")
+
+check_venv()
 
 # Sample Python file with proper structure
 sample_code = '''"""
@@ -179,8 +199,8 @@ def test_integration():
         stats = indexer.index_project()
         
         print(f"   - Files indexed: {stats['files_indexed']}")
-        print(f"   - Total chunks: {stats['total_chunks']}")
-        print(f"   - Indexing time: {stats['indexing_time']:.2f}s")
+        print(f"   - Total chunks: {stats['chunks_created']}")
+        print(f"   - Indexing time: {stats['time_taken']:.2f}s")
         
         # Verify chunks were created properly
         print("\n2. Verifying chunk metadata...")
@@ -195,10 +215,10 @@ def test_integration():
         results = searcher.search("data processor class unified interface", top_k=3)
         print(f"\n   Test 1 - Class search:")
         for i, result in enumerate(results[:1]):
-            print(f"   - Match {i+1}: {result['file_path']}")
-            print(f"     Chunk type: {result['chunk_type']}")
-            print(f"     Score: {result['score']:.3f}")
-            if 'This class handles' in result['content']:
+            print(f"   - Match {i+1}: {result.file_path}")
+            print(f"     Chunk type: {result.chunk_type}")
+            print(f"     Score: {result.score:.3f}")
+            if 'This class handles' in result.content:
                 print("     [OK] Docstring included with class")
             else:
                 print("     [FAIL] Docstring not found")
@@ -207,10 +227,10 @@ def test_integration():
         results = searcher.search("process list of data items", top_k=3)
         print(f"\n   Test 2 - Method search:")
         for i, result in enumerate(results[:1]):
-            print(f"   - Match {i+1}: {result['file_path']}")
-            print(f"     Chunk type: {result['chunk_type']}")
-            print(f"     Parent class: {result.get('parent_class', 'N/A')}")
-            if 'Args:' in result['content'] and 'Returns:' in result['content']:
+            print(f"   - Match {i+1}: {result.file_path}")
+            print(f"     Chunk type: {result.chunk_type}")
+            print(f"     Parent class: {getattr(result, 'parent_class', 'N/A')}")
+            if 'Args:' in result.content and 'Returns:' in result.content:
                 print("     [OK] Docstring included with method")
             else:
                 print("     [FAIL] Method docstring not complete")
@@ -219,19 +239,19 @@ def test_integration():
         results = searcher.search("smart chunking capabilities markdown", top_k=3)
         print(f"\n   Test 3 - Markdown search:")
         for i, result in enumerate(results[:1]):
-            print(f"   - Match {i+1}: {result['file_path']}")
-            print(f"     Chunk type: {result['chunk_type']}")
-            print(f"     Lines: {result['start_line']}-{result['end_line']}")
+            print(f"   - Match {i+1}: {result.file_path}")
+            print(f"     Chunk type: {result.chunk_type}")
+            print(f"     Lines: {result.start_line}-{result.end_line}")
         
         # Test 4: Verify chunk navigation
         print(f"\n   Test 4 - Chunk navigation:")
         all_results = searcher.search("", top_k=100)  # Get all chunks
-        py_chunks = [r for r in all_results if r['file_path'].endswith('.py')]
+        py_chunks = [r for r in all_results if r.file_path.endswith('.py')]
         
         if py_chunks:
             first_chunk = py_chunks[0]
-            print(f"   - First chunk: index={first_chunk.get('chunk_index', 'N/A')}")
-            print(f"     Next chunk ID: {first_chunk.get('next_chunk_id', 'N/A')}")
+            print(f"   - First chunk: index={getattr(first_chunk, 'chunk_index', 'N/A')}")
+            print(f"     Next chunk ID: {getattr(first_chunk, 'next_chunk_id', 'N/A')}")
             
             # Verify chain
             valid_chain = True
@@ -239,7 +259,7 @@ def test_integration():
                 curr = py_chunks[i]
                 next_chunk = py_chunks[i + 1]
                 expected_next = f"processor_{i+1}"
-                if curr.get('next_chunk_id') != expected_next:
+                if getattr(curr, 'next_chunk_id', None) != expected_next:
                     valid_chain = False
                     break
             

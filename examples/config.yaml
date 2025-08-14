@@ -86,7 +86,7 @@ embedding:
 #═════════════════════════════════════════════════════════════════════════════════
 
 search:
-  default_limit: 10                # How many search results to show by default
+  default_top_k: 10                # How many search results to show by default
                                   # 💡 MORE RESULTS: 15-20 | FASTER SEARCH: 5-8
   
   enable_bm25: true               # Also use keyword matching (like Google search)

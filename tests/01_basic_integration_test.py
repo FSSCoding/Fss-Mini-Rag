@@ -1,11 +1,28 @@
 """
 Comprehensive demo of the RAG system showing all integrated features.
+
+⚠️  IMPORTANT: This test requires the virtual environment to be activated:
+    source .venv/bin/activate
+    PYTHONPATH=. python tests/01_basic_integration_test.py
+
+Or run directly with venv:
+    source .venv/bin/activate && PYTHONPATH=. python tests/01_basic_integration_test.py
 """
 
 import os
 import sys
 import tempfile
 from pathlib import Path
+
+# Check if virtual environment is activated
+def check_venv():
+    if 'VIRTUAL_ENV' not in os.environ:
+        print("⚠️  WARNING: Virtual environment not detected!")
+        print("   This test requires the virtual environment to be activated.")
+        print("   Run: source .venv/bin/activate && PYTHONPATH=. python tests/01_basic_integration_test.py")
+        print("   Continuing anyway...\n")
+
+check_venv()
 
 # Fix Windows encoding
 if sys.platform == 'win32':
@@ -15,7 +32,7 @@ if sys.platform == 'win32':
 from mini_rag.chunker import CodeChunker
 from mini_rag.indexer import ProjectIndexer
 from mini_rag.search import CodeSearcher
-from mini_rag.embeddings import CodeEmbedder
+from mini_rag.ollama_embeddings import OllamaEmbedder as CodeEmbedder
 
 def main():
     print("=" * 60)
@@ -189,17 +206,17 @@ if __name__ == "__main__":
         
         # Test different search types
         print("\n   a) Semantic search for 'calculate average':")
-        results = searcher.search("calculate average", limit=3)
+        results = searcher.search("calculate average", top_k=3)
         for i, result in enumerate(results, 1):
             print(f"      {i}. {result.chunk_type} '{result.name}' in {result.file_path} (score: {result.score:.3f})")
         
         print("\n   b) BM25-weighted search for 'divide zero':")
-        results = searcher.search("divide zero", limit=3, semantic_weight=0.2, bm25_weight=0.8)
+        results = searcher.search("divide zero", top_k=3, semantic_weight=0.2, bm25_weight=0.8)
         for i, result in enumerate(results, 1):
             print(f"      {i}. {result.chunk_type} '{result.name}' in {result.file_path} (score: {result.score:.3f})")
         
         print("\n   c) Search with context for 'test addition':")
-        results = searcher.search("test addition", limit=2, include_context=True)
+        results = searcher.search("test addition", top_k=2, include_context=True)
         for i, result in enumerate(results, 1):
             print(f"      {i}. {result.chunk_type} '{result.name}'")
             if result.parent_chunk:

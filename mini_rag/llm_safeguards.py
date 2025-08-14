@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SafeguardConfig:
-    """Configuration for LLM safeguards."""
-    max_output_tokens: int = 2000        # Prevent excessive generation
-    max_repetition_ratio: float = 0.3    # Max ratio of repeated content
-    max_response_time: int = 60          # Max seconds for response
-    min_useful_length: int = 20          # Minimum useful response length
-    context_window: int = 32768          # Ollama context window
+    """Configuration for LLM safeguards - gentle and educational."""
+    max_output_tokens: int = 4000        # Allow longer responses for learning
+    max_repetition_ratio: float = 0.7    # Be very permissive - only catch extreme repetition
+    max_response_time: int = 120         # Allow 2 minutes for complex thinking
+    min_useful_length: int = 10          # Lower threshold - short answers can be useful
+    context_window: int = 32000          # Match Qwen3 context length (32K token limit)
     enable_thinking_detection: bool = True  # Detect thinking patterns
     
 class ModelRunawayDetector:
@@ -98,8 +98,19 @@ class ModelRunawayDetector:
         if self.response_patterns['phrase_repetition'].search(response):
             return "phrase_repetition"
         
-        # Calculate repetition ratio
-        words = response.split()
+        # Calculate repetition ratio (excluding Qwen3 thinking blocks)
+        analysis_text = response
+        if "<think>" in response and "</think>" in response:
+            # Extract only the actual response (after thinking) for repetition analysis
+            thinking_end = response.find("</think>")
+            if thinking_end != -1:
+                analysis_text = response[thinking_end + 8:].strip()
+                
+                # If the actual response (excluding thinking) is short, don't penalize
+                if len(analysis_text.split()) < 20:
+                    return None
+        
+        words = analysis_text.split()
         if len(words) > 10:
             unique_words = set(words)
             repetition_ratio = 1 - (len(unique_words) / len(words))

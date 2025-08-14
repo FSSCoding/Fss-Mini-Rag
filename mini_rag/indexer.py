@@ -12,11 +12,19 @@ from typing import List, Dict, Any, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import numpy as np
-import lancedb
 import pandas as pd
-import pyarrow as pa
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
 from rich.console import Console
+
+# Optional LanceDB import
+try:
+    import lancedb
+    import pyarrow as pa
+    LANCEDB_AVAILABLE = True
+except ImportError:
+    lancedb = None
+    pa = None
+    LANCEDB_AVAILABLE = False
 
 from .ollama_embeddings import OllamaEmbedder as CodeEmbedder
 from .chunker import CodeChunker, CodeChunk
@@ -163,7 +171,7 @@ class ProjectIndexer:
                 "skip_binary": True
             },
             "search": {
-                "default_limit": 10,
+                "default_top_k": 10,
                 "similarity_threshold": 0.7,
                 "hybrid_search": True,
                 "bm25_weight": 0.3
@@ -526,6 +534,11 @@ class ProjectIndexer:
     
     def _init_database(self):
         """Initialize LanceDB connection and table."""
+        if not LANCEDB_AVAILABLE:
+            logger.error("LanceDB is not available. Please install LanceDB for full indexing functionality.")
+            logger.info("For Ollama-only mode, consider using hash-based embeddings instead.")
+            raise ImportError("LanceDB dependency is required for indexing. Install with: pip install lancedb pyarrow")
+        
         try:
             self.db = lancedb.connect(self.rag_dir)
             

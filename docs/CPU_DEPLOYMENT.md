@@ -67,7 +67,7 @@ llm:
 # Aggressive caching for CPU systems  
 search:
   expand_queries: false          # Enable only in TUI
-  default_limit: 8               # Slightly fewer results for speed
+  default_top_k: 8               # Slightly fewer results for speed
 ```
 
 ## System Requirements

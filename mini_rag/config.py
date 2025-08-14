@@ -63,7 +63,7 @@ class EmbeddingConfig:
 @dataclass
 class SearchConfig:
     """Configuration for search behavior."""
-    default_limit: int = 10
+    default_top_k: int = 10
     enable_bm25: bool = True
     similarity_threshold: float = 0.1
     expand_queries: bool = False  # Enable automatic query expansion
@@ -81,12 +81,33 @@ class LLMConfig:
     enable_thinking: bool = True  # Enable thinking mode for Qwen3 models
     cpu_optimized: bool = True     # Prefer lightweight models
     
+    # Model preference rankings (configurable)
+    model_rankings: list = None    # Will be set in __post_init__
+    
     # Provider-specific settings (for different LLM providers)
     provider: str = "ollama"       # "ollama", "openai", "anthropic"
     ollama_host: str = "localhost:11434"  # Ollama connection
     api_key: Optional[str] = None  # API key for cloud providers
     api_base: Optional[str] = None # Base URL for API (e.g., OpenRouter)
     timeout: int = 20              # Request timeout in seconds
+    
+    def __post_init__(self):
+        if self.model_rankings is None:
+            # Default model preference rankings (can be overridden in config file)
+            self.model_rankings = [
+                # Testing model (prioritized for current testing phase)
+                "qwen3:1.7b",
+                
+                # Ultra-efficient models (perfect for CPU-only systems)
+                "qwen3:0.6b", 
+                
+                # Recommended model (excellent quality but larger)
+                "qwen3:4b",
+                
+                # Common fallbacks (only include models we know exist)
+                "llama3.2:1b",
+                "qwen2.5:1.5b",
+            ]
 
 
 @dataclass
@@ -151,6 +172,8 @@ class ConfigManager:
                 config.embedding = EmbeddingConfig(**data['embedding'])
             if 'search' in data:
                 config.search = SearchConfig(**data['search'])
+            if 'llm' in data:
+                config.llm = LLMConfig(**data['llm'])
                 
             return config
             
@@ -219,7 +242,7 @@ class ConfigManager:
             "",
             "# Search behavior settings", 
             "search:",
-            f"  default_limit: {config_dict['search']['default_limit']}           # Default number of results",
+            f"  default_top_k: {config_dict['search']['default_top_k']}           # Default number of top results",
             f"  enable_bm25: {str(config_dict['search']['enable_bm25']).lower()}             # Enable keyword matching boost",
             f"  similarity_threshold: {config_dict['search']['similarity_threshold']}        # Minimum similarity score",
             f"  expand_queries: {str(config_dict['search']['expand_queries']).lower()}          # Enable automatic query expansion",
@@ -232,7 +255,15 @@ class ConfigManager:
             f"  max_expansion_terms: {config_dict['llm']['max_expansion_terms']}        # Maximum terms to add to queries",
             f"  enable_synthesis: {str(config_dict['llm']['enable_synthesis']).lower()}       # Enable synthesis by default",
             f"  synthesis_temperature: {config_dict['llm']['synthesis_temperature']}      # LLM temperature for analysis",
+            "  model_rankings:          # Preferred model order (edit to change priority)",
         ])
+        
+        # Add model rankings list
+        if 'model_rankings' in config_dict['llm'] and config_dict['llm']['model_rankings']:
+            for model in config_dict['llm']['model_rankings'][:10]:  # Show first 10
+                yaml_lines.append(f"    - \"{model}\"")
+            if len(config_dict['llm']['model_rankings']) > 10:
+                yaml_lines.append("    # ... (edit config to see all options)")
         
         return '\n'.join(yaml_lines)
     

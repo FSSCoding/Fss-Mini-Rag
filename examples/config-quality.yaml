@@ -44,7 +44,7 @@ embedding:
 
 # 🔍 Search optimized for comprehensive results
 search:
-  default_limit: 15       # More results to choose from
+  default_top_k: 15       # More results to choose from
   enable_bm25: true       # Use both semantic and keyword matching
   similarity_threshold: 0.05  # Very permissive (show more possibilities)
   expand_queries: true    # Automatic query expansion for better recall

@@ -110,7 +110,7 @@ python3 -c "import mini_rag; print('✅ Installation successful')"
 2. **Reduce result limit:**
    ```yaml
    search:
-     default_limit: 5  # Instead of 10
+     default_top_k: 5  # Instead of 10
    ```
 
 3. **Use faster embedding method:**
@@ -165,9 +165,9 @@ python3 -c "import mini_rag; print('✅ Installation successful')"
 
 2. **Try different model:**
    ```bash
-   ollama pull qwen3:4b     # Recommended: excellent quality
-   ollama pull qwen3:1.7b   # Still very good, faster
-   ollama pull qwen3:0.6b   # Surprisingly good for CPU-only
+   ollama pull qwen3:1.7b   # Recommended: excellent quality (default priority)
+   ollama pull qwen3:0.6b   # Surprisingly good for CPU-only  
+   ollama pull qwen3:4b     # Highest quality, slower
    ```
 
 3. **Use synthesis mode instead of exploration:**

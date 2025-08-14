@@ -125,7 +125,7 @@ print(f"Indexed {result['files_processed']} files, {result['chunks_created']} ch
 
 # Search
 print("\nSearching for authentication code...")
-results = searcher.search("user authentication logic", limit=5)
+results = searcher.search("user authentication logic", top_k=5)
 
 for i, result in enumerate(results, 1):
     print(f"\n{i}. {result.file_path}")

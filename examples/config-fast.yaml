@@ -62,7 +62,7 @@ embedding:
 
 # 🔍 Search optimized for speed
 search:
-  default_limit: 5        # Fewer results = faster display
+  default_top_k: 5        # Fewer results = faster display
   enable_bm25: false      # Skip keyword matching for speed
   similarity_threshold: 0.2  # Higher threshold = fewer results to process
   expand_queries: false   # No query expansion (much faster)

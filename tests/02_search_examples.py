@@ -37,25 +37,25 @@ def demo_search(project_path: Path):
             'title': 'Keyword-Heavy Search',
             'query': 'BM25Okapi rank_bm25 search scoring',
             'description': 'This query has specific technical keywords that BM25 excels at finding',
-            'limit': 5
+            'top_k': 5
         },
         {
             'title': 'Natural Language Query',
             'query': 'how to build search index from database chunks',
             'description': 'This semantic query benefits from transformer embeddings understanding intent',
-            'limit': 5
+            'top_k': 5
         },
         {
             'title': 'Mixed Technical Query',
             'query': 'vector embeddings for semantic code search with transformers',
             'description': 'This hybrid query combines technical terms with conceptual understanding',
-            'limit': 5
+            'top_k': 5
         },
         {
             'title': 'Function Search',
             'query': 'search method implementation with filters',
             'description': 'Looking for specific function implementations',
-            'limit': 5
+            'top_k': 5
         }
     ]
     
@@ -67,7 +67,7 @@ def demo_search(project_path: Path):
         # Run search with hybrid mode
         results = searcher.search(
             query=demo['query'],
-            limit=demo['limit'],
+            top_k=demo['top_k'],
             semantic_weight=0.7,
             bm25_weight=0.3
         )

@@ -653,66 +653,28 @@ show_completion() {
     fi
 }
 
-# Create sample project for testing
-create_sample_project() {
-    local sample_dir="$SCRIPT_DIR/.sample_test"
-    rm -rf "$sample_dir"
-    mkdir -p "$sample_dir"
-    
-    # Create a few small sample files
-    cat > "$sample_dir/README.md" << 'EOF'
-# Sample Project
-
-This is a sample project for testing FSS-Mini-RAG search capabilities.
-
-## Features
-
-- User authentication system
-- Document processing
-- Search functionality
-- Email integration
-EOF
-
-    cat > "$sample_dir/auth.py" << 'EOF'
-# Authentication module
-def login_user(username, password):
-    """Handle user login with password validation"""
-    if validate_credentials(username, password):
-        create_session(username)
-        return True
-    return False
-
-def validate_credentials(username, password):
-    """Check username and password against database"""
-    # Database validation logic here
-    return check_password_hash(username, password)
-EOF
-
-    cat > "$sample_dir/search.py" << 'EOF'
-# Search functionality
-def semantic_search(query, documents):
-    """Perform semantic search across document collection"""
-    embeddings = generate_embeddings(query)
-    results = find_similar_documents(embeddings, documents)
-    return rank_results(results)
-
-def generate_embeddings(text):
-    """Generate vector embeddings for text"""
-    # Embedding generation logic
-    return process_with_model(text)
-EOF
-
-    echo "$sample_dir"
-}
+# Note: Sample project creation removed - now indexing real codebase/docs
 
 # Run quick test with sample data
 run_quick_test() {
     print_header "Quick Test"
     
-    print_info "Creating small sample project for testing..."
-    local sample_dir=$(create_sample_project)
-    echo "✅ Sample project created: $sample_dir"
+    # Ask what to index: code vs docs
+    echo -e "${CYAN}What would you like to explore with FSS-Mini-RAG?${NC}"
     echo ""
+    echo -e "${GREEN}1) Code${NC} - Index the FSS-Mini-RAG codebase (~50 files)"
+    echo -e "${BLUE}2) Docs${NC} - Index the documentation (~10 files)"  
+    echo ""
+    echo -n "Choose [1/2] or Enter for code: "
+    read -r index_choice
+    
+    # Determine what to index
+    local target_dir="$SCRIPT_DIR"
+    local target_name="FSS-Mini-RAG codebase"
+    if [[ "$index_choice" == "2" ]]; then
+        target_dir="$SCRIPT_DIR/docs"
+        target_name="FSS-Mini-RAG documentation"
+    fi
     
     # Ensure we're in the right directory and have the right permissions
     if [[ ! -f "./rag-mini" ]]; then
@@ -726,32 +688,31 @@ run_quick_test() {
         chmod +x ./rag-mini
     fi
     
-    # Test with explicit error handling and timeout
-    print_info "Indexing sample project (should complete in ~5 seconds)..."
-    echo -e "${CYAN}Command: ./rag-mini index \"$sample_dir\" --quiet${NC}"
+    # Index the chosen target
+    print_info "Indexing $target_name..."
+    echo -e "${CYAN}This will take 10-30 seconds depending on your system${NC}"
+    echo ""
     
-    if timeout 30 ./rag-mini index "$sample_dir" --quiet; then
-        print_success "✅ Indexing completed successfully"
+    if ./rag-mini index "$target_dir"; then
+        print_success "✅ Indexing completed successfully!"
         
         echo ""
-        print_info "Testing search functionality..."
-        echo -e "${CYAN}Command: ./rag-mini search \"$sample_dir\" \"user authentication\" --limit 2${NC}"
+        print_info "🎯 Launching Interactive Tutorial..."
+        echo -e "${CYAN}The TUI has 6 sample questions to get you started.${NC}"
+        echo -e "${CYAN}Try the suggested queries or enter your own!${NC}"
+        echo ""
+        echo -n "Press Enter to start interactive tutorial: "
+        read -r
         
-        if timeout 15 ./rag-mini search "$sample_dir" "user authentication" --limit 2; then
-            echo ""
-            print_success "🎉 Test completed successfully!"
-            echo -e "${CYAN}FSS-Mini-RAG is working perfectly!${NC}"
-        else
-            print_error "Search test failed or timed out"
-            echo "Indexing worked but search had issues."
-        fi
+        # Launch the TUI which has the existing interactive tutorial system
+        ./rag-tui.py "$target_dir"
         
-        # Clean up sample
-        print_info "Cleaning up test files..."
-        rm -rf "$sample_dir"
+        echo ""
+        print_success "🎉 Tutorial completed!"
+        echo -e "${CYAN}FSS-Mini-RAG is working perfectly!${NC}"
         
     else
-        print_error "❌ Indexing test failed or timed out"
+        print_error "❌ Indexing failed"
         echo ""
         echo -e "${YELLOW}Possible causes:${NC}"
         echo "• Virtual environment not properly activated"
@@ -759,8 +720,6 @@ run_quick_test() {
         echo "• Path issues (ensure script runs from project directory)"
         echo "• Ollama connection issues (if using Ollama)"
         echo ""
-        print_info "Cleaning up and continuing..."
-        rm -rf "$sample_dir"
         return 1
     fi
 }

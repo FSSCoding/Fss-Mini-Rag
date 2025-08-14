@@ -41,7 +41,7 @@ embedding:
 
 # 🔍 Search behavior  
 search:
-  default_limit: 10       # Show 10 results (good starting point)
+  default_top_k: 10       # Show 10 results (good starting point)
   enable_bm25: true       # Find exact word matches too
   similarity_threshold: 0.1  # Pretty permissive (shows more results)
   expand_queries: false   # Keep it simple for now

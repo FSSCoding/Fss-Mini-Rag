@@ -1,11 +1,29 @@
 #!/usr/bin/env python3
 """
 Test script for adjacent chunk retrieval functionality.
+
+⚠️  IMPORTANT: This test requires the virtual environment to be activated:
+    source .venv/bin/activate
+    PYTHONPATH=. python tests/test_context_retrieval.py
+
+Or run directly with venv:
+    source .venv/bin/activate && PYTHONPATH=. python tests/test_context_retrieval.py
 """
 
+import os
 from pathlib import Path
 from mini_rag.search import CodeSearcher
-from mini_rag.embeddings import CodeEmbedder
+from mini_rag.ollama_embeddings import OllamaEmbedder as CodeEmbedder
+
+# Check if virtual environment is activated
+def check_venv():
+    if 'VIRTUAL_ENV' not in os.environ:
+        print("⚠️  WARNING: Virtual environment not detected!")
+        print("   This test requires the virtual environment to be activated.")
+        print("   Run: source .venv/bin/activate && PYTHONPATH=. python tests/test_context_retrieval.py")
+        print("   Continuing anyway...\n")
+
+check_venv()
 
 def test_context_retrieval():
     """Test the new context retrieval functionality."""
@@ -20,7 +38,7 @@ def test_context_retrieval():
         
         # Test 1: Search without context
         print("\n1. Search WITHOUT context:")
-        results = searcher.search("chunk metadata", limit=3, include_context=False)
+        results = searcher.search("chunk metadata", top_k=3, include_context=False)
         for i, result in enumerate(results, 1):
             print(f"  Result {i}: {result.file_path}:{result.start_line}-{result.end_line}")
             print(f"    Type: {result.chunk_type}, Name: {result.name}")
@@ -30,7 +48,7 @@ def test_context_retrieval():
         
         # Test 2: Search with context
         print("\n2. Search WITH context:")
-        results = searcher.search("chunk metadata", limit=3, include_context=True)
+        results = searcher.search("chunk metadata", top_k=3, include_context=True)
         for i, result in enumerate(results, 1):
             print(f"  Result {i}: {result.file_path}:{result.start_line}-{result.end_line}")
             print(f"    Type: {result.chunk_type}, Name: {result.name}")

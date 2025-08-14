@@ -8,12 +8,19 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pandas as pd
-import lancedb
 from rich.console import Console
 from rich.table import Table
 from rich.syntax import Syntax
 from rank_bm25 import BM25Okapi
 from collections import defaultdict
+
+# Optional LanceDB import
+try:
+    import lancedb
+    LANCEDB_AVAILABLE = True
+except ImportError:
+    lancedb = None
+    LANCEDB_AVAILABLE = False
 
 from .ollama_embeddings import OllamaEmbedder as CodeEmbedder
 from .path_handler import display_path
@@ -115,6 +122,14 @@ class CodeSearcher:
     
     def _connect(self):
         """Connect to the LanceDB database."""
+        if not LANCEDB_AVAILABLE:
+            print("❌ LanceDB Not Available")
+            print("   LanceDB is required for search functionality")
+            print("   Install it with: pip install lancedb pyarrow")
+            print("   For basic Ollama functionality, use hash-based search instead")
+            print()
+            raise ImportError("LanceDB dependency is required for search. Install with: pip install lancedb pyarrow")
+        
         try:
             if not self.rag_dir.exists():
                 print("🗃️ No Search Index Found")

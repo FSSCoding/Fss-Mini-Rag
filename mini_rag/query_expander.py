@@ -59,23 +59,8 @@ class QueryExpander:
         if self._initialized:
             return
             
-        # Warm up LLM if enabled and available
-        if self.enabled:
-            try:
-                model = self._select_expansion_model()
-                if model:
-                    requests.post(
-                        f"{self.ollama_url}/api/generate",
-                        json={
-                            "model": model,
-                            "prompt": "testing, just say 'hi' <no_think>",
-                            "stream": False,
-                            "options": {"temperature": 0.1, "max_tokens": 5}
-                        },
-                        timeout=5
-                    )
-            except:
-                pass  # Warmup failure is non-critical
+        # Skip warmup - causes startup delays and unwanted model calls
+        # Query expansion works fine on first use without warmup
                 
         self._initialized = True
     
@@ -183,10 +168,10 @@ Expanded query:"""
                 data = response.json()
                 available = [model['name'] for model in data.get('models', [])]
                 
-                # Prefer ultra-fast, efficient models for query expansion (CPU-friendly)
+                # Use same model rankings as main synthesizer for consistency
                 expansion_preferences = [
-                    "qwen3:0.6b", "qwen3:1.7b", "qwen2.5:1.5b", 
-                    "llama3.2:1b", "gemma2:2b", "llama3.2:3b"
+                    "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "llama3.2:1b", 
+                    "qwen2.5:1.5b", "qwen3:3b", "qwen2.5-coder:1.5b"
                 ]
                 
                 for preferred in expansion_preferences:
