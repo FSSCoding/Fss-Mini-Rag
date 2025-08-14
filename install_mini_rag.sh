@@ -162,22 +162,72 @@ check_ollama() {
         print_warning "Ollama not found"
         echo ""
         echo -e "${CYAN}Ollama provides the best embedding quality and performance.${NC}"
-        echo -e "${YELLOW}To install Ollama:${NC}"
-        echo "  1. Visit: https://ollama.ai/download"
-        echo "  2. Download and install for your system"
-        echo "  3. Run: ollama serve"
-        echo "  4. Re-run this installer"
         echo ""
-        echo -e "${BLUE}Alternative: Use ML fallback (requires more disk space)${NC}"
+        echo -e "${BOLD}Options:${NC}"
+        echo -e "${GREEN}1) Install Ollama automatically${NC} (recommended)"
+        echo -e "${YELLOW}2) Manual installation${NC} - Visit https://ollama.com/download"
+        echo -e "${BLUE}3) Continue without Ollama${NC} (uses ML fallback)"
         echo ""
-        echo -n "Continue without Ollama? (y/N): "
-        read -r continue_without
-        if [[ $continue_without =~ ^[Yy]$ ]]; then
-            return 1
-        else
-            print_info "Install Ollama first, then re-run this script"
-            exit 0
-        fi
+        echo -n "Choose [1/2/3]: "
+        read -r ollama_choice
+        
+        case "$ollama_choice" in
+            1|"")
+                print_info "Installing Ollama using official installer..."
+                echo -e "${CYAN}Running: curl -fsSL https://ollama.com/install.sh | sh${NC}"
+                
+                if curl -fsSL https://ollama.com/install.sh | sh; then
+                    print_success "Ollama installed successfully"
+                    
+                    print_info "Starting Ollama server..."
+                    ollama serve &
+                    sleep 3
+                    
+                    if curl -s http://localhost:11434/api/version >/dev/null 2>&1; then
+                        print_success "Ollama server started"
+                        
+                        echo ""
+                        echo -e "${CYAN}💡 Pro tip: Download an LLM for AI-powered search synthesis!${NC}"
+                        echo -e "   Lightweight: ${GREEN}ollama pull qwen3:0.6b${NC} (~400MB, very fast)"
+                        echo -e "   Balanced:    ${GREEN}ollama pull qwen3:1.7b${NC} (~1GB, good quality)" 
+                        echo -e "   Excellent:   ${GREEN}ollama pull qwen3:3b${NC} (~2GB, great for this project)"
+                        echo -e "   Premium:     ${GREEN}ollama pull qwen3:8b${NC} (~5GB, amazing results)"
+                        echo ""
+                        echo -e "${BLUE}Creative possibilities: Try mistral for storytelling, or qwen3-coder for development!${NC}"
+                        echo ""
+                        
+                        return 0
+                    else
+                        print_warning "Ollama installed but failed to start automatically"
+                        echo "Please start Ollama manually: ollama serve"
+                        echo "Then re-run this installer"
+                        exit 1
+                    fi
+                else
+                    print_error "Failed to install Ollama automatically"
+                    echo "Please install manually from https://ollama.com/download"
+                    exit 1
+                fi
+                ;;
+            2)
+                echo ""
+                echo -e "${YELLOW}Manual Ollama installation:${NC}"
+                echo "  1. Visit: https://ollama.com/download" 
+                echo "  2. Download and install for your system"
+                echo "  3. Run: ollama serve"
+                echo "  4. Re-run this installer"
+                print_info "Exiting for manual installation..."
+                exit 0
+                ;;
+            3)
+                print_info "Continuing without Ollama (will use ML fallback)"
+                return 1
+                ;;
+            *)
+                print_warning "Invalid choice, continuing without Ollama"
+                return 1
+                ;;
+        esac
     fi
 }
 
@@ -271,8 +321,8 @@ get_installation_preferences() {
     
     echo ""
     echo -e "${BOLD}Installation options:${NC}"
-    echo -e "${GREEN}L) Light${NC} - Ollama + basic deps (~50MB)"
-    echo -e "${YELLOW}F) Full${NC}  - Light + ML fallback (~2-3GB)"
+    echo -e "${GREEN}L) Light${NC} - Ollama + basic deps (~50MB) ${CYAN}← Best performance + AI chat${NC}"
+    echo -e "${YELLOW}F) Full${NC}  - Light + ML fallback (~2-3GB) ${CYAN}← RAG-only if no Ollama${NC}"
     echo -e "${BLUE}C) Custom${NC} - Configure individual components"
     echo ""
     
