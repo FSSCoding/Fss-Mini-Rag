@@ -469,6 +469,31 @@ class OllamaEmbedder:
             "ollama_url": self.base_url if self.mode == "ollama" else None
         }
     
+    def get_embedding_info(self) -> Dict[str, str]:
+        """Get human-readable embedding system information for installer."""
+        status = self.get_status()
+        
+        if status["mode"] == "ollama":
+            return {
+                "method": f"Ollama ({status['ollama_model']})",
+                "status": "working"
+            }
+        elif status["mode"] == "ml":
+            return {
+                "method": f"ML Fallback ({status['fallback_model']})",
+                "status": "working"
+            }
+        elif status["mode"] == "hash":
+            return {
+                "method": "Hash-based (basic similarity)",
+                "status": "working"
+            }
+        else:
+            return {
+                "method": "Unknown",
+                "status": "error"
+            }
+    
     def warmup(self):
         """Warm up the embedding system with a dummy request."""
         dummy_code = "def hello(): pass"

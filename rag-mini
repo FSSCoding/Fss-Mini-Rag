@@ -327,8 +327,8 @@ main() {
             exec "$PYTHON" "$SCRIPT_DIR/claude_rag/server.py" "$@"
             ;;
         "index"|"search"|"status")
-            # Direct CLI commands
-            exec "$SCRIPT_DIR/rag-mini" "$@"
+            # Direct CLI commands - call Python script
+            exec "$PYTHON" "$SCRIPT_DIR/rag-mini.py" "$@"
             ;;
         *)
             # Unknown command - show help

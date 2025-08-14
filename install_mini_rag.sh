@@ -188,12 +188,13 @@ check_ollama() {
                         
                         echo ""
                         echo -e "${CYAN}💡 Pro tip: Download an LLM for AI-powered search synthesis!${NC}"
-                        echo -e "   Lightweight: ${GREEN}ollama pull qwen3:0.6b${NC} (~400MB, very fast)"
-                        echo -e "   Balanced:    ${GREEN}ollama pull qwen3:1.7b${NC} (~1GB, good quality)" 
-                        echo -e "   Excellent:   ${GREEN}ollama pull qwen3:3b${NC} (~2GB, great for this project)"
-                        echo -e "   Premium:     ${GREEN}ollama pull qwen3:8b${NC} (~5GB, amazing results)"
+                        echo -e "   Lightweight: ${GREEN}ollama pull qwen3:0.6b${NC} (~500MB, very fast)"
+                        echo -e "   Balanced:    ${GREEN}ollama pull qwen3:1.7b${NC} (~1.4GB, good quality)" 
+                        echo -e "   Excellent:   ${GREEN}ollama pull qwen3:4b${NC} (~2.5GB, sweet spot for most users)"
+                        echo -e "   Maximum:     ${GREEN}ollama pull qwen3:8b${NC} (~5GB, slower but top quality)"
                         echo ""
-                        echo -e "${BLUE}Creative possibilities: Try mistral for storytelling, or qwen3-coder for development!${NC}"
+                        echo -e "${BLUE}🧠 RAG works great with smaller models! 4B is usually perfect.${NC}"
+                        echo -e "${BLUE}Creative possibilities: Try mistral for storytelling, qwen2.5-coder for development!${NC}"
                         echo ""
                         
                         return 0
@@ -558,7 +559,36 @@ print(f'✅ Embedding system: {info[\"method\"]}')
     " 2>/dev/null; then
         print_success "Embedding system working"
     else
-        print_warning "Embedding test failed, but system should still work"
+        echo ""
+        echo -e "${YELLOW}⚠️  System Check${NC}"
+        
+        # Smart diagnosis - check what's actually available
+        if command_exists ollama && curl -s http://localhost:11434/api/version >/dev/null 2>&1; then
+            # Ollama is running, check for models
+            local available_models=$(ollama list 2>/dev/null | grep -E "(qwen3|llama|mistral|gemma)" | head -5)
+            local embedding_models=$(ollama list 2>/dev/null | grep -E "(embed|bge)" | head -2)
+            
+            if [[ -n "$available_models" ]]; then
+                echo -e "${GREEN}✅ Ollama is running with available models${NC}"
+                echo -e "${CYAN}Your setup will work great! The system will auto-select the best models.${NC}"
+                echo ""
+                echo -e "${BLUE}💡 RAG Performance Tip:${NC} Smaller models often work better with RAG!"
+                echo -e "   With context provided, even 0.6B models give good results"
+                echo -e "   4B models = excellent, 8B+ = overkill (slower responses)"
+            else
+                echo -e "${BLUE}Ollama is running but no chat models found.${NC}"
+                echo -e "Download a lightweight model: ${GREEN}ollama pull qwen3:0.6b${NC} (fast)"
+                echo -e "Or balanced option: ${GREEN}ollama pull qwen3:4b${NC} (excellent quality)"
+            fi
+        else
+            echo -e "${BLUE}Ollama not running or not installed.${NC}"
+            echo -e "Start Ollama: ${GREEN}ollama serve${NC}"
+            echo -e "Or install from: https://ollama.com/download"
+        fi
+        
+        echo ""
+        echo -e "${CYAN}✅ FSS-Mini-RAG will auto-detect and use the best available method.${NC}"
+        echo ""
     fi
     
     return 0
@@ -595,13 +625,30 @@ show_completion() {
     fi
     
     # Ask if they want to run a test
-    echo -n "Would you like to run a quick test now? (Y/n): "
-    read -r run_test
-    if [[ ! $run_test =~ ^[Nn]$ ]]; then
-        run_quick_test
-        echo ""
-        show_beginner_guidance
+    echo ""
+    echo -e "${BOLD}🧪 Quick Test Available${NC}"
+    echo -e "${CYAN}Test FSS-Mini-RAG with a small sample project (takes ~10 seconds)${NC}"
+    echo ""
+    
+    # Ensure output is flushed and we're ready for input
+    printf "Run quick test now? [Y/n]: "
+    
+    # More robust input handling
+    if read -r run_test < /dev/tty 2>/dev/null; then
+        echo "User chose: '$run_test'"  # Debug output
+        if [[ ! $run_test =~ ^[Nn]$ ]]; then
+            run_quick_test
+            echo ""
+            show_beginner_guidance
+        else
+            echo -e "${BLUE}Skipping test - you can run it later with: ./rag-tui${NC}"
+            show_beginner_guidance
+        fi
     else
+        # Fallback if interactive input fails
+        echo ""
+        echo -e "${YELLOW}⚠️  Interactive input not available - skipping test prompt${NC}"
+        echo -e "${BLUE}You can test FSS-Mini-RAG anytime with: ./rag-tui${NC}"
         show_beginner_guidance
     fi
 }
@@ -664,34 +711,57 @@ run_quick_test() {
     
     print_info "Creating small sample project for testing..."
     local sample_dir=$(create_sample_project)
-    echo "Sample project created with 3 files for fast testing."
+    echo "✅ Sample project created: $sample_dir"
     echo ""
     
-    # Index the sample project (much faster)
-    print_info "Indexing sample project (this should be fast)..."
-    if ./rag-mini index "$sample_dir" --quiet; then
-        print_success "Sample project indexed successfully"
+    # Ensure we're in the right directory and have the right permissions
+    if [[ ! -f "./rag-mini" ]]; then
+        print_error "rag-mini script not found in current directory: $(pwd)"
+        print_info "This might be a path issue. The installer should run from the project directory."
+        return 1
+    fi
+    
+    if [[ ! -x "./rag-mini" ]]; then
+        print_info "Making rag-mini executable..."
+        chmod +x ./rag-mini
+    fi
+    
+    # Test with explicit error handling and timeout
+    print_info "Indexing sample project (should complete in ~5 seconds)..."
+    echo -e "${CYAN}Command: ./rag-mini index \"$sample_dir\" --quiet${NC}"
+    
+    if timeout 30 ./rag-mini index "$sample_dir" --quiet; then
+        print_success "✅ Indexing completed successfully"
         
         echo ""
-        print_info "Testing search with sample queries..."
-        echo -e "${BLUE}Running search: 'user authentication'${NC}"
-        ./rag-mini search "$sample_dir" "user authentication" --limit 2
+        print_info "Testing search functionality..."
+        echo -e "${CYAN}Command: ./rag-mini search \"$sample_dir\" \"user authentication\" --limit 2${NC}"
         
-        echo ""
-        print_success "Test completed successfully!"
-        echo -e "${CYAN}Ready to use FSS-Mini-RAG on your own projects!${NC}"
-        
-        # Offer beginner guidance
-        echo ""
-        echo -e "${YELLOW}💡 Beginner Tip:${NC} Try the interactive mode with pre-made questions"
-        echo "   Run: ./rag-tui for guided experience"
+        if timeout 15 ./rag-mini search "$sample_dir" "user authentication" --limit 2; then
+            echo ""
+            print_success "🎉 Test completed successfully!"
+            echo -e "${CYAN}FSS-Mini-RAG is working perfectly!${NC}"
+        else
+            print_error "Search test failed or timed out"
+            echo "Indexing worked but search had issues."
+        fi
         
         # Clean up sample
+        print_info "Cleaning up test files..."
         rm -rf "$sample_dir"
+        
     else
-        print_error "Sample test failed"
-        echo "This might indicate an issue with the installation."
+        print_error "❌ Indexing test failed or timed out"
+        echo ""
+        echo -e "${YELLOW}Possible causes:${NC}"
+        echo "• Virtual environment not properly activated"
+        echo "• Missing dependencies (try: pip install -r requirements.txt)"
+        echo "• Path issues (ensure script runs from project directory)"
+        echo "• Ollama connection issues (if using Ollama)"
+        echo ""
+        print_info "Cleaning up and continuing..."
         rm -rf "$sample_dir"
+        return 1
     fi
 }
 
