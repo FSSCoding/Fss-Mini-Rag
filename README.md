@@ -12,19 +12,40 @@
 ## How It Works
 
 ```mermaid
-graph LR
-    Files[📁 Your Code/Documents] --> Index[🔍 Index]
-    Index --> Chunks[✂️ Smart Chunks]
-    Chunks --> Embeddings[🧠 Semantic Vectors]
-    Embeddings --> Database[(💾 Vector DB)]
+flowchart TD
+    Start([🚀 Start FSS-Mini-RAG]) --> Interface{Choose Interface}
     
-    Query[❓ user auth] --> Search[🎯 Hybrid Search]
-    Database --> Search
-    Search --> Results[📋 Ranked Results]
+    Interface -->|Beginners| TUI[🖥️ Interactive TUI<br/>./rag-tui]
+    Interface -->|Power Users| CLI[⚡ Advanced CLI<br/>./rag-mini <command>]
     
-    style Files fill:#e3f2fd
-    style Results fill:#e8f5e8
-    style Database fill:#fff3e0
+    TUI --> SelectFolder[📁 Select Folder to Index]
+    CLI --> SelectFolder
+    
+    SelectFolder --> Index[🔍 Index Documents<br/>Creates searchable database]
+    
+    Index --> Ready{📚 Ready to Search}
+    
+    Ready -->|Quick Answers| Search[🔍 Search Mode<br/>Fast semantic search]
+    Ready -->|Deep Analysis| Explore[🧠 Explore Mode<br/>AI-powered analysis]
+    
+    Search --> SearchResults[📋 Instant Results<br/>Ranked by relevance]
+    Explore --> ExploreResults[💬 AI Conversation<br/>Context + reasoning]
+    
+    SearchResults --> More{Want More?}
+    ExploreResults --> More
+    
+    More -->|Different Query| Ready
+    More -->|Advanced Features| CLI
+    More -->|Done| End([✅ Success!])
+    
+    CLI -.->|Full Power| AdvancedFeatures[⚡ Advanced Features:<br/>• Batch processing<br/>• Custom parameters<br/>• Automation scripts<br/>• Background server]
+    
+    style Start fill:#e3f2fd
+    style CLI fill:#fff3e0,stroke:#ff9800,stroke-width:3px
+    style AdvancedFeatures fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    style Search fill:#e8f5e8
+    style Explore fill:#f3e5f5
+    style End fill:#e8f5e8
 ```
 
 ## What This Is
