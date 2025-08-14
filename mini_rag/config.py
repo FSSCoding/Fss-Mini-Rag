@@ -72,13 +72,21 @@ class SearchConfig:
 @dataclass 
 class LLMConfig:
     """Configuration for LLM synthesis and query expansion."""
-    ollama_host: str = "localhost:11434"
+    # Core settings
     synthesis_model: str = "auto"  # "auto", "qwen3:1.7b", "qwen2.5:1.5b", etc.
     expansion_model: str = "auto"  # Usually same as synthesis_model
     max_expansion_terms: int = 8   # Maximum additional terms to add
     enable_synthesis: bool = False # Enable by default when --synthesize used
     synthesis_temperature: float = 0.3
-    enable_thinking: bool = True  # Enable thinking mode for Qwen3 models (production: True, testing: toggle)
+    enable_thinking: bool = True  # Enable thinking mode for Qwen3 models
+    cpu_optimized: bool = True     # Prefer lightweight models
+    
+    # Provider-specific settings (for different LLM providers)
+    provider: str = "ollama"       # "ollama", "openai", "anthropic"
+    ollama_host: str = "localhost:11434"  # Ollama connection
+    api_key: Optional[str] = None  # API key for cloud providers
+    api_base: Optional[str] = None # Base URL for API (e.g., OpenRouter)
+    timeout: int = 20              # Request timeout in seconds
 
 
 @dataclass

@@ -1,0 +1,233 @@
+# 🌐 LLM PROVIDER ALTERNATIVES - OpenRouter, LM Studio, OpenAI & More
+# Educational guide showing how to configure different LLM providers
+# Copy sections you need to your main config.yaml
+
+#═════════════════════════════════════════════════════════════════════════════════
+# 🎯 QUICK PROVIDER SELECTION GUIDE:
+#
+# 🏠 LOCAL (Best Privacy, No Internet Needed):
+#   - Ollama: Great quality, easy setup, free
+#   - LM Studio: User-friendly GUI, works with many models
+#
+# ☁️ CLOUD (Powerful Models, Requires API Keys):
+#   - OpenRouter: Access to many models with one API
+#   - OpenAI: High quality, reliable, but more expensive
+#   - Anthropic: Excellent for code analysis
+#
+# 💰 BUDGET FRIENDLY:
+#   - OpenRouter (Qwen, Llama models): $0.10-0.50 per million tokens
+#   - Local Ollama/LM Studio: Completely free
+#
+# 🚀 PERFORMANCE:
+#   - Local: Limited by your hardware
+#   - Cloud: Fast and powerful, costs per use
+#═════════════════════════════════════════════════════════════════════════════════
+
+# Standard FSS-Mini-RAG settings (copy these to any config)
+chunking:
+  max_size: 2000
+  min_size: 150
+  strategy: semantic
+
+streaming:
+  enabled: true
+  threshold_bytes: 1048576
+
+files:
+  min_file_size: 50
+  exclude_patterns:
+    - "node_modules/**"
+    - ".git/**"
+    - "__pycache__/**"
+    - "*.pyc"
+    - ".venv/**"
+    - "build/**"
+    - "dist/**"
+  include_patterns:
+    - "**/*"
+
+embedding:
+  preferred_method: ollama    # Use Ollama for embeddings (works with all providers below)
+  ollama_model: nomic-embed-text
+  ollama_host: localhost:11434
+  batch_size: 32
+
+search:
+  default_limit: 10
+  enable_bm25: true
+  similarity_threshold: 0.1
+  expand_queries: false
+
+#═════════════════════════════════════════════════════════════════════════════════
+# 🤖 LLM PROVIDER CONFIGURATIONS
+#═════════════════════════════════════════════════════════════════════════════════
+
+# 🏠 OPTION 1: OLLAMA (LOCAL) - Default and Recommended
+# ✅ Pros: Free, private, no API keys, good quality
+# ❌ Cons: Uses your computer's resources, limited by hardware
+llm:
+  provider: ollama                    # Use local Ollama
+  ollama_host: localhost:11434        # Default Ollama location
+  synthesis_model: llama3.2           # Good all-around model
+  # alternatives: qwen3:0.6b (faster), llama3.2:3b (balanced), llama3.1:8b (quality)
+  expansion_model: llama3.2
+  enable_synthesis: false
+  synthesis_temperature: 0.3
+  cpu_optimized: true
+  enable_thinking: true
+  max_expansion_terms: 8
+
+# 🖥️ OPTION 2: LM STUDIO (LOCAL) - User-Friendly Alternative
+# ✅ Pros: Easy GUI, drag-drop model installation, compatible with Ollama
+# ❌ Cons: Another app to manage, similar hardware limitations
+# 
+# SETUP STEPS:
+# 1. Download LM Studio from lmstudio.ai
+# 2. Install a model (try "microsoft/DialoGPT-medium" or "TheBloke/Llama-2-7B-Chat-GGML")
+# 3. Start local server in LM Studio (usually port 1234)
+# 4. Use this config:
+#
+# llm:
+#   provider: openai                   # LM Studio uses OpenAI-compatible API
+#   api_base: http://localhost:1234/v1 # LM Studio default port
+#   api_key: "not-needed"             # LM Studio doesn't require real API key
+#   synthesis_model: "any"            # Use whatever model you loaded in LM Studio
+#   expansion_model: "any"
+#   enable_synthesis: false
+#   synthesis_temperature: 0.3
+#   cpu_optimized: true
+#   enable_thinking: true
+#   max_expansion_terms: 8
+
+# ☁️ OPTION 3: OPENROUTER (CLOUD) - Many Models, One API
+# ✅ Pros: Access to many models, good prices, no local setup
+# ❌ Cons: Requires internet, costs money, less private
+#
+# SETUP STEPS:
+# 1. Sign up at openrouter.ai
+# 2. Get API key from dashboard
+# 3. Add credits to account ($5-10 goes a long way)
+# 4. Use this config:
+#
+# llm:
+#   provider: openai                   # OpenRouter uses OpenAI-compatible API
+#   api_base: https://openrouter.ai/api/v1
+#   api_key: "your-openrouter-api-key-here"  # Replace with your actual key
+#   synthesis_model: "meta-llama/llama-3.1-8b-instruct:free"  # Free tier model
+#   # alternatives: "openai/gpt-4o-mini" ($0.15/M), "anthropic/claude-3-haiku" ($0.25/M)
+#   expansion_model: "meta-llama/llama-3.1-8b-instruct:free"
+#   enable_synthesis: false
+#   synthesis_temperature: 0.3
+#   cpu_optimized: false              # Cloud models don't need CPU optimization
+#   enable_thinking: true
+#   max_expansion_terms: 8
+#   timeout: 30                       # Longer timeout for internet requests
+
+# 🏢 OPTION 4: OPENAI (CLOUD) - Premium Quality
+# ✅ Pros: Excellent quality, very reliable, fast
+# ❌ Cons: More expensive, requires OpenAI account
+#
+# SETUP STEPS:
+# 1. Sign up at platform.openai.com
+# 2. Add payment method (pay-per-use)
+# 3. Create API key in dashboard
+# 4. Use this config:
+#
+# llm:
+#   provider: openai
+#   api_key: "your-openai-api-key-here"      # Replace with your actual key
+#   synthesis_model: "gpt-4o-mini"           # Affordable option (~$0.15/M tokens)
+#   # alternatives: "gpt-4o" (premium, ~$2.50/M), "gpt-3.5-turbo" (budget, ~$0.50/M)
+#   expansion_model: "gpt-4o-mini"
+#   enable_synthesis: false
+#   synthesis_temperature: 0.3
+#   cpu_optimized: false
+#   enable_thinking: true
+#   max_expansion_terms: 8
+#   timeout: 30
+
+# 🧠 OPTION 5: ANTHROPIC CLAUDE (CLOUD) - Excellent for Code
+# ✅ Pros: Great at code analysis, very thoughtful responses
+# ❌ Cons: Premium pricing, separate API account needed
+#
+# SETUP STEPS:
+# 1. Sign up at console.anthropic.com
+# 2. Get API key and add credits
+# 3. Use this config:
+#
+# llm:
+#   provider: anthropic
+#   api_key: "your-anthropic-api-key-here"   # Replace with your actual key
+#   synthesis_model: "claude-3-haiku-20240307"  # Most affordable option
+#   # alternatives: "claude-3-sonnet-20240229" (balanced), "claude-3-opus-20240229" (premium)
+#   expansion_model: "claude-3-haiku-20240307"
+#   enable_synthesis: false
+#   synthesis_temperature: 0.3
+#   cpu_optimized: false
+#   enable_thinking: true
+#   max_expansion_terms: 8
+#   timeout: 30
+
+#═════════════════════════════════════════════════════════════════════════════════
+# 🧪 TESTING YOUR CONFIGURATION
+#═════════════════════════════════════════════════════════════════════════════════
+#
+# After setting up any provider, test with these commands:
+#
+# 1. Test basic search (no LLM needed):
+#    ./rag-mini search /path/to/project "test query"
+#
+# 2. Test LLM synthesis:
+#    ./rag-mini search /path/to/project "test query" --synthesize
+#
+# 3. Test query expansion:
+#    Enable expand_queries: true in search section and try:
+#    ./rag-mini search /path/to/project "auth"
+#
+# 4. Test thinking mode:
+#    ./rag-mini explore /path/to/project
+#    Then ask: "explain the authentication system"
+#
+#═════════════════════════════════════════════════════════════════════════════════
+# 💡 TROUBLESHOOTING
+#═════════════════════════════════════════════════════════════════════════════════
+#
+# ❌ "Connection refused" or "API error":
+#    - Local: Make sure Ollama/LM Studio is running
+#    - Cloud: Check API key and internet connection
+#
+# ❌ "Model not found":
+#    - Local: Install model with `ollama pull model-name`
+#    - Cloud: Check model name matches provider's API docs
+#
+# ❌ "Token limit exceeded" or expensive bills:
+#    - Use cheaper models like gpt-4o-mini or claude-haiku
+#    - Enable shorter contexts with max_size: 1500
+#
+# ❌ Slow responses:
+#    - Local: Try smaller models (qwen3:0.6b)
+#    - Cloud: Increase timeout or try different provider
+#
+# ❌ Poor quality results:
+#    - Try higher-quality models
+#    - Adjust synthesis_temperature (0.1 for factual, 0.5 for creative)
+#    - Enable expand_queries for better search coverage
+#
+#═════════════════════════════════════════════════════════════════════════════════
+# 📚 LEARN MORE
+#═════════════════════════════════════════════════════════════════════════════════
+# 
+# Provider Documentation:
+# - Ollama: https://ollama.ai/library (model catalog)
+# - LM Studio: https://lmstudio.ai/docs (getting started)
+# - OpenRouter: https://openrouter.ai/docs (API reference)
+# - OpenAI: https://platform.openai.com/docs (API docs)
+# - Anthropic: https://docs.anthropic.com/claude/reference (Claude API)
+#
+# Model Recommendations:
+# - Code Analysis: claude-3-sonnet, gpt-4o, llama3.1:8b
+# - Fast Responses: gpt-4o-mini, claude-haiku, qwen3:0.6b  
+# - Budget Friendly: OpenRouter free tier, local Ollama
+# - Best Privacy: Local Ollama or LM Studio only
+#
+#═════════════════════════════════════════════════════════════════════════════════

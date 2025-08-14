@@ -81,16 +81,36 @@ class OllamaEmbedder:
     
     def _verify_ollama_connection(self):
         """Verify Ollama server is running and model is available."""
-        # Check server status
-        response = requests.get(f"{self.base_url}/api/tags", timeout=5)
-        response.raise_for_status()
+        try:
+            # Check server status
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            print("🔌 Ollama Service Unavailable")
+            print("   Ollama provides AI embeddings that make semantic search possible")
+            print("   Start Ollama: ollama serve")
+            print("   Install models: ollama pull nomic-embed-text")
+            print()
+            raise ConnectionError("Ollama service not running. Start with: ollama serve")
+        except requests.exceptions.Timeout:
+            print("⏱️ Ollama Service Timeout")  
+            print("   Ollama is taking too long to respond")
+            print("   Check if Ollama is overloaded: ollama ps")
+            print("   Restart if needed: killall ollama && ollama serve")
+            print()
+            raise ConnectionError("Ollama service timeout")
         
         # Check if our model is available
         models = response.json().get('models', [])
         model_names = [model['name'] for model in models]
         
         if self.model_name not in model_names:
-            logger.warning(f"Model {self.model_name} not found. Available: {model_names}")
+            print(f"📦 Model '{self.model_name}' Not Found")
+            print("   Embedding models convert text into searchable vectors")
+            print(f"   Download model: ollama pull {self.model_name}")
+            if model_names:
+                print(f"   Available models: {', '.join(model_names[:3])}")
+            print()
             # Try to pull the model
             self._pull_model()
         

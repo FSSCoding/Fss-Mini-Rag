@@ -47,6 +47,7 @@ search:
   expand_queries: false   # Keep it simple for now
 
 # 🤖 AI explanations (optional but helpful)
+# 💡 WANT DIFFERENT LLM? See examples/config-llm-providers.yaml for OpenAI, Claude, etc.
 llm:
   synthesis_model: auto         # Pick best available model
   enable_synthesis: false       # Turn on manually with --synthesize

@@ -15,11 +15,29 @@ import logging
 # Add the RAG system to the path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mini_rag.indexer import ProjectIndexer
-from mini_rag.search import CodeSearcher
-from mini_rag.ollama_embeddings import OllamaEmbedder
-from mini_rag.llm_synthesizer import LLMSynthesizer
-from mini_rag.explorer import CodeExplorer
+try:
+    from mini_rag.indexer import ProjectIndexer
+    from mini_rag.search import CodeSearcher
+    from mini_rag.ollama_embeddings import OllamaEmbedder
+    from mini_rag.llm_synthesizer import LLMSynthesizer
+    from mini_rag.explorer import CodeExplorer
+except ImportError as e:
+    print("❌ Error: Missing dependencies!")
+    print()
+    print("It looks like you haven't installed the required packages yet.")
+    print("This is a common mistake - here's how to fix it:")
+    print()
+    print("1. Make sure you're in the FSS-Mini-RAG directory")
+    print("2. Run the installer script:")
+    print("   ./install_mini_rag.sh")
+    print()
+    print("Or if you want to install manually:")
+    print("   python3 -m venv .venv")
+    print("   source .venv/bin/activate")
+    print("   pip install -r requirements.txt")
+    print()
+    print(f"Missing module: {e.name}")
+    sys.exit(1)
 
 # Configure logging for user-friendly output
 logging.basicConfig(
@@ -68,7 +86,25 @@ def index_project(project_path: Path, force: bool = False):
         if not (project_path / '.mini-rag' / 'last_search').exists():
             print(f"\n💡 Try: rag-mini search {project_path} \"your search here\"")
             
+    except FileNotFoundError:
+        print(f"📁 Directory Not Found: {project_path}")
+        print("   Make sure the path exists and you're in the right location")
+        print(f"   Current directory: {Path.cwd()}")
+        print("   Check path: ls -la /path/to/your/project")
+        print()
+        sys.exit(1)
+    except PermissionError:
+        print("🔒 Permission Denied")
+        print("   FSS-Mini-RAG needs to read files and create index database")
+        print(f"   Check permissions: ls -la {project_path}")
+        print("   Try a different location with write access")
+        print()
+        sys.exit(1)
     except Exception as e:
+        # Connection errors are handled in the embedding module
+        if "ollama" in str(e).lower() or "connection" in str(e).lower():
+            sys.exit(1)  # Error already displayed
+            
         print(f"❌ Indexing failed: {e}")
         print()
         print("🔧 Common solutions:")

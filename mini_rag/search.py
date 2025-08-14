@@ -117,11 +117,21 @@ class CodeSearcher:
         """Connect to the LanceDB database."""
         try:
             if not self.rag_dir.exists():
+                print("🗃️ No Search Index Found")
+                print("   An index is a database that makes your files searchable")
+                print(f"   Create index: ./rag-mini index {self.project_path}")
+                print("   (This analyzes your files and creates semantic search vectors)")
+                print()
                 raise FileNotFoundError(f"No RAG index found at {self.rag_dir}")
             
             self.db = lancedb.connect(self.rag_dir)
             
             if "code_vectors" not in self.db.table_names():
+                print("🔧 Index Database Corrupted") 
+                print("   The search index exists but is missing data tables")
+                print(f"   Rebuild index: rm -rf {self.rag_dir} && ./rag-mini index {self.project_path}")
+                print("   (This will recreate the search database)")
+                print()
                 raise ValueError("No code_vectors table found. Run indexing first.")
             
             self.table = self.db.open_table("code_vectors")
