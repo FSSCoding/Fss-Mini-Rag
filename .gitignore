@@ -41,9 +41,13 @@ Thumbs.db
 
 # RAG system specific
 .claude-rag/
+.mini-rag/
 *.lance/
 *.db
 manifest.json
+
+# Claude Code specific
+.claude/
 
 # Logs and temporary files
 *.log
