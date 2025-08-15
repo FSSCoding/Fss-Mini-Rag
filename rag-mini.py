@@ -192,7 +192,16 @@ def search_project(project_path: Path, query: str, top_k: int = 10, synthesize: 
         # LLM Synthesis if requested
         if synthesize:
             print("🧠 Generating LLM synthesis...")
-            synthesizer = LLMSynthesizer()
+            
+            # Load config to respect user's model preferences
+            from mini_rag.config import ConfigManager
+            config_manager = ConfigManager(project_path)
+            config = config_manager.load_config()
+            
+            synthesizer = LLMSynthesizer(
+                model=config.llm.synthesis_model if config.llm.synthesis_model != "auto" else None,
+                config=config
+            )
             
             if synthesizer.is_available():
                 synthesis = synthesizer.synthesize_search_results(query, results, project_path)

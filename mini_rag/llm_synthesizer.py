@@ -64,7 +64,10 @@ class LLMSynthesizer:
     def _select_best_model(self) -> str:
         """Select the best available model based on configuration rankings."""
         if not self.available_models:
-            return "qwen2.5:1.5b"  # Fallback preference
+            # Use config fallback if available, otherwise use default
+            if self.config and hasattr(self.config, 'llm') and hasattr(self.config.llm, 'model_rankings') and self.config.llm.model_rankings:
+                return self.config.llm.model_rankings[0]  # First preferred model
+            return "qwen2.5:1.5b"  # System fallback only if no config
         
         # Get model rankings from config or use defaults
         if self.config and hasattr(self.config, 'llm') and hasattr(self.config.llm, 'model_rankings'):
