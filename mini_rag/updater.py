@@ -63,8 +63,11 @@ class UpdateChecker:
         self.cache_file = self.app_root / ".update_cache.json"
         self.backup_dir = self.app_root / ".backup"
         
-        # User preferences
-        self.config = ConfigManager()
+        # User preferences (graceful fallback if config unavailable)
+        try:
+            self.config = ConfigManager(self.app_root)
+        except Exception:
+            self.config = None
         
     def should_check_for_updates(self) -> bool:
         """

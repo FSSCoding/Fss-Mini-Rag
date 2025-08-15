@@ -1,0 +1,127 @@
+name: Auto Release & Update System
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.2.3)'
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+        
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "clean_version=${VERSION#v}" >> $GITHUB_OUTPUT
+        
+    - name: Update version in code
+      run: |
+        VERSION="${{ steps.version.outputs.clean_version }}"
+        # Update __init__.py version
+        if [ -f "mini_rag/__init__.py" ]; then
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" mini_rag/__init__.py
+        fi
+        # Update any setup.py or pyproject.toml if they exist
+        if [ -f "setup.py" ]; then
+          sed -i "s/version=\".*\"/version=\"$VERSION\"/" setup.py
+        fi
+        
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Get commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          COMMITS=$(git log --oneline $LAST_TAG..HEAD --pretty=format:"• %s")
+        else
+          COMMITS=$(git log --oneline --pretty=format:"• %s" | head -10)
+        fi
+        
+        # Create release notes
+        cat > release_notes.md << EOF
+        ## What's New in $VERSION
+        
+        ### 🚀 Changes
+        $COMMITS
+        
+        ### 📥 Installation
+        
+        **Quick Install:**
+        \`\`\`bash
+        # Download and run installer
+        curl -sSL https://github.com/${{ github.repository }}/releases/latest/download/install.sh | bash
+        \`\`\`
+        
+        **Manual Install:**
+        \`\`\`bash
+        # Download source
+        wget https://github.com/${{ github.repository }}/archive/refs/tags/$VERSION.zip
+        unzip $VERSION.zip
+        cd *-${VERSION#v}
+        ./install_mini_rag.sh
+        \`\`\`
+        
+        ### 🔄 Auto-Update
+        If you have a previous version with auto-update support:
+        \`\`\`bash
+        ./rag-mini check-update
+        ./rag-mini update
+        \`\`\`
+        
+        ---
+        
+        🤖 **Auto-Update System**: This release includes automatic update checking.
+        Users will be notified of future updates and can install them with one command!
+        EOF
+        
+        echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Release ${{ steps.version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: |
+          *.sh
+          *.bat
+          requirements.txt
+          
+    - name: Trigger update notifications
+      run: |
+        echo "🎉 Release ${{ steps.version.outputs.version }} created!"
+        echo "📢 Users with auto-update will be notified within 24 hours"
+        echo "🔄 They can update with: ./rag-mini update"

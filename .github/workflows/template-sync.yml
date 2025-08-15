@@ -1,0 +1,156 @@
+name: Template Synchronization
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  sync-template:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+    - name: Checkout current repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        
+    - name: Check if repository was created from template
+      id: template_check
+      run: |
+        # Check if this repo has template metadata
+        TEMPLATE_REPO=$(gh api repos/${{ github.repository }} --jq '.template_repository.full_name' 2>/dev/null || echo "")
+        
+        if [ -n "$TEMPLATE_REPO" ]; then
+          echo "template_repo=$TEMPLATE_REPO" >> $GITHUB_OUTPUT
+          echo "is_template_derived=true" >> $GITHUB_OUTPUT
+          echo "✅ Repository created from template: $TEMPLATE_REPO"
+        else
+          echo "is_template_derived=false" >> $GITHUB_OUTPUT
+          echo "ℹ️ Repository not created from template"
+        fi
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Fetch template updates
+      if: steps.template_check.outputs.is_template_derived == 'true'
+      id: fetch_updates
+      run: |
+        TEMPLATE_REPO="${{ steps.template_check.outputs.template_repo }}"
+        
+        # Add template as remote
+        git remote add template https://github.com/$TEMPLATE_REPO.git || true
+        git fetch template main
+        
+        # Check for changes in template files
+        TEMPLATE_FILES=$(git diff --name-only HEAD template/main -- .github/ scripts/ | head -20)
+        
+        if [ -n "$TEMPLATE_FILES" ] || [ "${{ github.event.inputs.force_sync }}" = "true" ]; then
+          echo "updates_available=true" >> $GITHUB_OUTPUT
+          echo "template_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$TEMPLATE_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "🔄 Template updates available"
+        else
+          echo "updates_available=false" >> $GITHUB_OUTPUT
+          echo "✅ No template updates needed"
+        fi
+        
+    - name: Create update branch
+      if: steps.fetch_updates.outputs.updates_available == 'true'
+      run: |
+        BRANCH_NAME="template-sync-$(date +%Y%m%d-%H%M%S)"
+        echo "sync_branch=$BRANCH_NAME" >> $GITHUB_ENV
+        
+        git checkout -b $BRANCH_NAME
+        
+        # Merge template changes for specific directories only
+        git checkout template/main -- .github/workflows/ || true
+        git checkout template/main -- scripts/ || true
+        
+        # Don't overwrite project-specific files
+        git reset HEAD -- .github/workflows/template-sync.yml || true
+        git checkout HEAD -- .github/workflows/template-sync.yml || true
+        
+    - name: Commit template updates
+      if: steps.fetch_updates.outputs.updates_available == 'true'
+      run: |
+        git config user.name "Template Sync Bot"
+        git config user.email "noreply@github.com"
+        
+        if git diff --cached --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "🔄 Sync template updates
+
+          Updated files:
+          ${{ steps.fetch_updates.outputs.template_files }}
+          
+          Source: ${{ steps.template_check.outputs.template_repo }}
+          Sync date: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          
+          This is an automated template synchronization.
+          Review changes before merging."
+          
+          git push origin ${{ env.sync_branch }}
+        fi
+        
+    - name: Create pull request
+      if: steps.fetch_updates.outputs.updates_available == 'true'
+      run: |
+        gh pr create \
+          --title "🔄 Template Updates Available" \
+          --body "## Template Synchronization
+
+        This PR contains updates from the template repository.
+
+        ### 📋 Changed Files:
+        \`\`\`
+        ${{ steps.fetch_updates.outputs.template_files }}
+        \`\`\`
+
+        ### 📊 What's Updated:
+        - GitHub Actions workflows
+        - Project scripts and automation
+        - Template-specific configurations
+
+        ### ⚠️ Review Notes:
+        - **Carefully review** all changes before merging
+        - **Test workflows** in a branch if needed
+        - **Preserve** any project-specific customizations
+        - **Check** that auto-update system still works
+
+        ### 🔗 Source:
+        Template: [${{ steps.template_check.outputs.template_repo }}](https://github.com/${{ steps.template_check.outputs.template_repo }})
+        Sync Date: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+        ---
+        
+        🤖 This is an automated template synchronization. Review carefully before merging!" \
+          --head "${{ env.sync_branch }}" \
+          --base main \
+          --label "template-sync,automation"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Summary
+      run: |
+        if [ "${{ steps.template_check.outputs.is_template_derived }}" = "true" ]; then
+          if [ "${{ steps.fetch_updates.outputs.updates_available }}" = "true" ]; then
+            echo "🎉 Template sync completed - PR created for review"
+          else
+            echo "✅ Template is up to date - no action needed"
+          fi
+        else
+          echo "ℹ️ Repository not created from template - skipping sync"
+        fi
