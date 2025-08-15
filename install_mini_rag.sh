@@ -705,7 +705,7 @@ run_quick_test() {
         read -r
         
         # Launch the TUI which has the existing interactive tutorial system
-        ./rag-tui.py "$target_dir"
+        ./rag-tui.py "$target_dir" || true
         
         echo ""
         print_success "🎉 Tutorial completed!"

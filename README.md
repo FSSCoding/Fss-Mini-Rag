@@ -79,6 +79,7 @@ FSS-Mini-RAG offers **two distinct experiences** optimized for different use cas
 
 ## Quick Start (2 Minutes)
 
+**Linux/macOS:**
 ```bash
 # 1. Install everything
 ./install_mini_rag.sh
@@ -89,6 +90,19 @@ FSS-Mini-RAG offers **two distinct experiences** optimized for different use cas
 ./rag-mini index ~/my-project     # Index your project first
 ./rag-mini search ~/my-project "query" --synthesize  # Fast synthesis
 ./rag-mini explore ~/my-project   # Interactive exploration
+```
+
+**Windows:**
+```cmd
+# 1. Install everything
+install_windows.bat
+
+# 2. Choose your interface
+rag.bat                           # Interactive interface
+# OR choose your mode:
+rag.bat index C:\my-project       # Index your project first
+rag.bat search C:\my-project "query"  # Fast search
+rag.bat explore C:\my-project     # Interactive exploration
 ```
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.
@@ -140,12 +154,22 @@ That's it. No external dependencies, no configuration required, no PhD in comput
 ## Installation Options
 
 ### Recommended: Full Installation
+
+**Linux/macOS:**
 ```bash
 ./install_mini_rag.sh
 # Handles Python setup, dependencies, optional AI models
 ```
 
+**Windows:**
+```cmd
+install_windows.bat
+# Handles Python setup, dependencies, works reliably
+```
+
 ### Experimental: Copy & Run (May Not Work)
+
+**Linux/macOS:**
 ```bash
 # Copy folder anywhere and try to run directly
 ./rag-mini index ~/my-project
@@ -153,10 +177,27 @@ That's it. No external dependencies, no configuration required, no PhD in comput
 # Falls back with clear instructions if it fails
 ```
 
+**Windows:**
+```cmd
+# Copy folder anywhere and try to run directly
+rag.bat index C:\my-project
+# Auto-setup will attempt to create environment
+# Falls back with clear instructions if it fails
+```
+
 ### Manual Setup
+
+**Linux/macOS:**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Windows:**
+```cmd
+python -m venv .venv
+.venv\Scripts\activate.bat
 pip install -r requirements.txt
 ```
 
@@ -187,7 +228,7 @@ This implementation prioritizes:
 
 ## Next Steps
 
-- **New users**: Run `./rag-mini` for guided experience
+- **New users**: Run `./rag-mini` (Linux/macOS) or `rag.bat` (Windows) for guided experience
 - **Developers**: Read [`TECHNICAL_GUIDE.md`](docs/TECHNICAL_GUIDE.md) for implementation details
 - **Contributors**: See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup
 

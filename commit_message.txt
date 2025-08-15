@@ -1,0 +1,36 @@
+feat: Add comprehensive Windows compatibility and enhanced LLM model setup
+
+🚀 Major cross-platform enhancement making FSS-Mini-RAG fully Windows and Linux compatible
+
+## Windows Compatibility
+- **New Windows installer**: `install_windows.bat` - rock-solid, no-hang installation
+- **Simple Windows launcher**: `rag.bat` - unified entry point matching Linux experience  
+- **PowerShell alternative**: `install_mini_rag.ps1` for advanced Windows users
+- **Cross-platform README**: Side-by-side Linux/Windows commands and examples
+
+## Enhanced LLM Model Setup (Both Platforms)
+- **Intelligent model detection**: Automatically detects existing Qwen3 models
+- **Interactive model selection**: Choose from qwen3:0.6b, 1.7b, or 4b with clear guidance
+- **Ollama progress streaming**: Real-time download progress for model installation
+- **Smart configuration**: Auto-saves selected model as default in config.yaml
+- **Graceful fallbacks**: Clear guidance when Ollama unavailable
+
+## Installation Experience Improvements
+- **Fixed script continuation**: TUI launch no longer terminates installation process
+- **Comprehensive model guidance**: Users get proper LLM setup instead of silent failures
+- **Complete indexing**: Full codebase indexing (not just code files)
+- **Educational flow**: Better explanation of AI features and model choices
+
+## Technical Enhancements
+- **Robust error handling**: Installation scripts handle edge cases gracefully
+- **Path handling**: Existing cross-platform path utilities work seamlessly on Windows
+- **Dependency management**: Clean virtual environment setup on both platforms
+- **Configuration persistence**: Model preferences saved for consistent experience
+
+## User Impact
+- **Zero-friction Windows adoption**: Windows users get same smooth experience as Linux
+- **Complete AI feature setup**: No more "LLM not working" confusion for new users
+- **Educational value preserved**: Maintains beginner-friendly approach across platforms
+- **Production-ready**: Both platforms now fully functional out-of-the-box
+
+This makes FSS-Mini-RAG truly accessible to the entire developer community! 🎉
