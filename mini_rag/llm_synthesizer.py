@@ -169,6 +169,9 @@ class LLMSynthesizer:
         start_time = time.time()
         
         try:
+            # Ensure we're initialized
+            self._ensure_initialized()
+            
             # Use the best available model
             model_to_use = self.model
             if self.model not in self.available_models:
@@ -262,7 +265,20 @@ class LLMSynthesizer:
                         # Preserve original response but add safeguard warning
                         return self._create_safeguard_response_with_content(issue_type, explanation, raw_response)
                 
-                return raw_response
+                # Clean up thinking tags from final response
+                cleaned_response = raw_response
+                if '<think>' in cleaned_response or '</think>' in cleaned_response:
+                    # Remove thinking content but preserve the rest
+                    cleaned_response = cleaned_response.replace('<think>', '').replace('</think>', '')
+                    # Clean up extra whitespace that might be left
+                    lines = cleaned_response.split('\n')
+                    cleaned_lines = []
+                    for line in lines:
+                        if line.strip():  # Only keep non-empty lines
+                            cleaned_lines.append(line)
+                    cleaned_response = '\n'.join(cleaned_lines)
+                
+                return cleaned_response.strip()
             else:
                 logger.error(f"Ollama API error: {response.status_code}")
                 return None
@@ -433,7 +449,8 @@ This is normal with smaller AI models and helps ensure you get quality responses
                                 if '<think>' in clean_text or '</think>' in clean_text:
                                     clean_text = clean_text.replace('<think>', '').replace('</think>', '')
                                 
-                                if clean_text.strip():
+                                if clean_text:  # Remove .strip() here to preserve whitespace
+                                    # Preserve all formatting including newlines and spaces
                                     print(clean_text, end='', flush=True)
                         
                         # Check if response is done
@@ -520,7 +537,20 @@ This is normal with smaller AI models and helps ensure you get quality responses
                     except json.JSONDecodeError:
                         continue
             
-            return full_response.strip()
+            # Clean up thinking tags from final response
+            cleaned_response = full_response
+            if '<think>' in cleaned_response or '</think>' in cleaned_response:
+                # Remove thinking content but preserve the rest
+                cleaned_response = cleaned_response.replace('<think>', '').replace('</think>', '')
+                # Clean up extra whitespace that might be left
+                lines = cleaned_response.split('\n')
+                cleaned_lines = []
+                for line in lines:
+                    if line.strip():  # Only keep non-empty lines
+                        cleaned_lines.append(line)
+                cleaned_response = '\n'.join(cleaned_lines)
+            
+            return cleaned_response.strip()
             
         except Exception as e:
             logger.error(f"Streaming with early stop failed: {e}")

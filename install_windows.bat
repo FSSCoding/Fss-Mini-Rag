@@ -70,10 +70,19 @@ echo.
 echo ══════════════════════════════════════════════════
 echo [2/5] Creating Python Virtual Environment...
 if exist "%SCRIPT_DIR%\.venv" (
-    echo 🔄 Removing old virtual environment...
+    echo 🔄 Found existing virtual environment, checking if it works...
+    call "%SCRIPT_DIR%\.venv\Scripts\activate.bat" >nul 2>&1
+    if not errorlevel 1 (
+        "%SCRIPT_DIR%\.venv\Scripts\python.exe" -c "import sys; print('✅ Existing environment works')" >nul 2>&1
+        if not errorlevel 1 (
+            echo ✅ Using existing virtual environment
+            goto skip_venv_creation
+        )
+    )
+    echo 🔄 Removing problematic virtual environment...
     rmdir /s /q "%SCRIPT_DIR%\.venv" 2>nul
     if exist "%SCRIPT_DIR%\.venv" (
-        echo ⚠️ Could not remove old environment, creating anyway...
+        echo ⚠️ Could not remove old environment, will try to work with it...
     )
 )
 
@@ -93,6 +102,7 @@ if errorlevel 1 (
 )
 echo ✅ Virtual environment created successfully
 
+:skip_venv_creation
 echo.
 echo ══════════════════════════════════════════════════
 echo [3/5] Installing Python Dependencies...
@@ -133,19 +143,29 @@ echo.
 echo ══════════════════════════════════════════════════
 echo [4/5] Testing Installation...
 echo 🧪 Verifying Python imports...
-"%SCRIPT_DIR%\.venv\Scripts\python.exe" -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('✅ Core imports successful')" 2>nul
+echo Attempting import test...
+"%SCRIPT_DIR%\.venv\Scripts\python.exe" -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('✅ Core imports successful')" 2>import_error.txt
 if errorlevel 1 (
     echo ❌ ERROR: Installation test failed
     echo.
+    echo 🔍 Import error details:
+    type import_error.txt
+    echo.
     echo 🔧 This usually means:
     echo    • Dependencies didn't install correctly
-    echo    • Virtual environment is corrupted
+    echo    • Virtual environment is corrupted  
     echo    • Python path issues
+    echo    • Module conflicts with existing installations
     echo.
-    echo 💡 Try running: pip install -r requirements.txt
+    echo 💡 Troubleshooting options:
+    echo    • Try: "%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -r requirements.txt --force-reinstall
+    echo    • Or delete .venv folder and run installer again
+    echo    • Or check import_error.txt for specific error details
+    del import_error.txt >nul 2>&1
     pause
     exit /b 1
 )
+del import_error.txt >nul 2>&1
 
 echo 🔍 Testing embedding system...
 "%SCRIPT_DIR%\.venv\Scripts\python.exe" -c "from mini_rag import CodeEmbedder; embedder = CodeEmbedder(); info = embedder.get_embedding_info(); print(f'✅ Embedding method: {info[\"method\"]}')" 2>nul
