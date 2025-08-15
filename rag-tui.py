@@ -182,13 +182,15 @@ class SimpleTUI:
                 "Keep current project (go back to main menu)",
                 "Use current directory (this folder)",
                 "Enter different project path",
-                "Browse recent projects"
+                "Browse recent projects",
+                "Open folder picker (GUI)"
             ]
         else:
             options = [
                 "Use current directory (perfect for beginners - try the RAG codebase!)",
                 "Enter project path (if you have a specific project)", 
-                "Browse recent projects"
+                "Browse recent projects",
+                "Open folder picker (GUI)"
             ]
         
         choice = self.show_menu("Choose project directory", options, show_cli=False, back_option="Back to main menu")
@@ -212,6 +214,12 @@ class SimpleTUI:
             elif choice == 3:
                 # Browse recent projects
                 self.browse_recent_projects()
+            elif choice == 4:
+                picked = self._pick_folder_dialog()
+                if picked:
+                    self.project_path = Path(picked)
+                    print(f"✅ Selected: {self.project_path}")
+                    self._save_last_project()
         else:
             if choice == 0:
                 # Use current directory
@@ -224,6 +232,12 @@ class SimpleTUI:
             elif choice == 2:
                 # Browse recent projects
                 self.browse_recent_projects()
+            elif choice == 3:
+                picked = self._pick_folder_dialog()
+                if picked:
+                    self.project_path = Path(picked)
+                    print(f"✅ Selected: {self.project_path}")
+                    self._save_last_project()
         
         input("\nPress Enter to continue...")
     
@@ -502,6 +516,23 @@ class SimpleTUI:
         
         print()
         input("Press Enter to continue...")
+
+    def _pick_folder_dialog(self) -> Optional[str]:
+        """Open a minimal cross-platform folder picker dialog and return path or None."""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.update()
+            directory = filedialog.askdirectory(title="Select project folder to index")
+            root.destroy()
+            if directory and Path(directory).exists():
+                return directory
+            return None
+        except Exception:
+            print("❌ Folder picker not available on this system")
+            return None
     
     def _show_existing_index_info(self, rag_dir: Path) -> bool:
         """Show essential info about existing index and ask about re-indexing."""
@@ -1309,18 +1340,18 @@ Your suggested question (under 10 words):"""
             from mini_rag.ollama_embeddings import OllamaEmbedder
             
             embedder = OllamaEmbedder()
-            info = embedder.get_status()
+            status = embedder.get_status()
             
             print("🧠 Embedding System:")
-            method = info.get('method', 'unknown')
-            if method == 'ollama':
+            mode = status.get('mode', 'unknown')
+            if mode == 'ollama':
                 print("   ✅ Ollama (high quality)")
-            elif method == 'ml':
+            elif mode == 'fallback':
                 print("   ✅ ML fallback (good quality)")
-            elif method == 'hash':
+            elif mode == 'hash':
                 print("   ⚠️  Hash fallback (basic quality)")
             else:
-                print(f"   ❓ Unknown: {method}")
+                print(f"   ❓ Unknown: {mode}")
             
         except Exception as e:
             print(f"🧠 Embedding System: ❌ Error: {e}")

@@ -135,9 +135,9 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
         
         # Show how to use
         console.print("\n[bold]Next steps:[/bold]")
-        console.print("  • Search your code: [cyan]mini-rag search \"your query\"[/cyan]")
-        console.print("  • Watch for changes: [cyan]mini-rag watch[/cyan]")
-        console.print("  • View statistics: [cyan]mini-rag stats[/cyan]\n")
+        console.print("  • Search your code: [cyan]rag-mini search \"your query\"[/cyan]")
+        console.print("  • Watch for changes: [cyan]rag-mini watch[/cyan]")
+        console.print("  • View statistics: [cyan]rag-mini stats[/cyan]\n")
         
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
@@ -166,7 +166,7 @@ def search(query: str, path: str, top_k: int, type: tuple, lang: tuple, show_con
     # Check if indexed
     rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'rag-mini init' first.")
         sys.exit(1)
     
     # Get performance monitor
@@ -280,7 +280,7 @@ def stats(path: str):
     # Check if indexed
     rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'rag-mini init' first.")
         sys.exit(1)
     
     try:
@@ -350,7 +350,7 @@ def debug_schema(path: str):
         rag_dir = project_path / '.mini-rag'
         
         if not rag_dir.exists():
-            console.print("[red]No RAG index found. Run 'init' first.[/red]")
+            console.print("[red]No RAG index found. Run 'rag-mini init' first.[/red]")
             return
         
         # Connect to database
@@ -418,7 +418,7 @@ def watch(path: str, delay: float, silent: bool):
     rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
         if not silent:
-            console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
+            console.print("[red]Error:[/red] Project not indexed. Run 'rag-mini init' first.")
         sys.exit(1)
     
     try:
@@ -543,7 +543,7 @@ def update(path: str):
     # Check if indexed
     rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'rag-mini init' first.")
         sys.exit(1)
     
     try:
@@ -598,7 +598,7 @@ def info(show_code: bool):
         console.print("\n[bold]Example Usage:[/bold]\n")
         
         code = """# Initialize a project
-mini-rag init
+rag-mini init
 
 # Search for code
 mini-rag search "database connection"
@@ -609,10 +609,10 @@ mini-rag find-function connect_to_db
 mini-rag find-class UserModel
 
 # Watch for changes
-mini-rag watch
+rag-mini watch
 
 # Get statistics
-mini-rag stats"""
+rag-mini stats"""
         
         syntax = Syntax(code, "bash", theme="monokai")
         console.print(syntax)
@@ -630,7 +630,7 @@ def server(path: str, port: int):
     # Check if indexed
     rag_dir = project_path / '.mini-rag'
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'mini-rag init' first.")
+        console.print("[red]Error:[/red] Project not indexed. Run 'rag-mini init' first.")
         sys.exit(1)
     
     try:
@@ -692,7 +692,7 @@ def status(path: str, port: int, discovery: bool):
             console.print(f"   • Error: {e}")
     else:
         console.print("   • Status: [red]❌ Not indexed[/red]")
-        console.print("   • Run 'rag-start' to initialize")
+        console.print("   • Run 'rag-mini init' to initialize")
     
     # Check server status
     console.print("\n[bold]🚀 Server Status:[/bold]")
@@ -713,7 +713,7 @@ def status(path: str, port: int, discovery: bool):
             console.print(f"   • [yellow]Server responding but with issues: {e}[/yellow]")
     else:
         console.print(f"   • Status: [red]❌ Not running on port {port}[/red]")
-        console.print("   • Run 'rag-start' to start server")
+        console.print("   • Run 'rag-mini server' to start the server")
     
     # Run codebase discovery if requested
     if discovery and rag_dir.exists():
@@ -739,18 +739,18 @@ def status(path: str, port: int, discovery: bool):
     elif discovery and not rag_dir.exists():
         console.print("\n[bold]🧠 Codebase Discovery:[/bold]")
         console.print("   [yellow]❌ Cannot run discovery - project not indexed[/yellow]")
-        console.print("   Run 'rag-start' first to initialize the system")
+        console.print("   Run 'rag-mini init' first to initialize the system")
     
     # Show next steps
     console.print("\n[bold]📋 Next Steps:[/bold]")
     if not rag_dir.exists():
-        console.print("   1. Run [cyan]rag-start[/cyan] to initialize and start RAG system")
-        console.print("   2. Use [cyan]rag-search \"your query\"[/cyan] to search code")
+        console.print("   1. Run [cyan]rag-mini init[/cyan] to initialize the RAG system")
+        console.print("   2. Use [cyan]rag-mini search \"your query\"[/cyan] to search code")
     elif not client.is_running():
-        console.print("   1. Run [cyan]rag-start[/cyan] to start the server")
-        console.print("   2. Use [cyan]rag-search \"your query\"[/cyan] to search code")
+        console.print("   1. Run [cyan]rag-mini server[/cyan] to start the server")
+        console.print("   2. Use [cyan]rag-mini search \"your query\"[/cyan] to search code")
     else:
-        console.print("   • System ready! Use [cyan]rag-search \"your query\"[/cyan] to search")
+        console.print("   • System ready! Use [cyan]rag-mini search \"your query\"[/cyan] to search")
         console.print("   • Add [cyan]--discovery[/cyan] flag to run intelligent codebase analysis")
     
     console.print()

@@ -103,6 +103,10 @@ rag.bat                           # Interactive interface
 rag.bat index C:\my-project       # Index your project first
 rag.bat search C:\my-project "query"  # Fast search
 rag.bat explore C:\my-project     # Interactive exploration
+
+# Direct Python entrypoint (after install):
+rag-mini index C:\my-project
+rag-mini search C:\my-project "query"
 ```
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.
@@ -234,12 +238,12 @@ This implementation prioritizes:
 
 ## Documentation
 
-- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[Getting Started](docs/GETTING_STARTED.md)** - Get running in 5 minutes
 - **[Visual Diagrams](docs/DIAGRAMS.md)** - 📊 System flow charts and architecture diagrams
 - **[TUI Guide](docs/TUI_GUIDE.md)** - Complete walkthrough of the friendly interface  
 - **[Technical Guide](docs/TECHNICAL_GUIDE.md)** - How the system actually works
-- **[Configuration Guide](docs/CONFIGURATION.md)** - Customizing for your needs
-- **[Development Guide](docs/DEVELOPMENT.md)** - Extending and modifying the code
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Fix common issues
+- **[Beginner Glossary](docs/BEGINNER_GLOSSARY.md)** - Friendly terms and concepts
 
 ## License
 

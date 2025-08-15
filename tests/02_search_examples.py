@@ -124,7 +124,7 @@ def main():
         project_path = Path(__file__).parent
     
     if not (project_path / '.mini-rag').exists():
-        console.print("[red]Error: No RAG index found. Run 'mini-rag index' first.[/red]")
+        console.print("[red]Error: No RAG index found. Run 'rag-mini index' first.[/red]")
         console.print(f"[dim]Looked in: {project_path / '.mini-rag'}[/dim]")
         return
     
