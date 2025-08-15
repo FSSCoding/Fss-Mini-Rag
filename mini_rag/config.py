@@ -115,6 +115,16 @@ class LLMConfig:
 
 
 @dataclass
+class UpdateConfig:
+    """Configuration for auto-update system."""
+    auto_check: bool = True          # Check for updates automatically
+    check_frequency_hours: int = 24  # How often to check (hours)
+    auto_install: bool = False       # Auto-install without asking (not recommended)
+    backup_before_update: bool = True # Create backup before updating
+    notify_beta_releases: bool = False # Include beta/pre-releases
+
+
+@dataclass
 class RAGConfig:
     """Main RAG system configuration."""
     chunking: ChunkingConfig = None
@@ -123,6 +133,7 @@ class RAGConfig:
     embedding: EmbeddingConfig = None
     search: SearchConfig = None
     llm: LLMConfig = None
+    updates: UpdateConfig = None
     
     def __post_init__(self):
         if self.chunking is None:
@@ -137,6 +148,8 @@ class RAGConfig:
             self.search = SearchConfig()
         if self.llm is None:
             self.llm = LLMConfig()
+        if self.updates is None:
+            self.updates = UpdateConfig()
 
 
 class ConfigManager:
@@ -273,6 +286,18 @@ class ConfigManager:
                 yaml_lines.append(f"    - \"{model}\"")
             if len(config_dict['llm']['model_rankings']) > 10:
                 yaml_lines.append("    # ... (edit config to see all options)")
+        
+        # Add update settings
+        yaml_lines.extend([
+            "",
+            "# Auto-update system settings",
+            "updates:",
+            f"  auto_check: {str(config_dict['updates']['auto_check']).lower()}            # Check for updates automatically",
+            f"  check_frequency_hours: {config_dict['updates']['check_frequency_hours']}    # Hours between update checks",
+            f"  auto_install: {str(config_dict['updates']['auto_install']).lower()}          # Auto-install updates (not recommended)",
+            f"  backup_before_update: {str(config_dict['updates']['backup_before_update']).lower()}   # Create backup before updating",
+            f"  notify_beta_releases: {str(config_dict['updates']['notify_beta_releases']).lower()}   # Include beta releases in checks",
+        ])
         
         return '\n'.join(yaml_lines)
     

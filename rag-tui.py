@@ -10,6 +10,13 @@ import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+# Update system (graceful import)
+try:
+    from mini_rag.updater import check_for_updates, get_updater, get_legacy_notification
+    UPDATER_AVAILABLE = True
+except ImportError:
+    UPDATER_AVAILABLE = False
+
 # Simple TUI without external dependencies
 class SimpleTUI:
     def __init__(self):
@@ -2083,11 +2090,106 @@ Your suggested question (under 10 words):"""
         
         input("Press Enter to continue...")
     
+    def check_for_updates_notification(self):
+        """Check for updates and show notification if available."""
+        if not UPDATER_AVAILABLE:
+            return
+            
+        try:
+            # Check for legacy notification first
+            legacy_notice = get_legacy_notification()
+            if legacy_notice:
+                print("🔔" + "=" * 58 + "🔔")
+                print(legacy_notice)
+                print("🔔" + "=" * 58 + "🔔")
+                print()
+                return
+                
+            # Check for regular updates
+            update_info = check_for_updates()
+            if update_info:
+                print("🎉" + "=" * 58 + "🎉")
+                print(f"🔄 Update Available: v{update_info.version}")
+                print()
+                print("📋 What's New:")
+                # Show first few lines of release notes
+                notes_lines = update_info.release_notes.split('\n')[:3]
+                for line in notes_lines:
+                    if line.strip():
+                        print(f"   • {line.strip()}")
+                print()
+                
+                # Simple update prompt
+                update_choice = self.get_input("🚀 Install update now? [y/N]", "n").lower()
+                if update_choice in ['y', 'yes']:
+                    self.perform_update(update_info)
+                else:
+                    print("💡 You can update anytime from the Configuration menu!")
+                
+                print("🎉" + "=" * 58 + "🎉")
+                print()
+                
+        except Exception:
+            # Silently ignore update check errors - don't interrupt user experience
+            pass
+
+    def perform_update(self, update_info):
+        """Perform the actual update with progress display."""
+        try:
+            updater = get_updater()
+            
+            print(f"\n📥 Downloading v{update_info.version}...")
+            
+            # Progress callback
+            def show_progress(downloaded, total):
+                if total > 0:
+                    percent = (downloaded / total) * 100
+                    bar_length = 30
+                    filled = int(bar_length * downloaded / total)
+                    bar = "█" * filled + "░" * (bar_length - filled)
+                    print(f"\r   [{bar}] {percent:.1f}%", end="", flush=True)
+            
+            # Download update
+            update_package = updater.download_update(update_info, show_progress)
+            if not update_package:
+                print("\n❌ Download failed. Please try again later.")
+                input("Press Enter to continue...")
+                return
+                
+            print("\n💾 Creating backup...")
+            if not updater.create_backup():
+                print("⚠️ Backup failed, but continuing anyway...")
+                
+            print("🔄 Installing update...")
+            if updater.apply_update(update_package, update_info):
+                print("✅ Update successful!")
+                print("🚀 Restarting application...")
+                input("Press Enter to restart...")
+                updater.restart_application()
+            else:
+                print("❌ Update failed.")
+                print("🔙 Attempting rollback...")
+                if updater.rollback_update():
+                    print("✅ Rollback successful.")
+                else:
+                    print("❌ Rollback failed. You may need to reinstall.")
+                input("Press Enter to continue...")
+                
+        except Exception as e:
+            print(f"❌ Update error: {e}")
+            input("Press Enter to continue...")
+
     def main_menu(self):
         """Main application loop."""
+        first_run = True
         while True:
             self.clear_screen()
             self.print_header()
+            
+            # Check for updates on first run only (non-intrusive)
+            if first_run:
+                self.check_for_updates_notification()
+                first_run = False
             
             # Show current project status prominently
             if self.project_path:

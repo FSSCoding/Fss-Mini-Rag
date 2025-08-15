@@ -21,6 +21,12 @@ try:
     from mini_rag.ollama_embeddings import OllamaEmbedder
     from mini_rag.llm_synthesizer import LLMSynthesizer
     from mini_rag.explorer import CodeExplorer
+    # Update system (graceful import)
+    try:
+        from mini_rag.updater import check_for_updates, get_updater
+        UPDATER_AVAILABLE = True
+    except ImportError:
+        UPDATER_AVAILABLE = False
 except ImportError as e:
     print("❌ Error: Missing dependencies!")
     print()
@@ -444,6 +450,119 @@ def explore_interactive(project_path: Path):
         print("Make sure the project is indexed first: rag-mini index <project>")
         sys.exit(1)
 
+def show_discrete_update_notice():
+    """Show a discrete, non-intrusive update notice for CLI users."""
+    if not UPDATER_AVAILABLE:
+        return
+        
+    try:
+        update_info = check_for_updates()
+        if update_info:
+            # Very discrete notice - just one line
+            print(f"🔄 (Update v{update_info.version} available - run 'rag-mini check-update' to learn more)")
+    except Exception:
+        # Silently ignore any update check failures
+        pass
+
+def handle_check_update():
+    """Handle the check-update command."""
+    if not UPDATER_AVAILABLE:
+        print("❌ Update system not available")
+        print("💡 Try updating to the latest version manually from GitHub")
+        return
+        
+    try:
+        print("🔍 Checking for updates...")
+        update_info = check_for_updates()
+        
+        if update_info:
+            print(f"\n🎉 Update Available: v{update_info.version}")
+            print("=" * 50)
+            print("\n📋 What's New:")
+            notes_lines = update_info.release_notes.split('\n')[:10]  # First 10 lines
+            for line in notes_lines:
+                if line.strip():
+                    print(f"   {line.strip()}")
+            
+            print(f"\n🔗 Release Page: {update_info.release_url}")
+            print(f"\n🚀 To install: rag-mini update")
+            print("💡 Or update manually from GitHub releases")
+        else:
+            print("✅ You're already on the latest version!")
+            
+    except Exception as e:
+        print(f"❌ Failed to check for updates: {e}")
+        print("💡 Try updating manually from GitHub")
+
+def handle_update():
+    """Handle the update command."""
+    if not UPDATER_AVAILABLE:
+        print("❌ Update system not available")
+        print("💡 Try updating manually from GitHub")
+        return
+        
+    try:
+        print("🔍 Checking for updates...")
+        update_info = check_for_updates()
+        
+        if not update_info:
+            print("✅ You're already on the latest version!")
+            return
+            
+        print(f"\n🎉 Update Available: v{update_info.version}")
+        print("=" * 50)
+        
+        # Show brief release notes
+        notes_lines = update_info.release_notes.split('\n')[:5]
+        for line in notes_lines:
+            if line.strip():
+                print(f"   • {line.strip()}")
+        
+        # Confirm update
+        confirm = input(f"\n🚀 Install v{update_info.version}? [Y/n]: ").strip().lower()
+        if confirm in ['', 'y', 'yes']:
+            updater = get_updater()
+            
+            print(f"\n📥 Downloading v{update_info.version}...")
+            
+            # Progress callback
+            def show_progress(downloaded, total):
+                if total > 0:
+                    percent = (downloaded / total) * 100
+                    bar_length = 30
+                    filled = int(bar_length * downloaded / total)
+                    bar = "█" * filled + "░" * (bar_length - filled)
+                    print(f"\r   [{bar}] {percent:.1f}%", end="", flush=True)
+            
+            # Download and install
+            update_package = updater.download_update(update_info, show_progress)
+            if not update_package:
+                print("\n❌ Download failed. Please try again later.")
+                return
+                
+            print("\n💾 Creating backup...")
+            if not updater.create_backup():
+                print("⚠️ Backup failed, but continuing anyway...")
+                
+            print("🔄 Installing update...")
+            if updater.apply_update(update_package, update_info):
+                print("✅ Update successful!")
+                print("🚀 Restarting...")
+                updater.restart_application()
+            else:
+                print("❌ Update failed.")
+                print("🔙 Attempting rollback...")
+                if updater.rollback_update():
+                    print("✅ Rollback successful.")
+                else:
+                    print("❌ Rollback failed. You may need to reinstall.")
+        else:
+            print("Update cancelled.")
+            
+    except Exception as e:
+        print(f"❌ Update failed: {e}")
+        print("💡 Try updating manually from GitHub")
+
 def main():
     """Main CLI interface."""
     # Check virtual environment
@@ -466,10 +585,10 @@ Examples:
         """
     )
     
-    parser.add_argument('command', choices=['index', 'search', 'explore', 'status'],
+    parser.add_argument('command', choices=['index', 'search', 'explore', 'status', 'update', 'check-update'],
                        help='Command to execute')
-    parser.add_argument('project_path', type=Path,
-                       help='Path to project directory (REQUIRED)')
+    parser.add_argument('project_path', type=Path, nargs='?',
+                       help='Path to project directory (REQUIRED except for update commands)')
     parser.add_argument('query', nargs='?',
                        help='Search query (for search command)')
     parser.add_argument('--force', action='store_true',
@@ -487,6 +606,19 @@ Examples:
     if args.verbose:
         logging.getLogger().setLevel(logging.INFO)
     
+    # Handle update commands first (don't require project_path)
+    if args.command == 'check-update':
+        handle_check_update()
+        return
+    elif args.command == 'update':
+        handle_update()
+        return
+    
+    # All other commands require project_path
+    if not args.project_path:
+        print("❌ Project path required for this command")
+        sys.exit(1)
+    
     # Validate project path
     if not args.project_path.exists():
         print(f"❌ Project path does not exist: {args.project_path}")
@@ -495,6 +627,9 @@ Examples:
     if not args.project_path.is_dir():
         print(f"❌ Project path is not a directory: {args.project_path}")
         sys.exit(1)
+    
+    # Show discrete update notification for regular commands (non-intrusive)
+    show_discrete_update_notice()
     
     # Execute command
     if args.command == 'index':

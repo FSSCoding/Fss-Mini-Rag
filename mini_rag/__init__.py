@@ -13,10 +13,24 @@ from .indexer import ProjectIndexer
 from .search import CodeSearcher
 from .watcher import FileWatcher
 
-__all__ = [
-    "CodeEmbedder",
-    "CodeChunker", 
-    "ProjectIndexer",
-    "CodeSearcher",
-    "FileWatcher",
-]
+# Auto-update system (graceful import for legacy versions)
+try:
+    from .updater import UpdateChecker, check_for_updates, get_updater
+    __all__ = [
+        "CodeEmbedder",
+        "CodeChunker", 
+        "ProjectIndexer",
+        "CodeSearcher",
+        "FileWatcher",
+        "UpdateChecker",
+        "check_for_updates", 
+        "get_updater",
+    ]
+except ImportError:
+    __all__ = [
+        "CodeEmbedder",
+        "CodeChunker", 
+        "ProjectIndexer",
+        "CodeSearcher",
+        "FileWatcher",
+    ]
