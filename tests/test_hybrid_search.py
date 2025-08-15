@@ -328,7 +328,7 @@ def main():
         project_path = Path.cwd()
     
     if not (project_path / '.mini-rag').exists():
-        console.print("[red]Error: No RAG index found. Run 'mini-rag index' first.[/red]")
+        console.print("[red]Error: No RAG index found. Run 'rag-mini index' first.[/red]")
         return
     
     # Create tester

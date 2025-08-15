@@ -272,7 +272,7 @@ class RAGClient:
         except ConnectionRefusedError:
             return {
                 'success': False,
-                'error': 'RAG server not running. Start with: mini-rag server'
+                'error': 'RAG server not running. Start with: rag-mini server'
             }
         except ConnectionError as e:
             # Try legacy mode without message framing
