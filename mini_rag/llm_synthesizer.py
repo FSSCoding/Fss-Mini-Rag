@@ -114,6 +114,51 @@ class LLMSynthesizer:
                 
         self._initialized = True
     
+    def _get_optimal_context_size(self, model_name: str) -> int:
+        """Get optimal context size based on model capabilities and configuration."""
+        # Get configured context window
+        if self.config and hasattr(self.config, 'llm'):
+            configured_context = self.config.llm.context_window
+            auto_context = getattr(self.config.llm, 'auto_context', True)
+        else:
+            configured_context = 16384  # Default to 16K
+            auto_context = True
+        
+        # Model-specific maximum context windows (based on research)
+        model_limits = {
+            # Qwen3 models with native context support
+            'qwen3:0.6b': 32768,    # 32K native
+            'qwen3:1.7b': 32768,    # 32K native  
+            'qwen3:4b': 131072,     # 131K with YaRN extension
+            
+            # Qwen2.5 models
+            'qwen2.5:1.5b': 32768,  # 32K native
+            'qwen2.5:3b': 32768,    # 32K native
+            'qwen2.5-coder:1.5b': 32768,  # 32K native
+            
+            # Fallback for unknown models
+            'default': 8192
+        }
+        
+        # Find model limit (check for partial matches)
+        model_limit = model_limits.get('default', 8192)
+        for model_pattern, limit in model_limits.items():
+            if model_pattern != 'default' and model_pattern.lower() in model_name.lower():
+                model_limit = limit
+                break
+        
+        # If auto_context is enabled, respect model limits
+        if auto_context:
+            optimal_context = min(configured_context, model_limit)
+        else:
+            optimal_context = configured_context
+        
+        # Ensure minimum usable context for RAG
+        optimal_context = max(optimal_context, 4096)  # Minimum 4K for basic RAG
+        
+        logger.debug(f"Context for {model_name}: {optimal_context} tokens (configured: {configured_context}, limit: {model_limit})")
+        return optimal_context
+    
     def is_available(self) -> bool:
         """Check if Ollama is available and has models."""
         self._ensure_initialized()
@@ -174,7 +219,7 @@ class LLMSynthesizer:
                     "temperature": qwen3_temp,
                     "top_p": qwen3_top_p,
                     "top_k": qwen3_top_k,
-                    "num_ctx": 32000,  # Critical: Qwen3 context length (32K token limit)
+                    "num_ctx": self._get_optimal_context_size(model_to_use),  # Dynamic context based on model and config
                     "num_predict": optimal_params.get("num_predict", 2000),
                     "repeat_penalty": optimal_params.get("repeat_penalty", 1.1),
                     "presence_penalty": qwen3_presence

@@ -1353,8 +1353,10 @@ Your suggested question (under 10 words):"""
                 config_path = self.project_path / '.mini-rag' / 'config.yaml'
                 
                 print("📋 Current Settings:")
+                print(f"   🤖 AI model: {config.llm.synthesis_model}")
+                print(f"   🧠 Context window: {config.llm.context_window} tokens")
                 print(f"   📁 Chunk size: {config.chunking.max_size} characters")
-                print(f"   🧠 Chunking strategy: {config.chunking.strategy}")
+                print(f"   🔄 Chunking strategy: {config.chunking.strategy}")
                 print(f"   🔍 Search results: {config.search.default_top_k} results")
                 print(f"   📊 Embedding method: {config.embedding.preferred_method}")
                 print(f"   🚀 Query expansion: {'enabled' if config.search.expand_queries else 'disabled'}")
@@ -1362,12 +1364,14 @@ Your suggested question (under 10 words):"""
                 print()
                 
                 print("🛠️  Quick Configuration Options:")
-                print("   1. Adjust chunk size (performance vs accuracy)")
-                print("   2. Toggle query expansion (smarter searches)")
-                print("   3. Configure search behavior")
-                print("   4. View/edit full configuration file")
-                print("   5. Reset to defaults")
-                print("   6. Advanced settings")
+                print("   1. Select AI model (Fast/Recommended/Quality)")
+                print("   2. Configure context window (Development/Production/Advanced)")
+                print("   3. Adjust chunk size (performance vs accuracy)")
+                print("   4. Toggle query expansion (smarter searches)")
+                print("   5. Configure search behavior")
+                print("   6. View/edit full configuration file")
+                print("   7. Reset to defaults")
+                print("   8. Advanced settings")
                 print()
                 print("   V. View current config file")
                 print("   B. Back to main menu")
@@ -1386,16 +1390,20 @@ Your suggested question (under 10 words):"""
             elif choice == 'v':
                 self._show_config_file(config_path)
             elif choice == '1':
-                self._configure_chunk_size(config_manager, config)
+                self._configure_llm_model(config_manager, config)
             elif choice == '2':
-                self._toggle_query_expansion(config_manager, config)
+                self._configure_context_window(config_manager, config)
             elif choice == '3':
-                self._configure_search_behavior(config_manager, config)
+                self._configure_chunk_size(config_manager, config)
             elif choice == '4':
-                self._edit_config_file(config_path)
+                self._toggle_query_expansion(config_manager, config)
             elif choice == '5':
-                self._reset_config(config_manager)
+                self._configure_search_behavior(config_manager, config)
             elif choice == '6':
+                self._edit_config_file(config_path)
+            elif choice == '7':
+                self._reset_config(config_manager)
+            elif choice == '8':
                 self._advanced_settings(config_manager, config)
             else:
                 print("Invalid option. Press Enter to continue...")
@@ -1420,6 +1428,340 @@ Your suggested question (under 10 words):"""
             print("   It will be created when you first index a project")
         
         print("\n" + "=" * 50)
+        input("Press Enter to continue...")
+    
+    def _configure_llm_model(self, config_manager, config):
+        """Interactive LLM model selection with download capability."""
+        self.clear_screen()
+        print("🤖 AI Model Configuration")
+        print("=========================")
+        print()
+        
+        # Check if Ollama is available
+        import subprocess
+        import requests
+        
+        ollama_available = False
+        try:
+            subprocess.run(['ollama', '--version'], capture_output=True, check=True)
+            response = requests.get("http://localhost:11434/api/version", timeout=3)
+            ollama_available = response.status_code == 200
+        except:
+            pass
+        
+        if not ollama_available:
+            print("❌ Ollama not available")
+            print()
+            print("To use AI features, please:")
+            print("   1. Install Ollama: https://ollama.com/download")
+            print("   2. Start the service: ollama serve")
+            print("   3. Return to this menu")
+            print()
+            input("Press Enter to continue...")
+            return
+        
+        # Get available models
+        try:
+            available_models = subprocess.run(['ollama', 'list'], capture_output=True, text=True, check=True)
+            model_lines = available_models.stdout.strip().split('\n')[1:]  # Skip header
+            installed_models = [line.split()[0] for line in model_lines if line.strip()]
+        except:
+            installed_models = []
+        
+        print("🧠 Why Small Models Work Great for RAG")
+        print("=====================================")
+        print()
+        print("RAG systems like FSS-Mini-RAG don't need massive models because:")
+        print("• The relevant code/docs are provided as context")
+        print("• Models focus on analysis, not memorizing facts")
+        print("• Even 0.6B models give excellent results with good context")
+        print("• Smaller models = faster responses = better user experience")
+        print()
+        print("💡 Advanced Use: For heavy development work with 15+ results")
+        print("   and 4000+ character chunks, even these models excel!")
+        print("   The 4B Qwen3 model will help you code remarkably well.")
+        print()
+        
+        # Model options
+        model_options = {
+            'fast': {
+                'model': 'qwen3:0.6b',
+                'description': 'Ultra-fast responses (~500MB)',
+                'details': 'Perfect for quick searches and exploration. Surprisingly capable!'
+            },
+            'recommended': {
+                'model': 'qwen3:1.7b', 
+                'description': 'Best balance of speed and quality (~1.4GB)',
+                'details': 'Ideal for most users. Great analysis with good speed.'
+            },
+            'quality': {
+                'model': 'qwen3:4b',
+                'description': 'Highest quality responses (~2.5GB)',
+                'details': 'Excellent for coding assistance and detailed analysis.'
+            }
+        }
+        
+        print("🎯 Recommended Models:")
+        print()
+        for key, info in model_options.items():
+            is_installed = any(info['model'] in model for model in installed_models)
+            status = "✅ Installed" if is_installed else "📥 Available for download"
+            
+            print(f"   {key.upper()}: {info['model']}")
+            print(f"   {info['description']} - {status}")
+            print(f"   {info['details']}")
+            print()
+        
+        current_model = config.llm.synthesis_model
+        print(f"Current model: {current_model}")
+        print()
+        
+        print("Options:")
+        print("   F. Select Fast model (qwen3:0.6b)")
+        print("   R. Select Recommended model (qwen3:1.7b)")
+        print("   Q. Select Quality model (qwen3:4b)")
+        print("   C. Keep current model")
+        print("   B. Back to configuration menu")
+        print()
+        
+        choice = input("Choose option: ").strip().lower()
+        
+        selected_model = None
+        if choice == 'f':
+            selected_model = model_options['fast']['model']
+        elif choice == 'r':
+            selected_model = model_options['recommended']['model']
+        elif choice == 'q':
+            selected_model = model_options['quality']['model']
+        elif choice == 'c':
+            print("Keeping current model.")
+            input("Press Enter to continue...")
+            return
+        elif choice == 'b':
+            return
+        else:
+            print("Invalid option.")
+            input("Press Enter to continue...")
+            return
+        
+        # Check if model is installed
+        model_installed = any(selected_model in model for model in installed_models)
+        
+        if not model_installed:
+            print(f"\n📥 Model {selected_model} not installed.")
+            print("Would you like to download it now?")
+            print("This may take 2-5 minutes depending on your internet speed.")
+            print()
+            
+            download = input("Download now? [Y/n]: ").strip().lower()
+            if download != 'n' and download != 'no':
+                print(f"\n🔄 Downloading {selected_model}...")
+                print("This may take a few minutes...")
+                
+                try:
+                    result = subprocess.run(['ollama', 'pull', selected_model], 
+                                          capture_output=True, text=True, check=True)
+                    print(f"✅ Successfully downloaded {selected_model}")
+                    model_installed = True
+                except subprocess.CalledProcessError as e:
+                    print(f"❌ Download failed: {e}")
+                    print("You can try downloading manually later with:")
+                    print(f"   ollama pull {selected_model}")
+                    input("Press Enter to continue...")
+                    return
+            else:
+                print("Model not downloaded. Configuration not changed.")
+                input("Press Enter to continue...")
+                return
+        
+        if model_installed:
+            # Update configuration
+            config.llm.synthesis_model = selected_model
+            config.llm.expansion_model = selected_model  # Keep them in sync
+            
+            try:
+                config_manager.save_config(config)
+                print(f"\n✅ Model updated to {selected_model}")
+                print("Configuration saved successfully!")
+            except Exception as e:
+                print(f"❌ Error saving configuration: {e}")
+        
+        print()
+        input("Press Enter to continue...")
+    
+    def _configure_context_window(self, config_manager, config):
+        """Interactive context window configuration."""
+        self.clear_screen()
+        print("🧠 Context Window Configuration")
+        print("===============================")
+        print()
+        
+        print("💡 Why Context Window Size Matters for RAG")
+        print("==========================================")
+        print()
+        print("Context window determines how much text the AI can 'remember' during conversation:")
+        print()
+        print("❌ Default 2048 tokens = Only 1-2 responses before forgetting")
+        print("✅ Proper context = 5-15+ responses with maintained conversation")
+        print()
+        print("For RAG systems like FSS-Mini-RAG:")
+        print("• Larger context = better analysis of multiple code files")
+        print("• Thinking tokens consume ~200-500 tokens per response")
+        print("• Search results can be 1000-3000 tokens depending on chunk size")
+        print("• Conversation history builds up over time")
+        print()
+        print("💻 Memory Usage Impact:")
+        print("• 8K context ≈ 6MB memory per conversation")
+        print("• 16K context ≈ 12MB memory per conversation") 
+        print("• 32K context ≈ 24MB memory per conversation")
+        print()
+        
+        current_context = config.llm.context_window
+        current_model = config.llm.synthesis_model
+        
+        # Get model capabilities
+        model_limits = {
+            'qwen3:0.6b': 32768,
+            'qwen3:1.7b': 32768,
+            'qwen3:4b': 131072,
+            'qwen2.5:1.5b': 32768,
+            'qwen2.5:3b': 32768,
+            'default': 8192
+        }
+        
+        model_limit = model_limits.get('default', 8192)
+        for model_pattern, limit in model_limits.items():
+            if model_pattern != 'default' and model_pattern.lower() in current_model.lower():
+                model_limit = limit
+                break
+        
+        print(f"Current model: {current_model}")
+        print(f"Model maximum: {model_limit:,} tokens")
+        print(f"Current setting: {current_context:,} tokens")
+        print()
+        
+        # Context options
+        context_options = {
+            'development': {
+                'size': 8192,
+                'description': 'Fast and efficient for most development work',
+                'details': 'Perfect for code exploration and basic analysis. Quick responses.',
+                'memory': '~6MB'
+            },
+            'production': {
+                'size': 16384,
+                'description': 'Balanced performance for professional use',
+                'details': 'Ideal for most users. Handles complex analysis well.',
+                'memory': '~12MB'
+            },
+            'advanced': {
+                'size': 32768,
+                'description': 'Maximum performance for heavy development',
+                'details': 'For large codebases, 15+ search results, complex analysis.',
+                'memory': '~24MB'
+            }
+        }
+        
+        print("🎯 Recommended Context Sizes:")
+        print()
+        for key, info in context_options.items():
+            # Check if this size is supported by current model
+            if info['size'] <= model_limit:
+                status = "✅ Supported"
+            else:
+                status = f"❌ Exceeds model limit ({model_limit:,})"
+            
+            print(f"   {key.upper()}: {info['size']:,} tokens ({info['memory']})")
+            print(f"   {info['description']} - {status}")
+            print(f"   {info['details']}")
+            print()
+        
+        print("Options:")
+        print("   D. Development (8K tokens - fast)")
+        print("   P. Production (16K tokens - balanced)")
+        print("   A. Advanced (32K tokens - maximum)")
+        print("   C. Custom size (manual entry)")
+        print("   K. Keep current setting")
+        print("   B. Back to configuration menu")
+        print()
+        
+        choice = input("Choose option: ").strip().lower()
+        
+        new_context = None
+        if choice == 'd':
+            new_context = context_options['development']['size']
+        elif choice == 'p':
+            new_context = context_options['production']['size']
+        elif choice == 'a':
+            new_context = context_options['advanced']['size']
+        elif choice == 'c':
+            print()
+            print("Enter custom context size in tokens:")
+            print(f"  Minimum: 4096 (4K)")
+            print(f"  Maximum for {current_model}: {model_limit:,}")
+            print()
+            try:
+                custom_size = int(input("Context size: ").strip())
+                if custom_size < 4096:
+                    print("❌ Context too small. Minimum is 4096 tokens for RAG.")
+                    input("Press Enter to continue...")
+                    return
+                elif custom_size > model_limit:
+                    print(f"❌ Context too large. Maximum for {current_model} is {model_limit:,} tokens.")
+                    input("Press Enter to continue...")
+                    return
+                else:
+                    new_context = custom_size
+            except ValueError:
+                print("❌ Invalid number.")
+                input("Press Enter to continue...")
+                return
+        elif choice == 'k':
+            print("Keeping current context setting.")
+            input("Press Enter to continue...")
+            return
+        elif choice == 'b':
+            return
+        else:
+            print("Invalid option.")
+            input("Press Enter to continue...")
+            return
+        
+        if new_context:
+            # Validate against model capabilities
+            if new_context > model_limit:
+                print(f"⚠️  Warning: {new_context:,} tokens exceeds {current_model} limit of {model_limit:,}")
+                print("The system will automatically cap at the model limit.")
+                print()
+            
+            # Update configuration
+            config.llm.context_window = new_context
+            
+            try:
+                config_manager.save_config(config)
+                print(f"✅ Context window updated to {new_context:,} tokens")
+                print()
+                
+                # Provide usage guidance
+                if new_context >= 32768:
+                    print("🚀 Advanced context enabled!")
+                    print("• Perfect for large codebases and complex analysis")
+                    print("• Try cranking up search results to 15+ for deep exploration")
+                    print("• Increase chunk size to 4000+ characters for comprehensive context")
+                elif new_context >= 16384:
+                    print("⚖️  Balanced context configured!")
+                    print("• Great for professional development work")
+                    print("• Supports extended conversations and analysis")
+                elif new_context >= 8192:
+                    print("⚡ Development context set!")
+                    print("• Fast responses with good conversation length")
+                    print("• Perfect for code exploration and basic analysis")
+                
+                print("Configuration saved successfully!")
+            except Exception as e:
+                print(f"❌ Error saving configuration: {e}")
+        
+        print()
         input("Press Enter to continue...")
     
     def _configure_chunk_size(self, config_manager, config):

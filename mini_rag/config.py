@@ -81,6 +81,10 @@ class LLMConfig:
     enable_thinking: bool = True  # Enable thinking mode for Qwen3 models
     cpu_optimized: bool = True     # Prefer lightweight models
     
+    # Context window configuration (critical for RAG performance)
+    context_window: int = 16384    # Context window size in tokens (16K recommended)
+    auto_context: bool = True      # Auto-adjust context based on model capabilities
+    
     # Model preference rankings (configurable)
     model_rankings: list = None    # Will be set in __post_init__
     
@@ -255,6 +259,11 @@ class ConfigManager:
             f"  max_expansion_terms: {config_dict['llm']['max_expansion_terms']}        # Maximum terms to add to queries",
             f"  enable_synthesis: {str(config_dict['llm']['enable_synthesis']).lower()}       # Enable synthesis by default",
             f"  synthesis_temperature: {config_dict['llm']['synthesis_temperature']}      # LLM temperature for analysis",
+            "",
+            "  # Context window configuration (critical for RAG performance)",
+            f"  context_window: {config_dict['llm']['context_window']}           # Context size in tokens (8K=fast, 16K=balanced, 32K=advanced)",
+            f"  auto_context: {str(config_dict['llm']['auto_context']).lower()}            # Auto-adjust context based on model capabilities",
+            "",
             "  model_rankings:          # Preferred model order (edit to change priority)",
         ])
         

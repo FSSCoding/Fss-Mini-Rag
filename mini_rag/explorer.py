@@ -408,7 +408,7 @@ Guidelines:
                     "temperature": temperature,
                     "top_p": optimal_params.get("top_p", 0.9),
                     "top_k": optimal_params.get("top_k", 40),
-                    "num_ctx": optimal_params.get("num_ctx", 32768),
+                    "num_ctx": self.synthesizer._get_optimal_context_size(model_to_use),
                     "num_predict": optimal_params.get("num_predict", 2000),
                     "repeat_penalty": optimal_params.get("repeat_penalty", 1.1),
                     "presence_penalty": optimal_params.get("presence_penalty", 1.0)
