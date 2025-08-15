@@ -40,12 +40,12 @@ flowchart TD
     
     CLI -.->|Full Power| AdvancedFeatures[⚡ Advanced Features:<br/>• Batch processing<br/>• Custom parameters<br/>• Automation scripts<br/>• Background server]
     
-    style Start fill:#e3f2fd
-    style CLI fill:#fff3e0,stroke:#ff9800,stroke-width:3px
-    style AdvancedFeatures fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style Search fill:#e8f5e8
-    style Explore fill:#f3e5f5
-    style End fill:#e8f5e8
+    style Start fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style CLI fill:#fff9c4,stroke:#f57c00,stroke-width:3px
+    style AdvancedFeatures fill:#fff9c4,stroke:#f57c00,stroke-width:2px
+    style Search fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    style Explore fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    style End fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
 ```
 
 ## What This Is
