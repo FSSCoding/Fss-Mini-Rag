@@ -310,6 +310,43 @@ def status_check(project_path: Path):
                 
         except Exception as e:
             print(f"   ❌ Status check failed: {e}")
+        
+        print()
+        
+        # Check LLM status and show actual vs configured model
+        print("🤖 LLM System:")
+        try:
+            from mini_rag.config import ConfigManager
+            config_manager = ConfigManager(project_path)
+            config = config_manager.load_config()
+            
+            synthesizer = LLMSynthesizer(
+                model=config.llm.synthesis_model if config.llm.synthesis_model != "auto" else None,
+                config=config
+            )
+            
+            if synthesizer.is_available():
+                synthesizer._ensure_initialized()
+                actual_model = synthesizer.model
+                config_model = config.llm.synthesis_model
+                
+                if config_model == "auto":
+                    print(f"   ✅ Auto-selected: {actual_model}")
+                elif config_model == actual_model:
+                    print(f"   ✅ Using configured: {actual_model}")
+                else:
+                    print(f"   ⚠️  Model mismatch!")
+                    print(f"   Configured: {config_model}")
+                    print(f"   Actually using: {actual_model}")
+                    print(f"   (Configured model may not be installed)")
+                    
+                print(f"   Config file: {config_manager.config_path}")
+            else:
+                print("   ❌ Ollama not available")
+                print("   Start with: ollama serve")
+            
+        except Exception as e:
+            print(f"   ❌ LLM status check failed: {e}")
             
         # Show last search if available
         last_search_file = rag_dir / 'last_search' if rag_dir.exists() else None

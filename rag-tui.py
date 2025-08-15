@@ -79,12 +79,23 @@ class SimpleTUI:
             else:
                 config = RAGConfig()
             
-            synthesizer = LLMSynthesizer(config=config)
+            # Create synthesizer with proper model configuration (same as main CLI)
+            synthesizer = LLMSynthesizer(
+                model=config.llm.synthesis_model if config.llm.synthesis_model != "auto" else None,
+                config=config
+            )
             if synthesizer.is_available():
                 # Get the model that would be selected
                 synthesizer._ensure_initialized()
                 model = synthesizer.model
-                return "✅ Ready", model
+                
+                # Show what config says vs what's actually being used
+                config_model = config.llm.synthesis_model
+                if config_model != "auto" and config_model != model:
+                    # Config specified a model but we're using a different one
+                    return "⚠️ Model mismatch", f"{model} (config: {config_model})"
+                else:
+                    return "✅ Ready", model
             else:
                 return "❌ Ollama not running", None
         except Exception as e:
@@ -1399,6 +1410,13 @@ Your suggested question (under 10 words):"""
                 print(f"   📊 Embedding method: {config.embedding.preferred_method}")
                 print(f"   🚀 Query expansion: {'enabled' if config.search.expand_queries else 'disabled'}")
                 print(f"   ⚡ LLM synthesis: {'enabled' if config.llm.enable_synthesis else 'disabled'}")
+                print()
+                
+                # Show config file location prominently
+                config_path = config_manager.config_path
+                print("📁 Configuration File Location:")
+                print(f"   {config_path}")
+                print("   💡 Edit this YAML file directly for advanced settings")
                 print()
                 
                 print("🛠️  Quick Configuration Options:")

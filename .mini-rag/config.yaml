@@ -1,5 +1,18 @@
 # FSS-Mini-RAG Configuration
-# Edit this file to customize indexing and search behavior
+# 
+# 🔧 EDIT THIS FILE TO CUSTOMIZE YOUR RAG SYSTEM
+# 
+# This file controls all behavior of your Mini-RAG system.
+# Changes take effect immediately - no restart needed!
+# 
+# 💡 IMPORTANT: To change the AI model, edit the 'synthesis_model' line below
+# 
+# Common model options:
+#   synthesis_model: auto              # Let system choose best available
+#   synthesis_model: qwen3:0.6b        # Ultra-fast (500MB)
+#   synthesis_model: qwen3:1.7b        # Balanced (1.4GB) - recommended
+#   synthesis_model: qwen3:4b          # High quality (2.5GB)
+#
 # See docs/GETTING_STARTED.md for detailed explanations
 
 # Text chunking settings
@@ -46,7 +59,7 @@ search:
 # LLM synthesis and query expansion settings
 llm:
   ollama_host: localhost:11434
-  synthesis_model: auto    # 'auto', 'qwen3:1.7b', etc.
+  synthesis_model: qwen3:1.7b    # 'auto', 'qwen3:1.7b', etc.
   expansion_model: auto     # Usually same as synthesis_model
   max_expansion_terms: 8        # Maximum terms to add to queries
   enable_synthesis: false       # Enable synthesis by default
