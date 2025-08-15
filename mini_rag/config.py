@@ -104,9 +104,9 @@ class LLMConfig:
                 # Recommended model (excellent quality but larger)
                 "qwen3:4b",
                 
-                # Common fallbacks (only include models we know exist)
-                "llama3.2:1b",
+                # Common fallbacks (prioritize Qwen models)  
                 "qwen2.5:1.5b",
+                "qwen2.5:3b",
             ]
 
 

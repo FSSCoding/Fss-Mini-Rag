@@ -143,8 +143,8 @@ python3 -c "import mini_rag; print('✅ Installation successful')"
 
 2. **Install a model:**
    ```bash
-   ollama pull qwen3:0.6b    # Fast, small model
-   # Or: ollama pull llama3.2  # Larger but better
+   ollama pull qwen2.5:3b    # Good balance of speed and quality
+   # Or: ollama pull qwen3:4b   # Larger but better quality
    ```
 
 3. **Test connection:**

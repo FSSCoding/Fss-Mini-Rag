@@ -112,7 +112,7 @@ llm:
   synthesis_model: auto           # Which AI model to use for explanations
                                   # 'auto': Picks best available model - RECOMMENDED
                                   # 'qwen3:0.6b': Ultra-fast, good for CPU-only computers
-                                  # 'llama3.2': Slower but more detailed explanations
+                                  # 'qwen3:4b': Slower but more detailed explanations
   
   expansion_model: auto           # Model for query expansion (usually same as synthesis)
   

@@ -23,8 +23,9 @@ That's it! The TUI will guide you through everything.
 ### User Flow
 1. **Select Project** → Choose directory to search
 2. **Index Project** → Process files for search
-3. **Search Content** → Find what you need
-4. **Explore Results** → See full context and files
+3. **Search Content** → Find what you need quickly
+4. **Explore Project** → Interactive AI-powered discovery (NEW!)
+5. **Configure System** → Customize search behavior
 
 ## Main Menu Options
 
@@ -110,7 +111,63 @@ That's it! The TUI will guide you through everything.
 ./rag-mini-enhanced context /path/to/project "login()"
 ```
 
-### 4. View Status
+### 4. Explore Project (NEW!)
+
+**Purpose**: Interactive AI-powered discovery with conversation memory
+
+**What Makes Explore Different**:
+- **Conversational**: Ask follow-up questions that build on previous answers
+- **AI Reasoning**: Uses thinking mode for deeper analysis and explanations
+- **Educational**: Perfect for understanding unfamiliar codebases
+- **Context Aware**: Remembers what you've already discussed
+
+**Interactive Process**:
+1. **First Question Guidance**: Clear prompts with example questions
+2. **Starter Suggestions**: Random helpful questions to get you going
+3. **Natural Follow-ups**: Ask "why?", "how?", "show me more" naturally
+4. **Session Memory**: AI remembers your conversation context
+
+**Explore Mode Features**:
+
+**Quick Start Options**:
+- **Option 1 - Help**: Show example questions and explore mode capabilities
+- **Option 2 - Status**: Project information and current exploration session
+- **Option 3 - Suggest**: Get a random starter question picked from 7 curated examples
+
+**Starter Questions** (randomly suggested):
+- "What are the main components of this project?"
+- "How is error handling implemented?"
+- "Show me the authentication and security logic"
+- "What are the key functions I should understand first?"
+- "How does data flow through this system?"
+- "What configuration options are available?"
+- "Show me the most important files to understand"
+
+**Advanced Usage**:
+- **Deep Questions**: "Why is this function slow?" "How does the security work?"
+- **Code Analysis**: "Explain this algorithm" "What could go wrong here?"
+- **Architecture**: "How do these components interact?" "What's the design pattern?"
+- **Best Practices**: "Is this code following best practices?" "How would you improve this?"
+
+**What You Learn**:
+- **Conversational AI**: How to have productive technical conversations with AI
+- **Code Understanding**: Deep analysis capabilities beyond simple search
+- **Context Building**: How conversation memory improves over time
+- **Question Techniques**: Effective ways to explore unfamiliar code
+
+**CLI Commands Shown**:
+```bash
+./rag-mini explore /path/to/project    # Start interactive exploration
+```
+
+**Perfect For**:
+- Understanding new codebases
+- Code review and analysis
+- Learning from existing projects
+- Documenting complex systems
+- Onboarding new team members
+
+### 5. View Status
 
 **Purpose**: Check system health and project information
 
@@ -139,32 +196,61 @@ That's it! The TUI will guide you through everything.
 ./rag-mini status /path/to/project
 ```
 
-### 5. Configuration
+### 6. Configuration Manager (ENHANCED!)
 
-**Purpose**: View and understand system settings
+**Purpose**: Interactive configuration with user-friendly options
 
-**Configuration Display**:
-- **Current settings** - Chunk size, strategy, file patterns
-- **File location** - Where config is stored
-- **Setting explanations** - What each option does
-- **Quick actions** - View or edit config directly
+**New Interactive Features**:
+- **Live Configuration Dashboard** - See current settings with clear status
+- **Quick Configuration Options** - Change common settings without YAML editing
+- **Guided Setup** - Explanations and presets for each option
+- **Validation** - Input checking and helpful error messages
 
-**Key Settings Explained**:
-- **chunking.max_size** - How large each searchable piece is
-- **chunking.strategy** - Smart (semantic) vs simple (fixed size)
-- **files.exclude_patterns** - Skip certain files/directories
-- **embedding.preferred_method** - AI model preference
-- **search.default_top_k** - How many results to show
+**Main Configuration Options**:
 
-**Interactive Options**:
-- **[V]iew config** - See full configuration file
-- **[E]dit path** - Get command to edit configuration
+**1. Adjust Chunk Size**:
+- **Presets**: Small (1000), Medium (2000), Large (3000), or custom
+- **Guidance**: Performance vs accuracy explanations
+- **Smart Validation**: Range checking and recommendations
+
+**2. Toggle Query Expansion**:
+- **Educational Info**: Clear explanation of benefits and requirements  
+- **Easy Toggle**: Simple on/off with confirmation
+- **System Check**: Verifies Ollama availability for AI features
+
+**3. Configure Search Behavior**:
+- **Result Count**: Adjust default number of search results (1-100)
+- **BM25 Toggle**: Enable/disable keyword matching boost
+- **Similarity Threshold**: Fine-tune match sensitivity (0.0-1.0)
+
+**4. View/Edit Configuration File**:
+- **Full File Viewer**: Display complete config with syntax highlighting
+- **Editor Instructions**: Commands for nano, vim, VS Code
+- **YAML Help**: Format explanation and editing tips
+
+**5. Reset to Defaults**:
+- **Safe Reset**: Confirmation before resetting all settings
+- **Clear Explanations**: Shows what defaults will be restored
+- **Backup Reminder**: Suggests saving current config first
+
+**6. Advanced Settings**:
+- **File Filtering**: Min file size, exclude patterns (view only)
+- **Performance Settings**: Batch sizes, streaming thresholds
+- **LLM Preferences**: Model rankings and selection priorities
+
+**Key Settings Dashboard**:
+- 📁 **Chunk size**: 2000 characters (with emoji indicators)
+- 🧠 **Chunking strategy**: semantic
+- 🔍 **Search results**: 10 results
+- 📊 **Embedding method**: ollama
+- 🚀 **Query expansion**: enabled/disabled
+- ⚡ **LLM synthesis**: enabled/disabled
 
 **What You Learn**:
-- How configuration affects search quality
-- YAML configuration format
-- Which settings to adjust for different projects
-- Where to find advanced options
+- **Configuration Impact**: How settings affect search quality and speed
+- **Interactive YAML**: Easier than manual editing for beginners
+- **Best Practices**: Recommended settings for different project types
+- **System Understanding**: How all components work together
 
 **CLI Commands Shown**:
 ```bash
@@ -172,7 +258,13 @@ cat /path/to/project/.mini-rag/config.yaml   # View config
 nano /path/to/project/.mini-rag/config.yaml  # Edit config
 ```
 
-### 6. CLI Command Reference
+**Perfect For**:
+- Beginners who find YAML intimidating
+- Quick adjustments without memorizing syntax
+- Understanding what each setting actually does
+- Safe experimentation with guided validation
+
+### 7. CLI Command Reference
 
 **Purpose**: Complete command reference for transitioning to CLI
 

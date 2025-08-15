@@ -195,7 +195,7 @@ class ModelRunawayDetector:
 • Try a more specific question
 • Break complex questions into smaller parts
 • Use exploration mode which handles context better: `rag-mini explore`
-• Consider: A larger model (qwen3:1.7b or qwen3:3b) would help"""
+• Consider: A larger model (qwen3:1.7b or qwen3:4b) would help"""
 
     def _explain_thinking_loop(self) -> str:
         return """🧠 The AI got caught in a "thinking loop" - overthinking the response.
@@ -266,7 +266,7 @@ class ModelRunawayDetector:
         
         # Universal suggestions
         suggestions.extend([
-            "Consider using a larger model if available (qwen3:1.7b or qwen3:3b)",
+            "Consider using a larger model if available (qwen3:1.7b or qwen3:4b)",
             "Check model status: `ollama list`"
         ])
         

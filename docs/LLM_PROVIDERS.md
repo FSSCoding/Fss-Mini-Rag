@@ -22,8 +22,8 @@ This guide shows how to configure FSS-Mini-RAG with different LLM providers for 
 llm:
   provider: ollama
   ollama_host: localhost:11434
-  synthesis_model: llama3.2
-  expansion_model: llama3.2
+  synthesis_model: qwen3:1.7b
+  expansion_model: qwen3:1.7b
   enable_synthesis: false
   synthesis_temperature: 0.3
   cpu_optimized: true
@@ -33,13 +33,13 @@ llm:
 **Setup:**
 1. Install Ollama: `curl -fsSL https://ollama.ai/install.sh | sh`
 2. Start service: `ollama serve`
-3. Download model: `ollama pull llama3.2`
+3. Download model: `ollama pull qwen3:1.7b`
 4. Test: `./rag-mini search /path/to/project "test" --synthesize`
 
 **Recommended Models:**
 - `qwen3:0.6b` - Ultra-fast, good for CPU-only systems
-- `llama3.2` - Balanced quality and speed  
-- `llama3.1:8b` - Higher quality, needs more RAM
+- `qwen3:1.7b` - Balanced quality and speed (recommended)
+- `qwen3:4b` - Higher quality, excellent for most use cases
 
 ### LM Studio
 

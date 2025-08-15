@@ -68,9 +68,9 @@ search:
 llm:
   provider: ollama                    # Use local Ollama
   ollama_host: localhost:11434        # Default Ollama location
-  synthesis_model: llama3.2           # Good all-around model
-  # alternatives: qwen3:0.6b (faster), llama3.2:3b (balanced), llama3.1:8b (quality)
-  expansion_model: llama3.2
+  synthesis_model: qwen3:1.7b         # Good all-around model
+  # alternatives: qwen3:0.6b (faster), qwen2.5:3b (balanced), qwen3:4b (quality)
+  expansion_model: qwen3:1.7b
   enable_synthesis: false
   synthesis_temperature: 0.3
   cpu_optimized: true

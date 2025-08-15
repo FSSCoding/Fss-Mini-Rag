@@ -916,28 +916,36 @@ class SimpleTUI:
                 input("Press Enter to continue...")
                 return
             
-            print("\n🤔 Ask questions about the codebase:")
-            print("   Quick: 0=quit, 1=summary, 2=history, 3=suggest next question")
+            # Show initial prompt
+            self._show_exploration_prompt(explorer, is_first=True)
             
+            is_first_question = True
             while True:
                 try:
-                    question = input("\n> ").strip()
+                    question = input("➤ ").strip()
                     
                     # Handle numbered options
                     if question == '0':
                         print(explorer.end_session())
                         break
                     elif question == '1':
-                        print("\n" + explorer.get_session_summary())
+                        # Use improved summary function
+                        summary = self._generate_conversation_summary(explorer)
+                        print(f"\n{summary}")
+                        self._show_exploration_prompt(explorer)
                         continue
                     elif question == '2':
                         if hasattr(explorer.current_session, 'conversation_history') and explorer.current_session.conversation_history:
-                            print("\n🔍 Recent questions:")
-                            for i, exchange in enumerate(explorer.current_session.conversation_history[-3:], 1):
-                                q = exchange["question"][:50] + "..." if len(exchange["question"]) > 50 else exchange["question"]
-                                print(f"   {i}. {q}")
+                            print("\n📋 Recent Question History:")
+                            print("═" * 40)
+                            for i, exchange in enumerate(explorer.current_session.conversation_history[-5:], 1):
+                                q = exchange["question"][:60] + "..." if len(exchange["question"]) > 60 else exchange["question"]
+                                confidence = exchange["response"].get("confidence", 0)
+                                print(f"   {i}. {q} (confidence: {confidence:.0f}%)")
+                            print()
                         else:
                             print("\n📝 No questions asked yet")
+                        self._show_exploration_prompt(explorer)
                         continue
                     elif question == '3':
                         # Generate smart suggestion
@@ -945,13 +953,14 @@ class SimpleTUI:
                         if suggested_question:
                             print(f"\n💡 Suggested question: {suggested_question}")
                             print("   Press Enter to use this, or type your own question:")
-                            next_input = input("> ").strip()
+                            next_input = input("➤ ").strip()
                             if not next_input:  # User pressed Enter to use suggestion
                                 question = suggested_question
                             else:
                                 question = next_input
                         else:
                             print("\n💡 No suggestions available yet. Ask a question first!")
+                            self._show_exploration_prompt(explorer)
                             continue
                     
                     # Simple exit handling
@@ -961,23 +970,31 @@ class SimpleTUI:
                     
                     # Skip empty input
                     if not question:
+                        print("💡 Please enter a question or choose an option (0-3)")
                         continue
                     
                     # Simple help
                     if question.lower() in ['help', 'h', '?']:
-                        print("\n💡 Just ask any question about the codebase!")
-                        print("   Examples: 'how does search work?' or 'explain the indexing'")
-                        print("   Quick: 0=quit, 1=summary, 2=history, 3=suggest")
+                        print("\n💡 Exploration Help:")
+                        print("   • Just ask any question about the codebase!")
+                        print("   • Examples: 'how does search work?' or 'explain the indexing'")
+                        print("   • Use options 0-3 for quick actions")
+                        self._show_exploration_prompt(explorer)
                         continue
                     
-                    # Process the question immediately
-                    print("🔍 Thinking...")
+                    # Process the question with streaming
+                    print("\n🔍 Starting analysis...")
                     response = explorer.explore_question(question)
                     
                     if response:
-                        print(f"\n{response}\n")
+                        print(f"\n{response}")
+                        is_first_question = False
+                        # Show prompt for next question
+                        self._show_exploration_prompt(explorer)
                     else:
-                        print("❌ Sorry, I couldn't process that question.\n")
+                        print("❌ Sorry, I couldn't process that question.")
+                        print("💡 Try rephrasing or using simpler terms.")
+                        self._show_exploration_prompt(explorer)
                 
                 except KeyboardInterrupt:
                     print(f"\n{explorer.end_session()}")
@@ -994,10 +1011,173 @@ class SimpleTUI:
         
         # Exploration session completed successfully, return to menu without extra prompt
     
+    def _get_context_tokens_estimate(self, explorer):
+        """Estimate the total tokens used in the conversation context."""
+        if not explorer.current_session or not explorer.current_session.conversation_history:
+            return 0
+        
+        total_chars = 0
+        for exchange in explorer.current_session.conversation_history:
+            total_chars += len(exchange["question"])
+            # Estimate response character count (summary + key points)
+            response = exchange["response"]
+            total_chars += len(response.get("summary", ""))
+            for point in response.get("key_points", []):
+                total_chars += len(point)
+        
+        # Rough estimate: 4 characters = 1 token
+        return total_chars // 4
+    
+    def _get_context_limit_estimate(self):
+        """Get estimated context limit for current model."""
+        # Conservative estimates for common models
+        return 32000  # Most models we use have 32k context
+    
+    def _format_token_display(self, used_tokens, limit_tokens):
+        """Format token usage display with color coding."""
+        percentage = (used_tokens / limit_tokens) * 100 if limit_tokens > 0 else 0
+        
+        if percentage < 50:
+            color = "🟢"  # Green - plenty of space
+        elif percentage < 75:
+            color = "🟡"  # Yellow - getting full
+        else:
+            color = "🔴"  # Red - almost full
+        
+        return f"{color} Context: {used_tokens}/{limit_tokens} tokens ({percentage:.0f}%)"
+    
+    def _show_exploration_prompt(self, explorer, is_first=False):
+        """Show standardized input prompt for exploration mode."""
+        print()
+        print("═" * 60)
+        if is_first:
+            print("🤔 Ask your first question about the codebase:")
+        else:
+            print("🤔 What would you like to explore next?")
+        print()
+        
+        # Show context usage
+        used_tokens = self._get_context_tokens_estimate(explorer)
+        limit_tokens = self._get_context_limit_estimate()
+        token_display = self._format_token_display(used_tokens, limit_tokens)
+        print(f"📊 {token_display}")
+        print()
+        
+        print("🔧 Quick Options:")
+        print("   0 = Quit exploration     1 = Summarize conversation")
+        print("   2 = Show question history     3 = Suggest next question")
+        print()
+        print("💬 Enter your question or choose an option:")
+        
+    def _generate_conversation_summary(self, explorer):
+        """Generate a detailed summary of the conversation history."""
+        if not explorer.current_session or not explorer.current_session.conversation_history:
+            return "📝 No conversation to summarize yet. Ask a question first!"
+        
+        try:
+            # Build conversation context
+            conversation_text = ""
+            for i, exchange in enumerate(explorer.current_session.conversation_history, 1):
+                conversation_text += f"Question {i}: {exchange['question']}\n"
+                conversation_text += f"Response {i}: {exchange['response']['summary']}\n"
+                # Add key points if available
+                if exchange['response'].get('key_points'):
+                    for point in exchange['response']['key_points']:
+                        conversation_text += f"- {point}\n"
+                conversation_text += "\n"
+            
+            # Determine summary length based on conversation length
+            char_count = len(conversation_text)
+            if char_count < 500:
+                target_length = "brief"
+                target_words = "50-80"
+            elif char_count < 2000:
+                target_length = "moderate"
+                target_words = "100-150"
+            else:
+                target_length = "comprehensive"
+                target_words = "200-300"
+            
+            # Create summary prompt for natural conversation style
+            prompt = f"""Please summarize this conversation about the project we've been exploring. Write a {target_length} summary ({target_words} words) in a natural, conversational style that captures:
+
+1. Main topics we explored together
+2. Key insights we discovered  
+3. Important details we learned
+4. Overall understanding we gained
+
+Conversation:
+{conversation_text.strip()}
+
+Write your summary as if you're explaining to a colleague what we discussed. Use a friendly, informative tone and avoid JSON or structured formats."""
+            
+            # Use the synthesizer to generate summary with streaming and thinking
+            print("\n💭 Generating summary...")
+            response = explorer.synthesizer._call_ollama(prompt, temperature=0.1, disable_thinking=False, use_streaming=True)
+            
+            if response:
+                return f"📋 **Conversation Summary**\n\n{response.strip()}"
+            else:
+                # Fallback summary
+                return self._generate_fallback_summary(explorer.current_session.conversation_history)
+                
+        except Exception as e:
+            logger.error(f"Summary generation failed: {e}")
+            return self._generate_fallback_summary(explorer.current_session.conversation_history)
+    
+    def _generate_fallback_summary(self, conversation_history):
+        """Generate a simple fallback summary when AI summary fails."""
+        if not conversation_history:
+            return "📝 No conversation to summarize yet."
+        
+        question_count = len(conversation_history)
+        topics = []
+        
+        # Extract simple topics from questions
+        for exchange in conversation_history:
+            question = exchange["question"].lower()
+            if "component" in question or "part" in question:
+                topics.append("system components")
+            elif "error" in question or "bug" in question:
+                topics.append("error handling")
+            elif "security" in question or "auth" in question:
+                topics.append("security/authentication")
+            elif "test" in question:
+                topics.append("testing")
+            elif "config" in question or "setting" in question:
+                topics.append("configuration")
+            elif "performance" in question or "speed" in question:
+                topics.append("performance")
+            else:
+                # Extract first few words as topic
+                words = question.split()[:3]
+                topics.append(" ".join(words))
+        
+        unique_topics = list(dict.fromkeys(topics))  # Remove duplicates while preserving order
+        
+        summary = f"📋 **Conversation Summary**\n\n"
+        summary += f"Questions asked: {question_count}\n"
+        summary += f"Topics explored: {', '.join(unique_topics[:5])}\n"
+        summary += f"Session duration: {len(conversation_history) * 2} minutes (estimated)\n\n"
+        summary += "💡 Use option 2 to see recent question history for more details."
+        
+        return summary
+        
     def _generate_smart_suggestion(self, explorer):
         """Generate a smart follow-up question based on conversation context."""
         if not explorer.current_session or not explorer.current_session.conversation_history:
-            return None
+            # First question - provide a random starter question
+            import random
+            starters = [
+                "What are the main components of this project?",
+                "How is error handling implemented?", 
+                "Show me the authentication and security logic",
+                "What are the key functions I should understand first?",
+                "How does data flow through this system?",
+                "What configuration options are available?",
+                "Show me the most important files to understand"
+            ]
+            return random.choice(starters)
         
         try:
             # Get recent conversation context
@@ -1023,8 +1203,8 @@ Respond with ONLY a single short question that would logically explore deeper or
 
 Your suggested question (under 10 words):"""
 
-            # Use the synthesizer to generate suggestion
-            response = explorer.synthesizer._call_ollama(prompt, temperature=0.3, disable_thinking=True)
+            # Use the synthesizer to generate suggestion with thinking collapse
+            response = explorer.synthesizer._call_ollama(prompt, temperature=0.3, disable_thinking=False, use_streaming=True, collapse_thinking=True)
             
             if response:
                 # Clean up the response - extract just the question
@@ -1149,99 +1329,344 @@ Your suggested question (under 10 words):"""
         input("Press Enter to continue...")
     
     def show_configuration(self):
-        """Show and manage configuration options."""
+        """Show and manage configuration options with interactive editing."""
         if not self.project_path:
             print("❌ No project selected")
             input("Press Enter to continue...")
             return
         
-        self.clear_screen()
-        self.print_header()
-        
-        print("⚙️  Configuration")
-        print("================")
-        print()
-        print(f"Project: {self.project_path.name}")
-        print()
-        
-        config_path = self.project_path / '.mini-rag' / 'config.yaml'
-        
-        # Show current configuration if it exists
-        if config_path.exists():
-            print("✅ Configuration file exists")
-            print(f"   Location: {config_path}")
+        while True:
+            self.clear_screen()
+            self.print_header()
+            
+            print("⚙️  Configuration Manager")
+            print("========================")
+            print()
+            print(f"Project: {self.project_path.name}")
             print()
             
+            # Load current configuration
             try:
-                import yaml
-                with open(config_path) as f:
-                    config = yaml.safe_load(f)
+                from mini_rag.config import ConfigManager
+                config_manager = ConfigManager(self.project_path)
+                config = config_manager.load_config()
+                config_path = self.project_path / '.mini-rag' / 'config.yaml'
                 
                 print("📋 Current Settings:")
-                if 'chunking' in config:
-                    chunk_cfg = config['chunking']
-                    print(f"   Chunk size: {chunk_cfg.get('max_size', 2000)} characters")
-                    print(f"   Strategy: {chunk_cfg.get('strategy', 'semantic')}")
-                
-                if 'embedding' in config:
-                    emb_cfg = config['embedding']
-                    print(f"   Embedding method: {emb_cfg.get('preferred_method', 'auto')}")
-                
-                if 'files' in config:
-                    files_cfg = config['files']
-                    print(f"   Min file size: {files_cfg.get('min_file_size', 50)} bytes")
-                    exclude_count = len(files_cfg.get('exclude_patterns', []))
-                    print(f"   Excluded patterns: {exclude_count} patterns")
-                
+                print(f"   📁 Chunk size: {config.chunking.max_size} characters")
+                print(f"   🧠 Chunking strategy: {config.chunking.strategy}")
+                print(f"   🔍 Search results: {config.search.default_top_k} results")
+                print(f"   📊 Embedding method: {config.embedding.preferred_method}")
+                print(f"   🚀 Query expansion: {'enabled' if config.search.expand_queries else 'disabled'}")
+                print(f"   ⚡ LLM synthesis: {'enabled' if config.llm.enable_synthesis else 'disabled'}")
                 print()
+                
+                print("🛠️  Quick Configuration Options:")
+                print("   1. Adjust chunk size (performance vs accuracy)")
+                print("   2. Toggle query expansion (smarter searches)")
+                print("   3. Configure search behavior")
+                print("   4. View/edit full configuration file")
+                print("   5. Reset to defaults")
+                print("   6. Advanced settings")
+                print()
+                print("   V. View current config file")
+                print("   B. Back to main menu")
                 
             except Exception as e:
-                print(f"⚠️  Could not read config: {e}")
+                print(f"❌ Error loading configuration: {e}")
+                print("   A default config will be created when needed")
                 print()
-        else:
-            print("⚠️  No configuration file found")
-            print("   A default config will be created when you index")
+                print("   B. Back to main menu")
+            
             print()
-        
-        # Show CLI commands for configuration
-        self.print_cli_command(f"cat {config_path}", 
-                              "View current configuration")
-        self.print_cli_command(f"nano {config_path}", 
-                              "Edit configuration file")
-        
-        print("🛠️  Configuration Options:")
-        print("   • chunking.max_size - How large each searchable chunk is")
-        print("   • chunking.strategy - 'semantic' (smart) vs 'fixed' (simple)")
-        print("   • files.exclude_patterns - Skip files matching these patterns")
-        print("   • embedding.preferred_method - 'ollama', 'ml', 'hash', or 'auto'")
-        print("   • search.default_top_k - Default number of search results (top-k)")
+            choice = input("Choose option: ").strip().lower()
+            
+            if choice == 'b' or choice == '' or choice == '0':
+                break
+            elif choice == 'v':
+                self._show_config_file(config_path)
+            elif choice == '1':
+                self._configure_chunk_size(config_manager, config)
+            elif choice == '2':
+                self._toggle_query_expansion(config_manager, config)
+            elif choice == '3':
+                self._configure_search_behavior(config_manager, config)
+            elif choice == '4':
+                self._edit_config_file(config_path)
+            elif choice == '5':
+                self._reset_config(config_manager)
+            elif choice == '6':
+                self._advanced_settings(config_manager, config)
+            else:
+                print("Invalid option. Press Enter to continue...")
+                input()
+    
+    def _show_config_file(self, config_path):
+        """Display the full configuration file."""
+        self.clear_screen()
+        print("📄 Configuration File Contents")
+        print("=" * 50)
         print()
         
-        print("📚 References:")
-        print("   • README.md - Complete configuration documentation")
-        print("   • examples/config.yaml - Example with all options")
-        print("   • docs/TUI_GUIDE.md - Detailed TUI walkthrough")
-        
-        print()
-        
-        # Quick actions
         if config_path.exists():
-            action = input("Quick actions: [V]iew config, [E]dit path, or Enter to continue: ").lower()
-            if action == 'v':
-                print("\n" + "="*60)
-                try:
-                    with open(config_path) as f:
-                        print(f.read())
-                except Exception as e:
-                    print(f"Could not read file: {e}")
-                print("="*60)
-                input("\nPress Enter to continue...")
-            elif action == 'e':
-                print(f"\n💡 To edit configuration:")
-                print(f"   nano {config_path}")
-                print(f"   # Or use your preferred editor")
-                input("\nPress Enter to continue...")
+            try:
+                with open(config_path) as f:
+                    content = f.read()
+                print(content)
+            except Exception as e:
+                print(f"❌ Could not read file: {e}")
         else:
+            print("⚠️  Configuration file doesn't exist yet")
+            print("   It will be created when you first index a project")
+        
+        print("\n" + "=" * 50)
+        input("Press Enter to continue...")
+    
+    def _configure_chunk_size(self, config_manager, config):
+        """Interactive chunk size configuration."""
+        self.clear_screen()
+        print("📁 Chunk Size Configuration")
+        print("===========================")
+        print()
+        print("Chunk size affects both performance and search accuracy:")
+        print("• Smaller chunks (500-1000): More precise but may miss context")
+        print("• Medium chunks (1500-2500): Good balance (recommended)")
+        print("• Larger chunks (3000+): More context but less precise")
+        print()
+        print(f"Current chunk size: {config.chunking.max_size} characters")
+        print()
+        
+        print("Quick presets:")
+        print("  1. Small (1000) - Precise searching")
+        print("  2. Medium (2000) - Balanced (default)")
+        print("  3. Large (3000) - More context")
+        print("  4. Custom size")
+        print()
+        
+        choice = input("Choose preset or enter custom size: ").strip()
+        
+        new_size = None
+        if choice == '1':
+            new_size = 1000
+        elif choice == '2':
+            new_size = 2000
+        elif choice == '3':
+            new_size = 3000
+        elif choice == '4':
+            try:
+                new_size = int(input("Enter custom chunk size (500-5000): "))
+                if new_size < 500 or new_size > 5000:
+                    print("❌ Size must be between 500 and 5000")
+                    input("Press Enter to continue...")
+                    return
+            except ValueError:
+                print("❌ Invalid number")
+                input("Press Enter to continue...")
+                return
+        elif choice.isdigit():
+            try:
+                new_size = int(choice)
+                if new_size < 500 or new_size > 5000:
+                    print("❌ Size must be between 500 and 5000")
+                    input("Press Enter to continue...")
+                    return
+            except ValueError:
+                pass
+        
+        if new_size and new_size != config.chunking.max_size:
+            config.chunking.max_size = new_size
+            config_manager.save_config(config)
+            print(f"\n✅ Chunk size updated to {new_size} characters")
+            print("💡 Tip: Re-index your project for changes to take effect")
+            input("Press Enter to continue...")
+    
+    def _toggle_query_expansion(self, config_manager, config):
+        """Toggle query expansion on/off."""
+        self.clear_screen()
+        print("🚀 Query Expansion Configuration")
+        print("================================")
+        print()
+        print("Query expansion automatically adds related terms to your searches")
+        print("to improve results quality. This uses an LLM to understand your")
+        print("intent and find related concepts.")
+        print()
+        print("Benefits:")
+        print("• Find relevant results even with different terminology")
+        print("• Better semantic understanding of queries")
+        print("• Improved search for complex technical concepts")
+        print()
+        print("Requirements:")
+        print("• Ollama with a language model (e.g., qwen3:1.7b)")
+        print("• Slightly slower search (1-2 seconds)")
+        print()
+        
+        current_status = "enabled" if config.search.expand_queries else "disabled"
+        print(f"Current status: {current_status}")
+        print()
+        
+        if config.search.expand_queries:
+            choice = input("Query expansion is currently ON. Turn OFF? [y/N]: ").lower()
+            if choice == 'y':
+                config.search.expand_queries = False
+                config_manager.save_config(config)
+                print("✅ Query expansion disabled")
+        else:
+            choice = input("Query expansion is currently OFF. Turn ON? [y/N]: ").lower()
+            if choice == 'y':
+                config.search.expand_queries = True
+                config_manager.save_config(config)
+                print("✅ Query expansion enabled")
+                print("💡 Make sure Ollama is running with a language model")
+        
+        input("\nPress Enter to continue...")
+    
+    def _configure_search_behavior(self, config_manager, config):
+        """Configure search behavior settings."""
+        self.clear_screen()
+        print("🔍 Search Behavior Configuration")
+        print("================================")
+        print()
+        print(f"Current settings:")
+        print(f"• Default results: {config.search.default_top_k}")
+        print(f"• BM25 keyword boost: {'enabled' if config.search.enable_bm25 else 'disabled'}")
+        print(f"• Similarity threshold: {config.search.similarity_threshold}")
+        print()
+        
+        print("Configuration options:")
+        print("  1. Change default number of results")
+        print("  2. Toggle BM25 keyword matching")
+        print("  3. Adjust similarity threshold")
+        print("  B. Back")
+        print()
+        
+        choice = input("Choose option: ").strip().lower()
+        
+        if choice == '1':
+            try:
+                new_top_k = int(input(f"Enter default number of results (current: {config.search.default_top_k}): "))
+                if 1 <= new_top_k <= 100:
+                    config.search.default_top_k = new_top_k
+                    config_manager.save_config(config)
+                    print(f"✅ Default results updated to {new_top_k}")
+                else:
+                    print("❌ Number must be between 1 and 100")
+            except ValueError:
+                print("❌ Invalid number")
+        elif choice == '2':
+            config.search.enable_bm25 = not config.search.enable_bm25
+            config_manager.save_config(config)
+            status = "enabled" if config.search.enable_bm25 else "disabled"
+            print(f"✅ BM25 keyword matching {status}")
+        elif choice == '3':
+            try:
+                new_threshold = float(input(f"Enter similarity threshold 0.0-1.0 (current: {config.search.similarity_threshold}): "))
+                if 0.0 <= new_threshold <= 1.0:
+                    config.search.similarity_threshold = new_threshold
+                    config_manager.save_config(config)
+                    print(f"✅ Similarity threshold updated to {new_threshold}")
+                else:
+                    print("❌ Threshold must be between 0.0 and 1.0")
+            except ValueError:
+                print("❌ Invalid number")
+        
+        if choice != 'b' and choice != '':
+            input("Press Enter to continue...")
+    
+    def _edit_config_file(self, config_path):
+        """Provide instructions for editing the config file."""
+        self.clear_screen()
+        print("📝 Edit Configuration File")
+        print("=========================")
+        print()
+        
+        if config_path.exists():
+            print(f"Configuration file location:")
+            print(f"   {config_path}")
+            print()
+            print("To edit the configuration:")
+            print("   • Use any text editor (nano, vim, VS Code, etc.)")
+            print("   • The file is in YAML format with helpful comments")
+            print("   • Changes take effect after saving")
+            print()
+            print("Quick edit commands:")
+            self.print_cli_command(f"nano {config_path}", "Edit with nano")
+            self.print_cli_command(f"code {config_path}", "Edit with VS Code") 
+            self.print_cli_command(f"vim {config_path}", "Edit with vim")
+        else:
+            print("⚠️  Configuration file doesn't exist yet")
+            print("   It will be created automatically when you index a project")
+        
+        input("\nPress Enter to continue...")
+    
+    def _reset_config(self, config_manager):
+        """Reset configuration to defaults."""
+        self.clear_screen()
+        print("🔄 Reset Configuration")
+        print("=====================")
+        print()
+        print("This will reset all settings to default values:")
+        print("• Chunk size: 2000 characters")
+        print("• Chunking strategy: semantic")
+        print("• Query expansion: disabled")
+        print("• Search results: 10")
+        print("• Embedding method: auto")
+        print()
+        
+        confirm = input("Are you sure you want to reset to defaults? [y/N]: ").lower()
+        if confirm == 'y':
+            from mini_rag.config import RAGConfig
+            default_config = RAGConfig()
+            config_manager.save_config(default_config)
+            print("✅ Configuration reset to defaults")
+            print("💡 You may want to re-index for changes to take effect")
+        else:
+            print("❌ Reset cancelled")
+        
+        input("Press Enter to continue...")
+    
+    def _advanced_settings(self, config_manager, config):
+        """Configure advanced settings."""
+        self.clear_screen()
+        print("⚙️  Advanced Configuration")
+        print("==========================")
+        print()
+        print("Advanced settings for power users:")
+        print()
+        print(f"Current advanced settings:")
+        print(f"• Min file size: {config.files.min_file_size} bytes")
+        print(f"• Streaming threshold: {config.streaming.threshold_bytes} bytes")
+        print(f"• Embedding batch size: {config.embedding.batch_size}")
+        print(f"• LLM synthesis: {'enabled' if config.llm.enable_synthesis else 'disabled'}")
+        print()
+        
+        print("Advanced options:")
+        print("  1. Configure file filtering")
+        print("  2. Adjust performance settings")
+        print("  3. LLM model preferences")
+        print("  B. Back")
+        print()
+        
+        choice = input("Choose option: ").strip().lower()
+        
+        if choice == '1':
+            print("\n📁 File filtering settings:")
+            print(f"Minimum file size: {config.files.min_file_size} bytes")
+            print(f"Excluded patterns: {len(config.files.exclude_patterns)} patterns")
+            print("\n💡 Edit the config file directly for detailed file filtering")
+        elif choice == '2':
+            print("\n⚡ Performance settings:")
+            print(f"Embedding batch size: {config.embedding.batch_size}")
+            print(f"Streaming threshold: {config.streaming.threshold_bytes}")
+            print("\n💡 Higher batch sizes = faster indexing but more memory")
+        elif choice == '3':
+            print("\n🧠 LLM model preferences:")
+            if hasattr(config.llm, 'model_rankings') and config.llm.model_rankings:
+                print("Current model priority order:")
+                for i, model in enumerate(config.llm.model_rankings[:5], 1):
+                    print(f"  {i}. {model}")
+            print("\n💡 Edit config file to change model preferences")
+        
+        if choice != 'b' and choice != '':
             input("Press Enter to continue...")
     
     def show_cli_reference(self):

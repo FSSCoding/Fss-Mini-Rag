@@ -49,7 +49,7 @@ ollama run qwen3:0.6b "Hello, can you expand this query: authentication"
 |-------|------|-----------|---------|
 | qwen3:0.6b | 522MB | Fast ⚡ | Excellent ✅ |
 | qwen3:1.7b | 1.4GB | Medium | Excellent ✅ |
-| qwen3:3b | 2.0GB | Slow | Excellent ✅ |
+| qwen3:4b | 2.5GB | Slow | Excellent ✅ |
 
 ## CPU-Optimized Configuration
 

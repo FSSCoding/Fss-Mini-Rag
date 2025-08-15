@@ -102,7 +102,7 @@ llm:
 # For even better results, try these model combinations:
 # • ollama pull nomic-embed-text:latest  (best embeddings)
 # • ollama pull qwen3:1.7b              (good general model)
-# • ollama pull llama3.2                (excellent for analysis)
+# • ollama pull qwen3:4b                (excellent for analysis)
 # 
 # Or adjust these settings for your specific needs:
 # • similarity_threshold: 0.3   (more selective results)

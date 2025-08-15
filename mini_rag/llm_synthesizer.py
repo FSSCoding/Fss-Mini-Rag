@@ -72,8 +72,8 @@ class LLMSynthesizer:
         else:
             # Fallback rankings if no config
             model_rankings = [
-                "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "llama3.2:1b", 
-                "qwen2.5:1.5b", "qwen3:3b", "qwen2.5-coder:1.5b"
+                "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "qwen2.5:3b", 
+                "qwen2.5:1.5b", "qwen2.5-coder:1.5b"
             ]
         
         # Find first available model from our ranked list (exact matches first)
@@ -119,7 +119,7 @@ class LLMSynthesizer:
         self._ensure_initialized()
         return len(self.available_models) > 0
     
-    def _call_ollama(self, prompt: str, temperature: float = 0.3, disable_thinking: bool = False, use_streaming: bool = False) -> Optional[str]:
+    def _call_ollama(self, prompt: str, temperature: float = 0.3, disable_thinking: bool = False, use_streaming: bool = True, collapse_thinking: bool = True) -> Optional[str]:
         """Make a call to Ollama API with safeguards."""
         start_time = time.time()
         
@@ -181,9 +181,9 @@ class LLMSynthesizer:
                 }
             }
             
-            # Handle streaming with early stopping
+            # Handle streaming with thinking display
             if use_streaming:
-                return self._handle_streaming_with_early_stop(payload, model_to_use, use_thinking, start_time)
+                return self._handle_streaming_with_thinking_display(payload, model_to_use, use_thinking, start_time, collapse_thinking)
             
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
@@ -283,6 +283,130 @@ This is normal with smaller AI models and helps ensure you get quality responses
 3. **Use exploration mode**: `rag-mini explore` for complex questions
 
 This is normal with smaller AI models and helps ensure you get quality responses."""
+
+    def _handle_streaming_with_thinking_display(self, payload: dict, model_name: str, use_thinking: bool, start_time: float, collapse_thinking: bool = True) -> Optional[str]:
+        """Handle streaming response with real-time thinking token display."""
+        import json
+        import sys
+        
+        try:
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json=payload,
+                stream=True,
+                timeout=65
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Ollama API error: {response.status_code}")
+                return None
+            
+            full_response = ""
+            thinking_content = ""
+            is_in_thinking = False
+            is_thinking_complete = False
+            thinking_lines_printed = 0
+            
+            # ANSI escape codes for colors and cursor control
+            GRAY = '\033[90m'      # Dark gray for thinking
+            LIGHT_GRAY = '\033[37m'  # Light gray alternative
+            RESET = '\033[0m'      # Reset color
+            CLEAR_LINE = '\033[2K' # Clear entire line
+            CURSOR_UP = '\033[A'   # Move cursor up one line
+            
+            print(f"\n💭 {GRAY}Thinking...{RESET}", flush=True)
+            
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        chunk_data = json.loads(line.decode('utf-8'))
+                        chunk_text = chunk_data.get('response', '')
+                        
+                        if chunk_text:
+                            full_response += chunk_text
+                            
+                            # Handle thinking tokens
+                            if use_thinking and '<think>' in chunk_text:
+                                is_in_thinking = True
+                                chunk_text = chunk_text.replace('<think>', '')
+                            
+                            if is_in_thinking and '</think>' in chunk_text:
+                                is_in_thinking = False
+                                is_thinking_complete = True
+                                chunk_text = chunk_text.replace('</think>', '')
+                                
+                                if collapse_thinking:
+                                    # Clear thinking content and show completion
+                                    # Move cursor up to clear thinking lines
+                                    for _ in range(thinking_lines_printed + 1):
+                                        print(f"{CURSOR_UP}{CLEAR_LINE}", end='', flush=True)
+                                    
+                                    print(f"💭 {GRAY}Thinking complete ✓{RESET}", flush=True)
+                                    thinking_lines_printed = 0
+                                else:
+                                    # Keep thinking visible, just show completion
+                                    print(f"\n💭 {GRAY}Thinking complete ✓{RESET}", flush=True)
+                                
+                                print("🤖 AI Response:", flush=True)
+                                continue
+                            
+                            # Display thinking content in gray with better formatting
+                            if is_in_thinking and chunk_text.strip():
+                                thinking_content += chunk_text
+                                
+                                # Handle line breaks and word wrapping properly
+                                if ' ' in chunk_text or '\n' in chunk_text or len(thinking_content) > 100:
+                                    # Split by sentences for better readability
+                                    sentences = thinking_content.replace('\n', ' ').split('. ')
+                                    
+                                    for sentence in sentences[:-1]:  # Process complete sentences
+                                        sentence = sentence.strip()
+                                        if sentence:
+                                            # Word wrap long sentences
+                                            words = sentence.split()
+                                            line = ""
+                                            for word in words:
+                                                if len(line + " " + word) > 70:
+                                                    if line:
+                                                        print(f"{GRAY}   {line.strip()}{RESET}", flush=True)
+                                                        thinking_lines_printed += 1
+                                                    line = word
+                                                else:
+                                                    line += " " + word if line else word
+                                            
+                                            if line.strip():
+                                                print(f"{GRAY}   {line.strip()}.{RESET}", flush=True)
+                                                thinking_lines_printed += 1
+                                    
+                                    # Keep the last incomplete sentence for next iteration
+                                    thinking_content = sentences[-1] if sentences else ""
+                            
+                            # Display regular response content (skip any leftover thinking)
+                            elif not is_in_thinking and is_thinking_complete and chunk_text.strip():
+                                # Filter out any remaining thinking tags that might leak through
+                                clean_text = chunk_text
+                                if '<think>' in clean_text or '</think>' in clean_text:
+                                    clean_text = clean_text.replace('<think>', '').replace('</think>', '')
+                                
+                                if clean_text.strip():
+                                    print(clean_text, end='', flush=True)
+                        
+                        # Check if response is done
+                        if chunk_data.get('done', False):
+                            print()  # Final newline
+                            break
+                            
+                    except json.JSONDecodeError:
+                        continue
+                    except Exception as e:
+                        logger.error(f"Error processing stream chunk: {e}")
+                        continue
+            
+            return full_response
+            
+        except Exception as e:
+            logger.error(f"Streaming failed: {e}")
+            return None
 
     def _handle_streaming_with_early_stop(self, payload: dict, model_name: str, use_thinking: bool, start_time: float) -> Optional[str]:
         """Handle streaming response with intelligent early stopping."""

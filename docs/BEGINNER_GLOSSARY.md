@@ -117,7 +117,7 @@ def login_user(email, password):
 
 **Models you might see:**
 - **qwen3:0.6b** - Ultra-fast, good for most questions
-- **llama3.2** - Slower but more detailed
+- **qwen3:4b** - Slower but more detailed
 - **auto** - Picks the best available model
 
 ---

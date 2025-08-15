@@ -462,6 +462,73 @@ install_dependencies() {
     fi
 }
 
+# Setup application icon for desktop integration
+setup_desktop_icon() {
+    print_header "Setting Up Desktop Integration"
+    
+    # Check if we're in a GUI environment
+    if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+        print_info "No GUI environment detected - skipping desktop integration"
+        return 0
+    fi
+    
+    local icon_source="$SCRIPT_DIR/assets/Fss_Mini_Rag.png"
+    local desktop_dir="$HOME/.local/share/applications"
+    local icon_dir="$HOME/.local/share/icons"
+    
+    # Check if icon file exists
+    if [ ! -f "$icon_source" ]; then
+        print_warning "Icon file not found at $icon_source"
+        return 1
+    fi
+    
+    # Create directories if needed
+    mkdir -p "$desktop_dir" "$icon_dir" 2>/dev/null
+    
+    # Copy icon to standard location
+    local icon_dest="$icon_dir/fss-mini-rag.png"
+    if cp "$icon_source" "$icon_dest" 2>/dev/null; then
+        print_success "Icon installed to $icon_dest"
+    else
+        print_warning "Could not install icon (permissions?)"
+        return 1
+    fi
+    
+    # Create desktop entry
+    local desktop_file="$desktop_dir/fss-mini-rag.desktop"
+    cat > "$desktop_file" << EOF
+[Desktop Entry]
+Name=FSS-Mini-RAG
+Comment=Fast Semantic Search for Code and Documents
+Exec=$SCRIPT_DIR/rag-tui
+Icon=fss-mini-rag
+Terminal=true
+Type=Application
+Categories=Development;Utility;TextEditor;
+Keywords=search;code;rag;semantic;ai;
+StartupNotify=true
+EOF
+    
+    if [ -f "$desktop_file" ]; then
+        chmod +x "$desktop_file"
+        print_success "Desktop entry created"
+        
+        # Update desktop database if available
+        if command_exists update-desktop-database; then
+            update-desktop-database "$desktop_dir" 2>/dev/null
+            print_info "Desktop database updated"
+        fi
+        
+        print_info "✨ FSS-Mini-RAG should now appear in your application menu!"
+        print_info "   Look for it in Development or Utility categories"
+    else
+        print_warning "Could not create desktop entry"
+        return 1
+    fi
+    
+    return 0
+}
+
 # Setup ML models based on configuration  
 setup_ml_models() {
     if [ "$INSTALL_TYPE" != "full" ]; then
@@ -793,6 +860,9 @@ main() {
         setup_ollama_model
     fi
     setup_ml_models
+    
+    # Setup desktop integration with icon
+    setup_desktop_icon
     
     if test_installation; then
         show_completion

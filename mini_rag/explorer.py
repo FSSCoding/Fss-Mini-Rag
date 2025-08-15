@@ -115,12 +115,13 @@ class CodeExplorer:
         # Add to conversation history
         self.current_session.add_exchange(question, results, synthesis)
         
-        # Format response with exploration context
-        response = self._format_exploration_response(
-            question, synthesis, len(results), search_time, synthesis_time
-        )
+        # Streaming already displayed the response
+        # Just return minimal status for caller
+        session_duration = time.time() - self.current_session.started_at
+        exchange_count = len(self.current_session.conversation_history)
         
-        return response
+        status = f"\n📊 Session: {session_duration/60:.1f}m | Question #{exchange_count} | Results: {len(results)} | Time: {search_time+synthesis_time:.1f}s"
+        return status
     
     def _build_contextual_prompt(self, question: str, results: List[Any]) -> str:
         """Build a prompt that includes conversation context."""
@@ -185,33 +186,22 @@ CURRENT QUESTION: "{question}"
 RELEVANT INFORMATION FOUND:
 {results_text}
 
-Please provide a helpful analysis in JSON format:
+Please provide a helpful, natural explanation that answers their question. Write as if you're having a friendly conversation with a colleague who's exploring this project.
 
-{{
-    "summary": "Clear explanation of what you found and how it answers their question",
-    "key_points": [
-        "Most important insight from the information",
-        "Secondary important point or relationship", 
-        "Third key point or practical consideration"
-    ],
-    "code_examples": [
-        "Relevant example or pattern from the information",
-        "Another useful example or demonstration"
-    ],
-    "suggested_actions": [
-        "Specific next step they could take",
-        "Additional exploration or investigation suggestion",
-        "Practical way to apply this information"
-    ],
-    "confidence": 0.85
-}}
+Structure your response to include:
+1. A clear explanation of what you found and how it answers their question
+2. The most important insights from the information you discovered  
+3. Relevant examples or code patterns when helpful
+4. Practical next steps they could take
 
 Guidelines:
-- Be educational and break things down clearly
+- Write in a conversational, friendly tone
+- Be educational but not condescending
 - Reference specific files and information when helpful
 - Give practical, actionable suggestions
-- Keep explanations beginner-friendly but not condescending
-- Connect information to their question directly
+- Connect everything back to their original question
+- Use natural language, not structured formats
+- Break complex topics into understandable pieces
 """
         
         return prompt
@@ -219,16 +209,12 @@ Guidelines:
     def _synthesize_with_context(self, prompt: str, results: List[Any]) -> SynthesisResult:
         """Synthesize results with full context and thinking."""
         try:
-            # TEMPORARILY: Use simple non-streaming call to avoid flow issues
-            # TODO: Re-enable streaming once flow is stable
-            response = self.synthesizer._call_ollama(prompt, temperature=0.2, disable_thinking=False)
+            # Use streaming with thinking visible (don't collapse)
+            response = self.synthesizer._call_ollama(prompt, temperature=0.2, disable_thinking=False, use_streaming=True, collapse_thinking=False)
             thinking_stream = ""
             
-            # Display simple thinking indicator
-            if response and len(response) > 200:
-                print("\n💭 Analysis in progress...")
-            
-            # Don't display thinking stream again - keeping it simple for now
+            # Streaming already shows thinking and response
+            # No need for additional indicators
             
             if not response:
                 return SynthesisResult(
@@ -239,40 +225,14 @@ Guidelines:
                     confidence=0.0
                 )
             
-            # Parse the structured response
-            try:
-                # Extract JSON from response
-                start_idx = response.find('{')
-                end_idx = response.rfind('}') + 1
-                if start_idx >= 0 and end_idx > start_idx:
-                    json_str = response[start_idx:end_idx]
-                    data = json.loads(json_str)
-                    
-                    return SynthesisResult(
-                        summary=data.get('summary', 'Analysis completed'),
-                        key_points=data.get('key_points', []),
-                        code_examples=data.get('code_examples', []),
-                        suggested_actions=data.get('suggested_actions', []),
-                        confidence=float(data.get('confidence', 0.7))
-                    )
-                else:
-                    # Fallback: use raw response as summary
-                    return SynthesisResult(
-                        summary=response[:400] + '...' if len(response) > 400 else response,
-                        key_points=[],
-                        code_examples=[],
-                        suggested_actions=[],
-                        confidence=0.5
-                    )
-                    
-            except json.JSONDecodeError:
-                return SynthesisResult(
-                    summary="Analysis completed but format parsing failed",
-                    key_points=[],
-                    code_examples=[],
-                    suggested_actions=["Try rephrasing your question"],
-                    confidence=0.3
-                )
+            # Use natural language response directly
+            return SynthesisResult(
+                summary=response.strip(),
+                key_points=[],  # Not used with natural language responses
+                code_examples=[],  # Not used with natural language responses
+                suggested_actions=[],  # Not used with natural language responses
+                confidence=0.85  # High confidence for natural responses
+            )
                 
         except Exception as e:
             logger.error(f"Context synthesis failed: {e}")
@@ -300,28 +260,11 @@ Guidelines:
         output.append("=" * 60)
         output.append("")
         
-        # Main analysis
-        output.append(f"📝 Analysis:")
-        output.append(f"   {synthesis.summary}")
+        # Response was already displayed via streaming
+        # Just show completion status
+        output.append("✅ Analysis complete")
         output.append("")
-        
-        if synthesis.key_points:
-            output.append("🔍 Key Insights:")
-            for point in synthesis.key_points:
-                output.append(f"   • {point}")
-            output.append("")
-        
-        if synthesis.code_examples:
-            output.append("💡 Code Examples:")
-            for example in synthesis.code_examples:
-                output.append(f"   {example}")
-            output.append("")
-        
-        if synthesis.suggested_actions:
-            output.append("🎯 Next Steps:")
-            for action in synthesis.suggested_actions:
-                output.append(f"   • {action}")
-            output.append("")
+        output.append("")
         
         # Confidence and context indicator
         confidence_emoji = "🟢" if synthesis.confidence > 0.7 else "🟡" if synthesis.confidence > 0.4 else "🔴"

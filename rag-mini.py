@@ -142,8 +142,8 @@ def search_project(project_path: Path, query: str, top_k: int = 10, synthesize: 
             print("   • Search for file types: \"python class\" or \"javascript function\"")
             print()
             print("⚙️ Configuration adjustments:")
-            print(f"   • Lower threshold: ./rag-mini search {project_path} \"{query}\" --threshold 0.05")
-            print("   • More results: add --top-k 20")
+            print(f"   • Lower threshold: ./rag-mini search \"{project_path}\" \"{query}\" --threshold 0.05")
+            print(f"   • More results: ./rag-mini search \"{project_path}\" \"{query}\" --top-k 20")
             print()
             print("📚 Need help? See: docs/TROUBLESHOOTING.md")
             return
@@ -201,7 +201,7 @@ def search_project(project_path: Path, query: str, top_k: int = 10, synthesize: 
             else:
                 print("❌ LLM synthesis unavailable")
                 print("   • Ensure Ollama is running: ollama serve")
-                print("   • Install a model: ollama pull llama3.2")
+                print("   • Install a model: ollama pull qwen3:1.7b")
                 print("   • Check connection to http://localhost:11434")
         
         # Save last search for potential enhancements
@@ -317,12 +317,27 @@ def explore_interactive(project_path: Path):
         if not explorer.start_exploration_session():
             sys.exit(1)
         
+        # Show enhanced first-time guidance
         print(f"\n🤔 Ask your first question about {project_path.name}:")
+        print()
+        print("💡 Enter your search query or question below:")
+        print('   Examples: "How does authentication work?" or "Show me error handling"')
+        print()
+        print("🔧 Quick options:")
+        print("   1. Help - Show example questions")
+        print("   2. Status - Project information")  
+        print("   3. Suggest - Get a random starter question")
+        print()
+        
+        is_first_question = True
         
         while True:
             try:
-                # Get user input
-                question = input("\n> ").strip()
+                # Get user input with clearer prompt
+                if is_first_question:
+                    question = input("📝 Enter question or option (1-3): ").strip()
+                else:
+                    question = input("\n> ").strip()
                 
                 # Handle exit commands
                 if question.lower() in ['quit', 'exit', 'q']:
@@ -331,14 +346,17 @@ def explore_interactive(project_path: Path):
                 
                 # Handle empty input
                 if not question:
-                    print("Please enter a question or 'quit' to exit.")
+                    if is_first_question:
+                        print("Please enter a question or try option 3 for a suggestion.")
+                    else:
+                        print("Please enter a question or 'quit' to exit.")
                     continue
                 
-                # Special commands
-                if question.lower() in ['help', 'h']:
+                # Handle numbered options and special commands
+                if question in ['1'] or question.lower() in ['help', 'h']:
                     print("""
 🧠 EXPLORATION MODE HELP:
-  • Ask any question about the codebase
+  • Ask any question about your documents or code
   • I remember our conversation for follow-up questions
   • Use 'why', 'how', 'explain' for detailed reasoning
   • Type 'summary' to see session overview
@@ -346,11 +364,53 @@ def explore_interactive(project_path: Path):
   
 💡 Example questions:
   • "How does authentication work?"
+  • "What are the main components?"
+  • "Show me error handling patterns"
   • "Why is this function slow?"
-  • "Explain the database connection logic"
-  • "What are the security concerns here?"
+  • "What security measures are in place?"
+  • "How does data flow through this system?"
 """)
                     continue
+                    
+                elif question in ['2'] or question.lower() == 'status':
+                    print(f"""
+📊 PROJECT STATUS: {project_path.name}
+  • Location: {project_path}
+  • Exploration session active
+  • AI model ready for questions
+  • Conversation memory enabled
+""")
+                    continue
+                    
+                elif question in ['3'] or question.lower() == 'suggest':
+                    # Random starter questions for first-time users
+                    if is_first_question:
+                        import random
+                        starters = [
+                            "What are the main components of this project?",
+                            "How is error handling implemented?", 
+                            "Show me the authentication and security logic",
+                            "What are the key functions I should understand first?",
+                            "How does data flow through this system?",
+                            "What configuration options are available?",
+                            "Show me the most important files to understand"
+                        ]
+                        suggested = random.choice(starters)
+                        print(f"\n💡 Suggested question: {suggested}")
+                        print("   Press Enter to use this, or type your own question:")
+                        
+                        next_input = input("📝 > ").strip()
+                        if not next_input:  # User pressed Enter to use suggestion
+                            question = suggested
+                        else:
+                            question = next_input
+                    else:
+                        # For subsequent questions, could add AI-powered suggestions here
+                        print("\n💡 Based on our conversation, you might want to ask:")
+                        print('   "Can you explain that in more detail?"')
+                        print('   "What are the security implications?"')
+                        print('   "Show me related code examples"')
+                        continue
                 
                 if question.lower() == 'summary':
                     print("\n" + explorer.get_session_summary())
@@ -360,6 +420,9 @@ def explore_interactive(project_path: Path):
                 print(f"\n🔍 Searching {project_path.name}...")
                 print("🧠 Thinking with AI model...")
                 response = explorer.explore_question(question)
+                
+                # Mark as no longer first question after processing
+                is_first_question = False
                 
                 if response:
                     print(f"\n{response}")

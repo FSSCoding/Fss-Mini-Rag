@@ -170,8 +170,8 @@ Expanded query:"""
                 
                 # Use same model rankings as main synthesizer for consistency
                 expansion_preferences = [
-                    "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "llama3.2:1b", 
-                    "qwen2.5:1.5b", "qwen3:3b", "qwen2.5-coder:1.5b"
+                    "qwen3:1.7b", "qwen3:0.6b", "qwen3:4b", "qwen2.5:3b", 
+                    "qwen2.5:1.5b", "qwen2.5-coder:1.5b"
                 ]
                 
                 for preferred in expansion_preferences:

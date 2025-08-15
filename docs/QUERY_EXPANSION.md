@@ -34,7 +34,24 @@ graph LR
 
 ## Configuration
 
-Edit `config.yaml`:
+### Easy Configuration (TUI)
+
+Use the interactive Configuration Manager in the TUI:
+
+1. **Start TUI**: `./rag-tui` or `rag.bat` (Windows)
+2. **Select Option 6**: Configuration Manager
+3. **Choose Option 2**: Toggle query expansion
+4. **Follow prompts**: Get explanation and easy on/off toggle
+
+The TUI will:
+- Explain benefits and requirements clearly
+- Check if Ollama is available
+- Show current status (enabled/disabled)
+- Save changes automatically
+
+### Manual Configuration (Advanced)
+
+Edit `config.yaml` directly:
 
 ```yaml
 # Search behavior settings
