@@ -16,11 +16,13 @@ from pathlib import Path
 
 try:
     from .llm_safeguards import ModelRunawayDetector, SafeguardConfig, get_optimal_ollama_parameters
+    from .system_context import get_system_context
 except ImportError:
     # Graceful fallback if safeguards not available
     ModelRunawayDetector = None
     SafeguardConfig = None
     get_optimal_ollama_parameters = lambda x: {}
+    get_system_context = lambda x=None: ""
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +177,20 @@ class LLMSynthesizer:
             # Ensure we're initialized
             self._ensure_initialized()
             
-            # Use the best available model
+            # Use the best available model with retry logic
             model_to_use = self.model
             if self.model not in self.available_models:
-                # Fallback to first available model
-                if self.available_models:
+                # Refresh model list in case of race condition
+                logger.warning(f"Configured model {self.model} not in available list, refreshing...")
+                self.available_models = self._get_available_models()
+                
+                if self.model in self.available_models:
+                    model_to_use = self.model
+                    logger.info(f"Model {self.model} found after refresh")
+                elif self.available_models:
+                    # Fallback to first available model
                     model_to_use = self.available_models[0]
+                    logger.warning(f"Using fallback model: {model_to_use}")
                 else:
                     logger.error("No Ollama models available")
                     return None
@@ -587,9 +597,13 @@ Content: {content[:500]}{'...' if len(content) > 500 else ''}
         
         context = "\n".join(context_parts)
         
-        # Create synthesis prompt
+        # Get system context for better responses
+        system_context = get_system_context(project_path)
+        
+        # Create synthesis prompt with system context
         prompt = f"""You are a senior software engineer analyzing code search results. Your task is to synthesize the search results into a helpful, actionable summary.
 
+SYSTEM CONTEXT: {system_context}
 SEARCH QUERY: "{query}"
 PROJECT: {project_path.name}
 

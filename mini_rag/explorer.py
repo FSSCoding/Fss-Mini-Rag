@@ -17,11 +17,13 @@ try:
     from .llm_synthesizer import LLMSynthesizer, SynthesisResult
     from .search import CodeSearcher
     from .config import RAGConfig
+    from .system_context import get_system_context
 except ImportError:
     # For direct testing
     from llm_synthesizer import LLMSynthesizer, SynthesisResult
     from search import CodeSearcher
     from config import RAGConfig
+    get_system_context = lambda x=None: ""
 
 logger = logging.getLogger(__name__)
 
@@ -154,9 +156,14 @@ Content: {content[:800]}{'...' if len(content) > 800 else ''}
         
         results_text = "\n".join(results_context)
         
+        # Get system context for better responses
+        system_context = get_system_context(self.project_path)
+        
         # Create comprehensive exploration prompt with thinking
         prompt = f"""<think>
 The user asked: "{question}"
+
+System context: {system_context}
 
 Let me analyze what they're asking and look at the information I have available.
 

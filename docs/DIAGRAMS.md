@@ -11,6 +11,7 @@
 - [Search Architecture](#search-architecture)
 - [Installation Flow](#installation-flow)
 - [Configuration System](#configuration-system)
+- [System Context Integration](#system-context-integration)
 - [Error Handling](#error-handling)
 
 ## System Overview
@@ -22,10 +23,12 @@ graph TB
     
     CLI --> Index[📁 Index Project]
     CLI --> Search[🔍 Search Project]
+    CLI --> Explore[🧠 Explore Project]
     CLI --> Status[📊 Show Status]
     
     TUI --> Index
     TUI --> Search
+    TUI --> Explore
     TUI --> Config[⚙️ Configuration]
     
     Index --> Files[📄 File Discovery]
@@ -34,17 +37,32 @@ graph TB
     Embed --> Store[💾 Vector Database]
     
     Search --> Query[❓ User Query]
+    Search --> Context[🖥️ System Context]
     Query --> Vector[🎯 Vector Search]
     Query --> Keyword[🔤 Keyword Search]
     Vector --> Combine[🔄 Hybrid Results]
     Keyword --> Combine
-    Combine --> Results[📋 Ranked Results]
+    Context --> Combine
+    Combine --> Synthesize{Synthesis Mode?}
+    
+    Synthesize -->|Yes| FastLLM[⚡ Fast Synthesis]
+    Synthesize -->|No| Results[📋 Ranked Results]
+    FastLLM --> Results
+    
+    Explore --> ExploreQuery[❓ Interactive Query]
+    ExploreQuery --> Memory[🧠 Conversation Memory]
+    ExploreQuery --> Context
+    Memory --> DeepLLM[🤔 Deep AI Analysis]
+    Context --> DeepLLM
+    Vector --> DeepLLM
+    DeepLLM --> Interactive[💬 Interactive Response]
     
     Store --> LanceDB[(🗄️ LanceDB)]
     Vector --> LanceDB
     
     Config --> YAML[📝 config.yaml]
     Status --> Manifest[📋 manifest.json]
+    Context --> SystemInfo[💻 OS, Python, Paths]
 ```
 
 ## User Journey
@@ -275,6 +293,58 @@ flowchart TD
     style Warn fill:#fff3e0
     style Error fill:#ffcdd2
 ```
+
+## System Context Integration
+
+```mermaid
+graph LR
+    subgraph "System Detection"
+        OS[🖥️ Operating System]
+        Python[🐍 Python Version] 
+        Project[📁 Project Path]
+        
+        OS --> Windows[Windows: rag.bat]
+        OS --> Linux[Linux: ./rag-mini]
+        OS --> macOS[macOS: ./rag-mini]
+    end
+    
+    subgraph "Context Collection"
+        Collect[🔍 Collect Context]
+        OS --> Collect
+        Python --> Collect
+        Project --> Collect
+        
+        Collect --> Format[📝 Format Context]
+        Format --> Limit[✂️ Limit to 200 chars]
+    end
+    
+    subgraph "AI Integration"
+        UserQuery[❓ User Query] 
+        SearchResults[📋 Search Results]
+        SystemContext[💻 System Context]
+        
+        UserQuery --> Prompt[📝 Build Prompt]
+        SearchResults --> Prompt
+        SystemContext --> Prompt
+        
+        Prompt --> AI[🤖 LLM Processing]
+        AI --> Response[💬 Contextual Response]
+    end
+    
+    subgraph "Enhanced Responses"
+        Response --> Commands[💻 OS-specific commands]
+        Response --> Paths[📂 Correct path formats]
+        Response --> Tips[💡 Platform-specific tips]
+    end
+    
+    Format --> SystemContext
+    
+    style SystemContext fill:#e3f2fd
+    style Response fill:#f3e5f5
+    style Commands fill:#e8f5e8
+```
+
+*System context helps the AI provide better, platform-specific guidance without compromising privacy*
 
 ## Architecture Layers
 

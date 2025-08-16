@@ -194,6 +194,16 @@ class ConfigManager:
                 
             return config
             
+        except yaml.YAMLError as e:
+            # YAML syntax error - help user fix it instead of silent fallback
+            error_msg = f"⚠️ Config file has YAML syntax error at line {getattr(e, 'problem_mark', 'unknown')}: {e}"
+            logger.error(error_msg)
+            print(f"\n{error_msg}")
+            print(f"Config file: {self.config_path}")
+            print("💡 Check YAML syntax (indentation, quotes, colons)")
+            print("💡 Or delete config file to reset to defaults")
+            return RAGConfig()  # Still return defaults but warn user
+            
         except Exception as e:
             logger.error(f"Failed to load config from {self.config_path}: {e}")
             logger.info("Using default configuration")
@@ -210,8 +220,16 @@ class ConfigManager:
             # Create YAML content with comments
             yaml_content = self._create_yaml_with_comments(config_dict)
             
+            # Write with basic file locking to prevent corruption
             with open(self.config_path, 'w') as f:
-                f.write(yaml_content)
+                try:
+                    import fcntl
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)  # Non-blocking exclusive lock
+                    f.write(yaml_content)
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # Unlock
+                except (OSError, ImportError):
+                    # Fallback for Windows or if fcntl unavailable
+                    f.write(yaml_content)
                 
             logger.info(f"Configuration saved to {self.config_path}")
             
@@ -274,7 +292,11 @@ class ConfigManager:
             f"  synthesis_temperature: {config_dict['llm']['synthesis_temperature']}      # LLM temperature for analysis",
             "",
             "  # Context window configuration (critical for RAG performance)",
-            f"  context_window: {config_dict['llm']['context_window']}           # Context size in tokens (8K=fast, 16K=balanced, 32K=advanced)",
+            "  # 💡 Sizing guide: 2K=1 question, 4K=1-2 questions, 8K=manageable, 16K=most users",
+            "  #               32K=large codebases, 64K+=power users only",
+            "  # ⚠️  Larger contexts use exponentially more CPU/memory - only increase if needed",
+            "  # 🔧 Low context limits? Try smaller topk, better search terms, or archive noise",
+            f"  context_window: {config_dict['llm']['context_window']}           # Context size in tokens",
             f"  auto_context: {str(config_dict['llm']['auto_context']).lower()}            # Auto-adjust context based on model capabilities",
             "",
             "  model_rankings:          # Preferred model order (edit to change priority)",
