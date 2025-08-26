@@ -41,24 +41,24 @@ jobs:
     - name: Run tests
       run: |
         # Run basic import tests
-        python -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('✅ Core imports successful')"
+        python -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('[OK] Core imports successful')"
         
         # Test basic functionality without venv requirements
         python -c "
         try:
             from mini_rag.config import ConfigManager
-            print('✅ Config system imports work')
+            print('[OK] Config system imports work')
         except Exception as e:
-            print(f'⚠️ Config test skipped: {e}')
+            print(f'[SKIP] Config test skipped: {e}')
         
         try:
             from mini_rag.chunker import CodeChunker
-            print('✅ Chunker imports work')
+            print('[OK] Chunker imports work')
         except Exception as e:
-            print(f'⚠️ Chunker test skipped: {e}')
+            print(f'[SKIP] Chunker test skipped: {e}')
         "
         
-        echo "✅ Core functionality tests completed"
+        echo "[OK] Core functionality tests completed"
       shell: bash
       
     - name: Test auto-update system
@@ -67,16 +67,16 @@ jobs:
         try:
             from mini_rag.updater import UpdateChecker
             updater = UpdateChecker()
-            print('✅ Auto-update system available')
+            print('[OK] Auto-update system available')
         except ImportError:
-            print('⚠️ Auto-update system not available (legacy version)')
+            print('[SKIP] Auto-update system not available (legacy version)')
         "
         
     - name: Test CLI commands
       run: |
-        echo "✅ Checking for CLI files..."
+        echo "[OK] Checking for CLI files..."
         ls -la rag* || dir rag* || echo "CLI files may not be present"
-        echo "✅ CLI check completed - this is expected in CI environment"
+        echo "[OK] CLI check completed - this is expected in CI environment"
       shell: bash
 
   security-scan:
@@ -97,7 +97,7 @@ jobs:
     - name: Run security scan
       run: |
         # Scan for security issues (non-failing)
-        bandit -r . -ll || echo "✅ Security scan completed"
+        bandit -r . -ll || echo "[OK] Security scan completed"
           
   auto-update-check:
     runs-on: ubuntu-latest
@@ -119,10 +119,10 @@ jobs:
     - name: Check for auto-update system
       run: |
         if [ -f "mini_rag/updater.py" ]; then
-          echo "✅ Auto-update system present"
+          echo "[OK] Auto-update system present"
           echo "UPDATE_AVAILABLE=true" >> $GITHUB_ENV
         else
-          echo "⚠️ No auto-update system found"
+          echo "[SKIP] No auto-update system found"
           echo "UPDATE_AVAILABLE=false" >> $GITHUB_ENV
         fi
         
@@ -133,8 +133,8 @@ jobs:
         try:
             from mini_rag.updater import UpdateChecker
             updater = UpdateChecker()
-            print(f'✅ Update system configured for: {updater.github_api_url}')
-            print(f'✅ Check frequency: {updater.check_frequency_hours} hours')
+            print(f'[OK] Update system configured for: {updater.github_api_url}')
+            print(f'[OK] Check frequency: {updater.check_frequency_hours} hours')
         except Exception as e:
-            print(f'⚠️ Update system validation skipped: {e}')
+            print(f'[SKIP] Update system validation skipped: {e}')
         "
