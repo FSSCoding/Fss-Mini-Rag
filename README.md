@@ -79,34 +79,24 @@ FSS-Mini-RAG offers **two distinct experiences** optimized for different use cas
 
 ## Quick Start (2 Minutes)
 
-**Linux/macOS:**
+**Step 1: Install**
 ```bash
-# 1. Install everything
+# Linux/macOS
 ./install_mini_rag.sh
 
-# 2. Choose your interface
-./rag-tui                         # Friendly interface for beginners
-# OR choose your mode:
-./rag-mini index ~/my-project     # Index your project first
-./rag-mini search ~/my-project "query" --synthesize  # Fast synthesis
-./rag-mini explore ~/my-project   # Interactive exploration
+# Windows  
+install_windows.bat
 ```
 
-**Windows:**
-```cmd
-# 1. Install everything
-install_windows.bat
+**Step 2: Start Using**
+```bash
+# Beginners: Interactive interface
+./rag-tui                    # Linux/macOS
+rag.bat                      # Windows
 
-# 2. Choose your interface
-rag.bat                           # Interactive interface
-# OR choose your mode:
-rag.bat index C:\my-project       # Index your project first
-rag.bat search C:\my-project "query"  # Fast search
-rag.bat explore C:\my-project     # Interactive exploration
-
-# Direct Python entrypoint (after install):
-rag-mini index C:\my-project
-rag-mini search C:\my-project "query"
+# Experienced users: Direct commands
+./rag-mini index ~/project   # Index your project
+./rag-mini search ~/project "your query"
 ```
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.
@@ -232,7 +222,7 @@ This implementation prioritizes:
 
 ## Next Steps
 
-- **New users**: Run `./rag-mini` (Linux/macOS) or `rag.bat` (Windows) for guided experience
+- **New users**: Run `./rag-tui` (Linux/macOS) or `rag.bat` (Windows) for guided experience
 - **Developers**: Read [`TECHNICAL_GUIDE.md`](docs/TECHNICAL_GUIDE.md) for implementation details
 - **Contributors**: See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup
 

@@ -329,7 +329,7 @@ main() {
             ;;
         "index"|"search"|"explore"|"status"|"update"|"check-update")
             # Direct CLI commands - call Python script
-            exec "$PYTHON" "$SCRIPT_DIR/rag-mini.py" "$@"
+            exec "$PYTHON" "$SCRIPT_DIR/bin/rag-mini.py" "$@"
             ;;
         *)
             # Unknown command - show help

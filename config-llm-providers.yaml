@@ -1,0 +1,9 @@
+llm:
+  provider: ollama
+  ollama_host: localhost:11434
+  synthesis_model: qwen3:1.5b
+  expansion_model: qwen3:1.5b
+  enable_synthesis: false
+  synthesis_temperature: 0.3
+  cpu_optimized: true
+  enable_thinking: true

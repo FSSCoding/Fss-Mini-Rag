@@ -93,10 +93,10 @@ That's it! The TUI will guide you through everything.
 - **Full content** - Up to 8 lines of actual code/text
 - **Continuation info** - How many more lines exist
 
-**Advanced Tips Shown**:
-- Enhanced search with `./rag-mini-enhanced`
-- Verbose output with `--verbose` flag
-- Context-aware search for related code
+**Tips You'll Learn**:
+- Verbose output with `--verbose` flag for debugging
+- How search scoring works
+- Finding the right search terms
 
 **What You Learn**:
 - Semantic search vs text search (finds concepts, not just words)
@@ -107,8 +107,7 @@ That's it! The TUI will guide you through everything.
 **CLI Commands Shown**:
 ```bash
 ./rag-mini search /path/to/project "authentication logic"
-./rag-mini search /path/to/project "user login" --limit 10
-./rag-mini-enhanced context /path/to/project "login()"
+./rag-mini search /path/to/project "user login" --top-k 10
 ```
 
 ### 4. Explore Project (NEW!)

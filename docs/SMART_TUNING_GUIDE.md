@@ -5,10 +5,10 @@
 ### **1. 📊 Intelligent Analysis**
 ```bash
 # Analyze your project patterns and get optimization suggestions
-./rag-mini-enhanced analyze /path/to/project
+./rag-mini analyze /path/to/project
 
 # Get smart recommendations based on actual usage
-./rag-mini-enhanced status /path/to/project
+./rag-mini status /path/to/project
 ```
 
 **What it analyzes:**
@@ -20,13 +20,9 @@
 ### **2. 🧠 Smart Search Enhancement**
 ```bash
 # Enhanced search with query intelligence
-./rag-mini-enhanced search /project "MyClass"     # Detects class names
-./rag-mini-enhanced search /project "login()"     # Detects function calls  
-./rag-mini-enhanced search /project "user auth"   # Natural language
-
-# Context-aware search (planned)
-./rag-mini-enhanced context /project "function_name"  # Show surrounding code
-./rag-mini-enhanced similar /project "pattern"        # Find similar patterns
+./rag-mini search /project "MyClass"     # Detects class names
+./rag-mini search /project "login()"     # Detects function calls  
+./rag-mini search /project "user auth"   # Natural language
 ```
 
 ### **3. ⚙️ Language-Specific Optimizations**
@@ -113,10 +109,10 @@ Edit `.mini-rag/config.json` in your project:
 ./rag-mini index /project --force
 
 # Test search quality improvements
-./rag-mini-enhanced search /project "your test query"
+./rag-mini search /project "your test query"
 
 # Verify optimization impact
-./rag-mini-enhanced analyze /project
+./rag-mini analyze /project
 ```
 
 ## 🎊 **Result: Smarter, Faster, Better**

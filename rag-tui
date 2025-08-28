@@ -19,4 +19,4 @@ if [ ! -f "$PYTHON" ]; then
 fi
 
 # Launch TUI
-exec "$PYTHON" "$SCRIPT_DIR/rag-tui.py" "$@"
+exec "$PYTHON" "$SCRIPT_DIR/bin/rag-tui.py" "$@"

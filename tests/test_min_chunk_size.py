@@ -1,13 +1,16 @@
 """Test with smaller min_chunk_size."""
 
-from mini_rag.chunker import CodeChunker
 from pathlib import Path
+
+from mini_rag.chunker import CodeChunker
 
 test_code = '''"""Test module."""
 
 import os
 
+
 class MyClass:
+
     def method(self):
         return 42
 

@@ -1,0 +1,19 @@
+[flake8]
+# Professional Python code style - balances quality with readability
+max-line-length = 95
+extend-ignore = E203,W503,W605
+exclude = 
+    .venv,
+    .venv-linting,
+    __pycache__,
+    *.egg-info,
+    .git,
+    build,
+    dist,
+    .mini-rag
+
+# Per-file ignores for practical development
+per-file-ignores =
+    tests/*.py:F401,F841
+    examples/*.py:F401,F841
+    fix_*.py:F401,F841,E501
