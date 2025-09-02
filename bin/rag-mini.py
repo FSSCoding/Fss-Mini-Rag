@@ -401,6 +401,78 @@ def status_check(project_path: Path):
         sys.exit(1)
 
 
+def show_model_status(project_path: Path):
+    """Show detailed model status and selection information."""
+    from mini_rag.config import ConfigManager
+    
+    print("🤖 Model Status Report")
+    print("=" * 50)
+    
+    try:
+        # Load config
+        config_manager = ConfigManager()
+        config = config_manager.load_config(project_path)
+        
+        # Create LLM synthesizer to check models
+        synthesizer = LLMSynthesizer(model=config.llm.synthesis_model, config=config)
+        
+        # Show configured model
+        print(f"📋 Configured model: {config.llm.synthesis_model}")
+        
+        # Show available models
+        available_models = synthesizer.available_models
+        if available_models:
+            print(f"\n📦 Available models ({len(available_models)}):")
+            
+            # Group models by series
+            qwen3_models = [m for m in available_models if m.startswith('qwen3:')]
+            qwen25_models = [m for m in available_models if m.startswith('qwen2.5')]
+            other_models = [m for m in available_models if not (m.startswith('qwen3:') or m.startswith('qwen2.5'))]
+            
+            if qwen3_models:
+                print("   🟢 Qwen3 series (recommended):")
+                for model in qwen3_models:
+                    is_selected = synthesizer._resolve_model_name(config.llm.synthesis_model) == model
+                    marker = "  ✅" if is_selected else "    "
+                    print(f"{marker} {model}")
+            
+            if qwen25_models:
+                print("   🟡 Qwen2.5 series:")
+                for model in qwen25_models:
+                    is_selected = synthesizer._resolve_model_name(config.llm.synthesis_model) == model
+                    marker = "  ✅" if is_selected else "    "
+                    print(f"{marker} {model}")
+                    
+            if other_models:
+                print("   🔵 Other models:")
+                for model in other_models[:10]:  # Limit to first 10
+                    is_selected = synthesizer._resolve_model_name(config.llm.synthesis_model) == model
+                    marker = "  ✅" if is_selected else "    "
+                    print(f"{marker} {model}")
+        else:
+            print("\n❌ No models available from Ollama")
+            print("   Make sure Ollama is running: ollama serve")
+            print("   Install models with: ollama pull qwen3:4b")
+            
+        # Show resolution result
+        resolved_model = synthesizer._resolve_model_name(config.llm.synthesis_model)
+        if resolved_model:
+            if resolved_model != config.llm.synthesis_model:
+                print(f"\n🔄 Model resolution: {config.llm.synthesis_model} -> {resolved_model}")
+            else:
+                print(f"\n✅ Using exact model match: {resolved_model}")
+        else:
+            print(f"\n❌ Model '{config.llm.synthesis_model}' not found!")
+            print("   Consider changing your model in the config file")
+            
+        print(f"\n📄 Config file: {config_manager.config_path}")
+        print("   Edit this file to change your model preference")
+        
+    except Exception as e:
+        print(f"❌ Model status check failed: {e}")
+        sys.exit(1)
+
+
 def explore_interactive(project_path: Path):
     """Interactive exploration mode with thinking and context memory for any documents."""
     try:
@@ -681,12 +753,13 @@ Examples:
   rag-mini search /path/to/project "query" -s  # Search with LLM synthesis
   rag-mini explore /path/to/project            # Interactive exploration mode
   rag-mini status /path/to/project             # Show status
+  rag-mini models /path/to/project             # Show model status and selection
         """,
     )
 
     parser.add_argument(
         "command",
-        choices=["index", "search", "explore", "status", "update", "check-update"],
+        choices=["index", "search", "explore", "status", "models", "update", "check-update"],
         help="Command to execute",
     )
     parser.add_argument(
@@ -756,6 +829,8 @@ Examples:
         explore_interactive(args.project_path)
     elif args.command == "status":
         status_check(args.project_path)
+    elif args.command == "models":
+        show_model_status(args.project_path)
 
 
 if __name__ == "__main__":

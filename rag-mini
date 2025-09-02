@@ -60,6 +60,7 @@ attempt_auto_setup() {
     echo -e "${GREEN}✅ Created virtual environment${NC}" >&2
     
     # Step 2: Install dependencies
+    echo -e "${YELLOW}📦 Installing dependencies (this may take 1-2 minutes)...${NC}" >&2
     if ! "$SCRIPT_DIR/.venv/bin/pip" install -r "$SCRIPT_DIR/requirements.txt" >/dev/null 2>&1; then
         return 1  # Dependency installation failed
     fi

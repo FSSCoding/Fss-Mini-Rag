@@ -157,16 +157,16 @@ jobs:
 
         ### 📥 Installation
         Download and install the latest version:
-        \`\`\`bash
+        ```bash
         curl -sSL https://github.com/{repo_owner}/{repo_name}/releases/latest/download/install.sh | bash
-        \`\`\`
+        ```
 
         ### 🔄 Auto-Update
         If you have auto-update support:
-        \`\`\`bash
+        ```bash
         ./{repo_name} check-update
         ./{repo_name} update
-        \`\`\`
+        ```
         EOF
 
     - name: Create GitHub Release
