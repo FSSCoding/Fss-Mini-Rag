@@ -106,3 +106,12 @@ dmypy.json
 
 # Project specific ignores
 REPOSITORY_SUMMARY.md
+
+# Analysis and scanning results (should not be committed)
+docs/live-analysis/
+docs/analysis-history/
+**/live-analysis/
+**/analysis-history/
+*.analysis.json
+*.analysis.html
+**/analysis_*/

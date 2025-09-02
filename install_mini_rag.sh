@@ -4,6 +4,30 @@
 
 set -e  # Exit on any error
 
+# Check for command line arguments
+HEADLESS_MODE=false
+if [[ "$1" == "--headless" ]]; then
+    HEADLESS_MODE=true
+    echo "🤖 Running in headless mode - using defaults for automation"
+elif [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo ""
+    echo "FSS-Mini-RAG Installation Script"
+    echo ""
+    echo "Usage:"
+    echo "  ./install_mini_rag.sh           # Interactive installation"
+    echo "  ./install_mini_rag.sh --headless  # Automated installation for agents/CI"
+    echo "  ./install_mini_rag.sh --help      # Show this help"
+    echo ""
+    echo "Headless mode options:"
+    echo "  • Uses existing virtual environment if available"
+    echo "  • Selects light installation (Ollama + basic dependencies)"  
+    echo "  • Downloads nomic-embed-text model if Ollama is available"
+    echo "  • Skips interactive prompts and tests"
+    echo "  • Perfect for agent automation and CI/CD pipelines"
+    echo ""
+    exit 0
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -84,14 +108,19 @@ check_python() {
 check_venv() {
     if [ -d "$SCRIPT_DIR/.venv" ]; then
         print_info "Virtual environment already exists at $SCRIPT_DIR/.venv"
-        echo -n "Recreate it? (y/N): "
-        read -r recreate
-        if [[ $recreate =~ ^[Yy]$ ]]; then
-            print_info "Removing existing virtual environment..."
-            rm -rf "$SCRIPT_DIR/.venv"
-            return 1  # Needs creation
-        else
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            print_info "Headless mode: Using existing virtual environment"
             return 0  # Use existing
+        else
+            echo -n "Recreate it? (y/N): "
+            read -r recreate
+            if [[ $recreate =~ ^[Yy]$ ]]; then
+                print_info "Removing existing virtual environment..."
+                rm -rf "$SCRIPT_DIR/.venv"
+                return 1  # Needs creation
+            else
+                return 0  # Use existing
+            fi
         fi
     else
         return 1  # Needs creation
@@ -140,8 +169,13 @@ check_ollama() {
             return 0
         else
             print_warning "Ollama is installed but not running"
-            echo -n "Start Ollama now? (Y/n): "
-            read -r start_ollama
+            if [[ "$HEADLESS_MODE" == "true" ]]; then
+                print_info "Headless mode: Starting Ollama server automatically"
+                start_ollama="y"
+            else
+                echo -n "Start Ollama now? (Y/n): "
+                read -r start_ollama
+            fi
             if [[ ! $start_ollama =~ ^[Nn]$ ]]; then
                 print_info "Starting Ollama server..."
                 ollama serve &
@@ -168,15 +202,26 @@ check_ollama() {
         echo -e "${YELLOW}2) Manual installation${NC} - Visit https://ollama.com/download"
         echo -e "${BLUE}3) Continue without Ollama${NC} (uses ML fallback)"
         echo ""
-        echo -n "Choose [1/2/3]: "
-        read -r ollama_choice
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            print_info "Headless mode: Continuing without Ollama (option 3)"
+            ollama_choice="3"
+        else
+            echo -n "Choose [1/2/3]: "
+            read -r ollama_choice
+        fi
         
         case "$ollama_choice" in
             1|"")
-                print_info "Installing Ollama using official installer..."
-                echo -e "${CYAN}Running: curl -fsSL https://ollama.com/install.sh | sh${NC}"
+                print_info "Installing Ollama using secure installation method..."
+                echo -e "${CYAN}Downloading and verifying Ollama installer...${NC}"
                 
-                if curl -fsSL https://ollama.com/install.sh | sh; then
+                # Secure installation: download, verify, then execute
+                local temp_script="/tmp/ollama-install-$$.sh"
+                if curl -fsSL https://ollama.com/install.sh -o "$temp_script" && \
+                   file "$temp_script" | grep -q "shell script" && \
+                   chmod +x "$temp_script" && \
+                   "$temp_script"; then
+                    rm -f "$temp_script"
                     print_success "Ollama installed successfully"
                     
                     print_info "Starting Ollama server..."
@@ -267,8 +312,13 @@ setup_ollama_model() {
         echo "  • Purpose: High-quality semantic embeddings"
         echo "  • Alternative: System will use ML/hash fallbacks"
         echo ""
-        echo -n "Download model? [y/N]: "
-        read -r download_model
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            print_info "Headless mode: Downloading nomic-embed-text model"
+            download_model="y"
+        else
+            echo -n "Download model? [y/N]: "
+            read -r download_model
+        fi
         should_download=$([ "$download_model" = "y" ] && echo "download" || echo "skip")
     fi
     
@@ -328,15 +378,21 @@ get_installation_preferences() {
     echo ""
     
     while true; do
-        echo -n "Choose [L/F/C] or Enter for recommended ($recommended): "
-        read -r choice
-        
-        # Default to recommendation if empty
-        if [ -z "$choice" ]; then
-            if [ "$ollama_available" = true ]; then
-                choice="L"
-            else
-                choice="F"  
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            # Default to light installation in headless mode
+            choice="L"
+            print_info "Headless mode: Selected Light installation"
+        else
+            echo -n "Choose [L/F/C] or Enter for recommended ($recommended): "
+            read -r choice
+            
+            # Default to recommendation if empty
+            if [ -z "$choice" ]; then
+                if [ "$ollama_available" = true ]; then
+                    choice="L"
+                else
+                    choice="F"  
+                fi
             fi
         fi
         
@@ -378,8 +434,13 @@ configure_custom_installation() {
         echo ""
         echo -e "${BOLD}Ollama embedding model:${NC}"
         echo "  • nomic-embed-text (~270MB) - Best quality embeddings"
-        echo -n "Download Ollama model? [y/N]: "
-        read -r download_ollama
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            print_info "Headless mode: Downloading Ollama model"
+            download_ollama="y"
+        else
+            echo -n "Download Ollama model? [y/N]: "
+            read -r download_ollama
+        fi
         if [[ $download_ollama =~ ^[Yy]$ ]]; then
             ollama_model="download"
         fi
@@ -390,8 +451,13 @@ configure_custom_installation() {
     echo -e "${BOLD}ML fallback system:${NC}"
     echo "  • PyTorch + transformers (~2-3GB) - Works without Ollama"
     echo "  • Useful for: Offline use, server deployments, CI/CD"
-    echo -n "Include ML dependencies? [y/N]: "
-    read -r include_ml
+    if [[ "$HEADLESS_MODE" == "true" ]]; then
+        print_info "Headless mode: Skipping ML dependencies (keeping light)"
+        include_ml="n"
+    else
+        echo -n "Include ML dependencies? [y/N]: "
+        read -r include_ml
+    fi
     
     # Pre-download models
     local predownload_ml="skip"
@@ -400,8 +466,13 @@ configure_custom_installation() {
         echo -e "${BOLD}Pre-download ML models:${NC}"
         echo "  • sentence-transformers model (~80MB)"
         echo "  • Skip: Models download automatically when first used"
-        echo -n "Pre-download now? [y/N]: "
-        read -r predownload
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            print_info "Headless mode: Skipping ML model pre-download"
+            predownload="n"
+        else
+            echo -n "Pre-download now? [y/N]: "
+            read -r predownload
+        fi
         if [[ $predownload =~ ^[Yy]$ ]]; then
             predownload_ml="download"
         fi
@@ -545,8 +616,13 @@ setup_ml_models() {
         echo "  • Purpose: Offline fallback when Ollama unavailable"
         echo "  • If skipped: Auto-downloads when first needed"
         echo ""
-        echo -n "Pre-download now? [y/N]: "
-        read -r download_ml
+        if [[ "$HEADLESS_MODE" == "true" ]]; then
+            print_info "Headless mode: Skipping ML model pre-download"
+            download_ml="n"
+        else
+            echo -n "Pre-download now? [y/N]: "
+            read -r download_ml
+        fi
         should_predownload=$([ "$download_ml" = "y" ] && echo "download" || echo "skip")
     fi
     
@@ -701,7 +777,11 @@ show_completion() {
     printf "Run quick test now? [Y/n]: "
     
     # More robust input handling
-    if read -r run_test < /dev/tty 2>/dev/null; then
+    if [[ "$HEADLESS_MODE" == "true" ]]; then
+        print_info "Headless mode: Skipping interactive test"
+        echo -e "${BLUE}You can test FSS-Mini-RAG anytime with: ./rag-tui${NC}"
+        show_beginner_guidance
+    elif read -r run_test < /dev/tty 2>/dev/null; then
         echo "User chose: '$run_test'"  # Debug output
         if [[ ! $run_test =~ ^[Nn]$ ]]; then
             run_quick_test
@@ -732,8 +812,13 @@ run_quick_test() {
     echo -e "${GREEN}1) Code${NC} - Index the FSS-Mini-RAG codebase (~50 files)"
     echo -e "${BLUE}2) Docs${NC} - Index the documentation (~10 files)"  
     echo ""
-    echo -n "Choose [1/2] or Enter for code: "
-    read -r index_choice
+    if [[ "$HEADLESS_MODE" == "true" ]]; then
+        print_info "Headless mode: Indexing code by default"
+        index_choice="1"
+    else
+        echo -n "Choose [1/2] or Enter for code: "
+        read -r index_choice
+    fi
     
     # Determine what to index
     local target_dir="$SCRIPT_DIR"
@@ -768,8 +853,10 @@ run_quick_test() {
         echo -e "${CYAN}The TUI has 6 sample questions to get you started.${NC}"
         echo -e "${CYAN}Try the suggested queries or enter your own!${NC}"
         echo ""
-        echo -n "Press Enter to start interactive tutorial: "
-        read -r
+        if [[ "$HEADLESS_MODE" != "true" ]]; then
+            echo -n "Press Enter to start interactive tutorial: "
+            read -r
+        fi
         
         # Launch the TUI which has the existing interactive tutorial system
         ./rag-tui.py "$target_dir" || true
@@ -832,11 +919,15 @@ main() {
     echo -e "${CYAN}Note: You'll be asked before downloading any models${NC}"
     echo ""
     
-    echo -n "Begin installation? [Y/n]: "
-    read -r continue_install
-    if [[ $continue_install =~ ^[Nn]$ ]]; then
-        echo "Installation cancelled."
-        exit 0
+    if [[ "$HEADLESS_MODE" == "true" ]]; then
+        print_info "Headless mode: Beginning installation automatically"
+    else
+        echo -n "Begin installation? [Y/n]: "
+        read -r continue_install
+        if [[ $continue_install =~ ^[Nn]$ ]]; then
+            echo "Installation cancelled."
+            exit 0
+        fi
     fi
     
     # Run installation steps

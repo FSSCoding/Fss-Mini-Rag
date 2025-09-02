@@ -83,7 +83,7 @@ class LLMSynthesizer:
         return []
 
     def _select_best_model(self) -> str:
-        """Select the best available model based on configuration rankings."""
+        """Select the best available model based on configuration rankings with robust name resolution."""
         if not self.available_models:
             # Use config fallback if available, otherwise use default
             if (
@@ -113,30 +113,113 @@ class LLMSynthesizer:
                 "qwen2.5-coder:1.5b",
             ]
 
-        # Find first available model from our ranked list (exact matches first)
+        # Find first available model from our ranked list using robust name resolution
         for preferred_model in model_rankings:
-            for available_model in self.available_models:
-                # Exact match first (e.g., "qwen3:1.7b" matches "qwen3:1.7b")
-                if preferred_model.lower() == available_model.lower():
-                    logger.info(f"Selected exact match model: {available_model}")
-                    return available_model
-
-                # Partial match with version handling (e.g., "qwen3:1.7b" matches "qwen3:1.7b-q8_0")
-                preferred_parts = preferred_model.lower().split(":")
-                available_parts = available_model.lower().split(":")
-
-                if len(preferred_parts) >= 2 and len(available_parts) >= 2:
-                    if (
-                        preferred_parts[0] == available_parts[0]
-                        and preferred_parts[1] in available_parts[1]
-                    ):
-                        logger.info(f"Selected version match model: {available_model}")
-                        return available_model
+            resolved_model = self._resolve_model_name(preferred_model)
+            if resolved_model:
+                logger.info(f"Selected model: {resolved_model} (requested: {preferred_model})")
+                return resolved_model
 
         # If no preferred models found, use first available
         fallback = self.available_models[0]
         logger.warning(f"Using fallback model: {fallback}")
         return fallback
+
+    def _resolve_model_name(self, configured_model: str) -> Optional[str]:
+        """Auto-resolve model names to match what's actually available in Ollama.
+        
+        This handles common patterns like:
+        - qwen3:1.7b -> qwen3:1.7b-q8_0
+        - qwen3:0.6b -> qwen3:0.6b-q4_0 
+        - auto -> first available model
+        """
+        if not self.available_models:
+            return None
+            
+        # Handle special 'auto' directive
+        if configured_model.lower() == 'auto':
+            return self.available_models[0] if self.available_models else None
+            
+        # Direct exact match first (case-insensitive)
+        for available_model in self.available_models:
+            if configured_model.lower() == available_model.lower():
+                return available_model
+        
+        # Fuzzy matching for common patterns
+        model_patterns = self._get_model_patterns(configured_model)
+        
+        for pattern in model_patterns:
+            for available_model in self.available_models:
+                if pattern.lower() in available_model.lower():
+                    # Additional validation: ensure it's not a partial match of something else
+                    if self._validate_model_match(pattern, available_model):
+                        return available_model
+        
+        return None  # Model not available
+
+    def _get_model_patterns(self, configured_model: str) -> List[str]:
+        """Generate fuzzy match patterns for common model naming conventions."""
+        patterns = [configured_model]  # Start with exact name
+        
+        # Common quantization patterns for different models
+        quantization_patterns = {
+            'qwen3:1.7b': ['qwen3:1.7b-q8_0', 'qwen3:1.7b-q4_0', 'qwen3:1.7b-q6_k'],
+            'qwen3:0.6b': ['qwen3:0.6b-q8_0', 'qwen3:0.6b-q4_0', 'qwen3:0.6b-q6_k'],
+            'qwen3:4b': ['qwen3:4b-q8_0', 'qwen3:4b-q4_0', 'qwen3:4b-q6_k'],
+            'qwen3:8b': ['qwen3:8b-q8_0', 'qwen3:8b-q4_0', 'qwen3:8b-q6_k'],
+            'qwen2.5:1.5b': ['qwen2.5:1.5b-q8_0', 'qwen2.5:1.5b-q4_0'],
+            'qwen2.5:3b': ['qwen2.5:3b-q8_0', 'qwen2.5:3b-q4_0'],
+            'qwen2.5-coder:1.5b': ['qwen2.5-coder:1.5b-q8_0', 'qwen2.5-coder:1.5b-q4_0'],
+            'qwen2.5-coder:3b': ['qwen2.5-coder:3b-q8_0', 'qwen2.5-coder:3b-q4_0'],
+            'qwen2.5-coder:7b': ['qwen2.5-coder:7b-q8_0', 'qwen2.5-coder:7b-q4_0'],
+        }
+        
+        # Add specific patterns for the configured model
+        if configured_model.lower() in quantization_patterns:
+            patterns.extend(quantization_patterns[configured_model.lower()])
+        
+        # Generic pattern generation for unknown models
+        if ':' in configured_model:
+            base_name, version = configured_model.split(':', 1)
+            
+            # Add common quantization suffixes
+            common_suffixes = ['-q8_0', '-q4_0', '-q6_k', '-q4_k_m', '-instruct', '-base']
+            for suffix in common_suffixes:
+                patterns.append(f"{base_name}:{version}{suffix}")
+                
+            # Also try with instruct variants
+            if 'instruct' not in version.lower():
+                patterns.append(f"{base_name}:{version}-instruct")
+                patterns.append(f"{base_name}:{version}-instruct-q8_0")
+                patterns.append(f"{base_name}:{version}-instruct-q4_0")
+        
+        return patterns
+
+    def _validate_model_match(self, pattern: str, available_model: str) -> bool:
+        """Validate that a fuzzy match is actually correct and not a false positive."""
+        # Convert to lowercase for comparison
+        pattern_lower = pattern.lower()
+        available_lower = available_model.lower()
+        
+        # Ensure the base model name matches
+        if ':' in pattern_lower and ':' in available_lower:
+            pattern_base = pattern_lower.split(':')[0]
+            available_base = available_lower.split(':')[0]
+            
+            # Base names must match exactly
+            if pattern_base != available_base:
+                return False
+                
+            # Version part should be contained or closely related
+            pattern_version = pattern_lower.split(':', 1)[1]
+            available_version = available_lower.split(':', 1)[1]
+            
+            # The pattern version should be a prefix of the available version
+            # e.g., "1.7b" should match "1.7b-q8_0" but not "11.7b"
+            if not available_version.startswith(pattern_version.split('-')[0]):
+                return False
+                
+        return True
 
     def _ensure_initialized(self):
         """Lazy initialization with LLM warmup."""

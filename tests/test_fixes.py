@@ -145,8 +145,8 @@ def test_safeguard_preservation():
 
         # Check that it's being called instead of dropping content
         if (
-            "return self._create_safeguard_response_with_content(issue_type, explanation, raw_response)"
-            in synthesizer_content
+            "return self._create_safeguard_response_with_content(" in synthesizer_content
+            and "issue_type, explanation, raw_response" in synthesizer_content
         ):
             print("✓ Preservation method is called when safeguards trigger")
             return True

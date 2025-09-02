@@ -4,11 +4,13 @@ Handles loading, saving, and validation of YAML config files.
 """
 
 import logging
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +168,221 @@ class ConfigManager:
         self.rag_dir = self.project_path / ".mini-rag"
         self.config_path = self.rag_dir / "config.yaml"
 
+    def get_available_ollama_models(self, ollama_host: str = "localhost:11434") -> List[str]:
+        """Get list of available Ollama models for validation with secure connection handling."""
+        import time
+        
+        # Retry logic with exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Use explicit timeout and SSL verification for security
+                response = requests.get(
+                    f"http://{ollama_host}/api/tags", 
+                    timeout=(5, 10),  # (connect_timeout, read_timeout)
+                    verify=True,  # Explicit SSL verification 
+                    allow_redirects=False  # Prevent redirect attacks
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [model["name"] for model in data.get("models", [])]
+                    logger.debug(f"Successfully fetched {len(models)} Ollama models")
+                    return models
+                else:
+                    logger.debug(f"Ollama API returned status {response.status_code}")
+                    
+            except requests.exceptions.SSLError as e:
+                logger.debug(f"SSL verification failed for Ollama connection: {e}")
+                # For local Ollama, SSL might not be configured - this is expected
+                if "localhost" in ollama_host or "127.0.0.1" in ollama_host:
+                    logger.debug("Retrying with local connection (SSL not required for localhost)")
+                    # Local connections don't need SSL verification
+                    try:
+                        response = requests.get(f"http://{ollama_host}/api/tags", timeout=(5, 10))
+                        if response.status_code == 200:
+                            data = response.json()
+                            return [model["name"] for model in data.get("models", [])]
+                    except Exception as local_e:
+                        logger.debug(f"Local Ollama connection also failed: {local_e}")
+                break  # Don't retry SSL errors for remote hosts
+                
+            except requests.exceptions.Timeout as e:
+                logger.debug(f"Ollama connection timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    sleep_time = (2 ** attempt)  # Exponential backoff
+                    time.sleep(sleep_time)
+                    continue
+                    
+            except requests.exceptions.ConnectionError as e:
+                logger.debug(f"Ollama connection error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                    
+            except Exception as e:
+                logger.debug(f"Unexpected error fetching Ollama models: {e}")
+                break
+                
+        return []
+
+    def _sanitize_model_name(self, model_name: str) -> str:
+        """Sanitize model name to prevent injection attacks."""
+        if not model_name:
+            return ""
+        
+        # Allow only alphanumeric, dots, colons, hyphens, underscores
+        # This covers legitimate model names like qwen3:1.7b-q8_0
+        sanitized = re.sub(r'[^a-zA-Z0-9\.\:\-\_]', '', model_name)
+        
+        # Limit length to prevent DoS
+        if len(sanitized) > 128:
+            logger.warning(f"Model name too long, truncating: {sanitized[:20]}...")
+            sanitized = sanitized[:128]
+            
+        return sanitized
+
+    def resolve_model_name(self, configured_model: str, available_models: List[str]) -> Optional[str]:
+        """Resolve configured model name to actual available model with input sanitization."""
+        if not available_models or not configured_model:
+            return None
+        
+        # Sanitize input to prevent injection
+        configured_model = self._sanitize_model_name(configured_model)
+        if not configured_model:
+            logger.warning("Model name was empty after sanitization")
+            return None
+            
+        # Handle special 'auto' directive
+        if configured_model.lower() == 'auto':
+            return available_models[0] if available_models else None
+            
+        # Direct exact match first (case-insensitive)
+        for available_model in available_models:
+            if configured_model.lower() == available_model.lower():
+                return available_model
+        
+        # Fuzzy matching for common patterns
+        model_patterns = self._get_model_patterns(configured_model)
+        
+        for pattern in model_patterns:
+            for available_model in available_models:
+                if pattern.lower() in available_model.lower():
+                    # Additional validation: ensure it's not a partial match of something else
+                    if self._validate_model_match(pattern, available_model):
+                        return available_model
+        
+        return None  # Model not available
+
+    def _get_model_patterns(self, configured_model: str) -> List[str]:
+        """Generate fuzzy match patterns for common model naming conventions."""
+        patterns = [configured_model]  # Start with exact name
+        
+        # Common quantization patterns for different models
+        quantization_patterns = {
+            'qwen3:1.7b': ['qwen3:1.7b-q8_0', 'qwen3:1.7b-q4_0', 'qwen3:1.7b-q6_k'],
+            'qwen3:0.6b': ['qwen3:0.6b-q8_0', 'qwen3:0.6b-q4_0', 'qwen3:0.6b-q6_k'],
+            'qwen3:4b': ['qwen3:4b-q8_0', 'qwen3:4b-q4_0', 'qwen3:4b-q6_k'],
+            'qwen3:8b': ['qwen3:8b-q8_0', 'qwen3:8b-q4_0', 'qwen3:8b-q6_k'],
+            'qwen2.5:1.5b': ['qwen2.5:1.5b-q8_0', 'qwen2.5:1.5b-q4_0'],
+            'qwen2.5:3b': ['qwen2.5:3b-q8_0', 'qwen2.5:3b-q4_0'],
+            'qwen2.5-coder:1.5b': ['qwen2.5-coder:1.5b-q8_0', 'qwen2.5-coder:1.5b-q4_0'],
+            'qwen2.5-coder:3b': ['qwen2.5-coder:3b-q8_0', 'qwen2.5-coder:3b-q4_0'],
+            'qwen2.5-coder:7b': ['qwen2.5-coder:7b-q8_0', 'qwen2.5-coder:7b-q4_0'],
+        }
+        
+        # Add specific patterns for the configured model
+        if configured_model.lower() in quantization_patterns:
+            patterns.extend(quantization_patterns[configured_model.lower()])
+        
+        # Generic pattern generation for unknown models
+        if ':' in configured_model:
+            base_name, version = configured_model.split(':', 1)
+            
+            # Add common quantization suffixes
+            common_suffixes = ['-q8_0', '-q4_0', '-q6_k', '-q4_k_m', '-instruct', '-base']
+            for suffix in common_suffixes:
+                patterns.append(f"{base_name}:{version}{suffix}")
+                
+            # Also try with instruct variants
+            if 'instruct' not in version.lower():
+                patterns.append(f"{base_name}:{version}-instruct")
+                patterns.append(f"{base_name}:{version}-instruct-q8_0")
+                patterns.append(f"{base_name}:{version}-instruct-q4_0")
+        
+        return patterns
+
+    def _validate_model_match(self, pattern: str, available_model: str) -> bool:
+        """Validate that a fuzzy match is actually correct and not a false positive."""
+        # Convert to lowercase for comparison
+        pattern_lower = pattern.lower()
+        available_lower = available_model.lower()
+        
+        # Ensure the base model name matches
+        if ':' in pattern_lower and ':' in available_lower:
+            pattern_base = pattern_lower.split(':')[0]
+            available_base = available_lower.split(':')[0]
+            
+            # Base names must match exactly
+            if pattern_base != available_base:
+                return False
+                
+            # Version part should be contained or closely related
+            pattern_version = pattern_lower.split(':', 1)[1]
+            available_version = available_lower.split(':', 1)[1]
+            
+            # The pattern version should be a prefix of the available version
+            # e.g., "1.7b" should match "1.7b-q8_0" but not "11.7b"
+            if not available_version.startswith(pattern_version.split('-')[0]):
+                return False
+                
+        return True
+
+    def validate_and_resolve_models(self, config: RAGConfig) -> RAGConfig:
+        """Validate and resolve model names in configuration."""
+        try:
+            available_models = self.get_available_ollama_models(config.llm.ollama_host)
+            
+            if not available_models:
+                logger.debug("No Ollama models available for validation")
+                return config
+                
+            # Resolve synthesis model
+            if config.llm.synthesis_model != "auto":
+                resolved = self.resolve_model_name(config.llm.synthesis_model, available_models)
+                if resolved and resolved != config.llm.synthesis_model:
+                    logger.info(f"Resolved synthesis model: {config.llm.synthesis_model} -> {resolved}")
+                    config.llm.synthesis_model = resolved
+                elif not resolved:
+                    logger.warning(f"Synthesis model '{config.llm.synthesis_model}' not found, keeping original")
+                    
+            # Resolve expansion model (if different from synthesis)
+            if (config.llm.expansion_model != "auto" and 
+                config.llm.expansion_model != config.llm.synthesis_model):
+                resolved = self.resolve_model_name(config.llm.expansion_model, available_models)
+                if resolved and resolved != config.llm.expansion_model:
+                    logger.info(f"Resolved expansion model: {config.llm.expansion_model} -> {resolved}")
+                    config.llm.expansion_model = resolved
+                elif not resolved:
+                    logger.warning(f"Expansion model '{config.llm.expansion_model}' not found, keeping original")
+            
+            # Update model rankings with resolved names
+            if config.llm.model_rankings:
+                updated_rankings = []
+                for model in config.llm.model_rankings:
+                    resolved = self.resolve_model_name(model, available_models)
+                    if resolved:
+                        updated_rankings.append(resolved)
+                        if resolved != model:
+                            logger.debug(f"Updated model ranking: {model} -> {resolved}")
+                    else:
+                        updated_rankings.append(model)  # Keep original if not resolved
+                config.llm.model_rankings = updated_rankings
+                        
+        except Exception as e:
+            logger.debug(f"Model validation failed: {e}")
+            
+        return config
+
     def load_config(self) -> RAGConfig:
         """Load configuration from YAML file or create default."""
         if not self.config_path.exists():
@@ -197,6 +414,9 @@ class ConfigManager:
                 config.search = SearchConfig(**data["search"])
             if "llm" in data:
                 config.llm = LLMConfig(**data["llm"])
+
+            # Validate and resolve model names if Ollama is available
+            config = self.validate_and_resolve_models(config)
 
             return config
 

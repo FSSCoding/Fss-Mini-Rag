@@ -5,6 +5,40 @@ setlocal enabledelayedexpansion
 REM Enable colors and unicode for modern Windows
 chcp 65001 >nul 2>&1
 
+REM Check for command line arguments
+set "HEADLESS_MODE=false"
+if "%1"=="--headless" (
+    set "HEADLESS_MODE=true"
+    echo 🤖 Running in headless mode - using defaults for automation
+) else if "%1"=="--help" (
+    goto show_help
+) else if "%1"=="-h" (
+    goto show_help
+)
+
+goto start_installation
+
+:show_help
+echo.
+echo FSS-Mini-RAG Windows Installation Script
+echo.
+echo Usage:
+echo   install_windows.bat           # Interactive installation
+echo   install_windows.bat --headless   # Automated installation for agents/CI
+echo   install_windows.bat --help       # Show this help
+echo.
+echo Headless mode options:
+echo   • Uses existing virtual environment if available
+echo   • Installs core dependencies only
+echo   • Skips AI model downloads
+echo   • Skips interactive prompts and tests  
+echo   • Perfect for agent automation and CI/CD pipelines
+echo.
+pause
+exit /b 0
+
+:start_installation
+
 echo.
 echo ╔══════════════════════════════════════════════════╗
 echo ║            FSS-Mini-RAG Windows Installer       ║
@@ -21,11 +55,15 @@ echo.
 echo 💡 Note: You'll be asked before downloading any models
 echo.
 
-set /p "continue=Begin installation? [Y/n]: "
-if /i "!continue!"=="n" (
-    echo Installation cancelled.
-    pause
-    exit /b 0
+if "!HEADLESS_MODE!"=="true" (
+    echo Headless mode: Beginning installation automatically
+) else (
+    set /p "continue=Begin installation? [Y/n]: "
+    if /i "!continue!"=="n" (
+        echo Installation cancelled.
+        pause
+        exit /b 0
+    )
 )
 
 REM Get script directory
@@ -203,11 +241,16 @@ REM Offer interactive tutorial
 echo 🧪 Quick Test Available:
 echo    Test FSS-Mini-RAG with a small sample project (takes ~30 seconds)
 echo.
-set /p "run_test=Run interactive tutorial now? [Y/n]: "
-if /i "!run_test!" NEQ "n" (
-    call :run_tutorial
-) else (
+if "!HEADLESS_MODE!"=="true" (
+    echo Headless mode: Skipping interactive tutorial
     echo 📚 You can run the tutorial anytime with: rag.bat
+) else (
+    set /p "run_test=Run interactive tutorial now? [Y/n]: "
+    if /i "!run_test!" NEQ "n" (
+        call :run_tutorial
+    ) else (
+        echo 📚 You can run the tutorial anytime with: rag.bat
+    )
 )
 
 echo.
@@ -245,7 +288,12 @@ curl -s http://localhost:11434/api/version >nul 2>&1
 if errorlevel 1 (
     echo 🟡 Ollama installed but not running
     echo.
-    set /p "start_ollama=Start Ollama server now? [Y/n]: "
+    if "!HEADLESS_MODE!"=="true" (
+        echo Headless mode: Starting Ollama server automatically
+        set "start_ollama=y"
+    ) else (
+        set /p "start_ollama=Start Ollama server now? [Y/n]: "
+    )
     if /i "!start_ollama!" NEQ "n" (
         echo 🚀 Starting Ollama server...
         start /b ollama serve
@@ -273,7 +321,12 @@ if errorlevel 1 (
     echo    • qwen3:0.6b    - Lightweight and fast (~500MB)  
     echo    • qwen3:4b      - Higher quality but slower (~2.5GB)
     echo.
-    set /p "install_model=Download qwen3:1.7b model now? [Y/n]: "
+    if "!HEADLESS_MODE!"=="true" (
+        echo Headless mode: Skipping model download
+        set "install_model=n"
+    ) else (
+        set /p "install_model=Download qwen3:1.7b model now? [Y/n]: "
+    )
     if /i "!install_model!" NEQ "n" (
         echo 📥 Downloading qwen3:1.7b model...
         echo    This may take 5-10 minutes depending on your internet speed

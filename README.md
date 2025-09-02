@@ -147,7 +147,167 @@ That's it. No external dependencies, no configuration required, no PhD in comput
 
 ## Installation Options
 
-### Recommended: Full Installation
+### 🎯 Copy & Paste Installation (Guaranteed to Work) 
+
+Perfect for beginners - these commands work on any fresh Ubuntu, Windows, or Mac system:
+
+**Fresh Ubuntu/Debian System:**
+```bash
+# Install required system packages
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv git curl
+
+# Clone and setup FSS-Mini-RAG
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+
+# Create isolated Python environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Optional: Install Ollama for best search quality (secure method)
+curl -fsSL https://ollama.com/install.sh -o /tmp/ollama-install.sh
+# Verify it's a shell script (basic safety check)
+file /tmp/ollama-install.sh | grep -q "shell script" && chmod +x /tmp/ollama-install.sh && /tmp/ollama-install.sh
+rm -f /tmp/ollama-install.sh
+ollama serve &
+sleep 3
+ollama pull nomic-embed-text
+
+# Ready to use!
+./rag-mini index /path/to/your/project
+./rag-mini search /path/to/your/project "your search query"
+```
+
+**Fresh CentOS/RHEL/Fedora System:**
+```bash
+# Install required system packages
+sudo dnf install -y python3 python3-pip python3-venv git curl
+
+# Clone and setup FSS-Mini-RAG
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+
+# Create isolated Python environment  
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Optional: Install Ollama for best search quality (secure method)
+curl -fsSL https://ollama.com/install.sh -o /tmp/ollama-install.sh
+# Verify it's a shell script (basic safety check)
+file /tmp/ollama-install.sh | grep -q "shell script" && chmod +x /tmp/ollama-install.sh && /tmp/ollama-install.sh
+rm -f /tmp/ollama-install.sh
+ollama serve &
+sleep 3
+ollama pull nomic-embed-text
+
+# Ready to use!
+./rag-mini index /path/to/your/project
+./rag-mini search /path/to/your/project "your search query"
+```
+
+**Fresh macOS System:**
+```bash
+# Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install required packages
+brew install python3 git curl
+
+# Clone and setup FSS-Mini-RAG
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+
+# Create isolated Python environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Optional: Install Ollama for best search quality (secure method)
+curl -fsSL https://ollama.com/install.sh -o /tmp/ollama-install.sh
+# Verify it's a shell script (basic safety check)
+file /tmp/ollama-install.sh | grep -q "shell script" && chmod +x /tmp/ollama-install.sh && /tmp/ollama-install.sh
+rm -f /tmp/ollama-install.sh
+ollama serve &
+sleep 3
+ollama pull nomic-embed-text
+
+# Ready to use!
+./rag-mini index /path/to/your/project  
+./rag-mini search /path/to/your/project "your search query"
+```
+
+**Fresh Windows System:**
+```cmd
+REM Install Python (if not installed)
+REM Download from: https://python.org/downloads (ensure "Add to PATH" is checked)
+REM Install Git from: https://git-scm.com/download/win
+
+REM Clone and setup FSS-Mini-RAG
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+
+REM Create isolated Python environment
+python -m venv .venv
+.venv\Scripts\activate.bat
+
+REM Install Python dependencies  
+pip install -r requirements.txt
+
+REM Optional: Install Ollama for best search quality
+REM Download from: https://ollama.com/download
+REM Run installer, then:
+ollama serve
+REM In new terminal:
+ollama pull nomic-embed-text
+
+REM Ready to use!
+rag.bat index C:\path\to\your\project
+rag.bat search C:\path\to\your\project "your search query"
+```
+
+**What these commands do:**
+- **System packages**: Install Python 3.8+, pip (package manager), venv (virtual environments), git (version control), curl (downloads)
+- **Clone repository**: Download FSS-Mini-RAG source code to your computer
+- **Virtual environment**: Create isolated Python space (prevents conflicts with system Python)
+- **Dependencies**: Install required Python libraries (pandas, numpy, lancedb, etc.)  
+- **Ollama (optional)**: AI model server for best search quality - works offline and free
+- **Model download**: Get high-quality embedding model for semantic search
+- **Ready to use**: Index any folder and search through it semantically
+
+### ⚡ For Agents & CI/CD: Headless Installation
+
+Perfect for automated deployments, agents, and CI/CD pipelines:
+
+**Linux/macOS:**
+```bash
+./install_mini_rag.sh --headless
+# Automated installation with sensible defaults
+# No interactive prompts, perfect for scripts
+```
+
+**Windows:**
+```cmd
+install_windows.bat --headless
+# Automated installation with sensible defaults  
+# No interactive prompts, perfect for scripts
+```
+
+**What headless mode does:**
+- Uses existing virtual environment if available
+- Installs core dependencies only (light mode)
+- Downloads embedding model if Ollama is available
+- Skips interactive prompts and tests
+- Perfect for agent automation and CI/CD pipelines
+
+### 🚀 Recommended: Full Installation
 
 **Linux/macOS:**
 ```bash
@@ -159,24 +319,6 @@ That's it. No external dependencies, no configuration required, no PhD in comput
 ```cmd
 install_windows.bat
 # Handles Python setup, dependencies, works reliably
-```
-
-### Experimental: Copy & Run (May Not Work)
-
-**Linux/macOS:**
-```bash
-# Copy folder anywhere and try to run directly
-./rag-mini index ~/my-project
-# Auto-setup will attempt to create environment
-# Falls back with clear instructions if it fails
-```
-
-**Windows:**
-```cmd
-# Copy folder anywhere and try to run directly
-rag.bat index C:\my-project
-# Auto-setup will attempt to create environment
-# Falls back with clear instructions if it fails
 ```
 
 ### Manual Setup
