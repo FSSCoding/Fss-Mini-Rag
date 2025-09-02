@@ -396,16 +396,23 @@ class UpdateChecker:
     def restart_application(self):
         """Restart the application after update."""
         try:
-            # Get the current script path
-            # sys.argv[0]  # Unused variable removed
+            # Sanitize arguments to prevent command injection
+            safe_argv = [sys.executable]
+            for arg in sys.argv[1:]:  # Skip sys.argv[0] (script name)
+                # Only allow safe arguments - alphanumeric, dashes, dots, slashes
+                if isinstance(arg, str) and len(arg) < 200:  # Reasonable length limit
+                    # Simple whitelist of safe characters
+                    import re
+                    if re.match(r'^[a-zA-Z0-9._/-]+$', arg):
+                        safe_argv.append(arg)
 
-            # Restart with the same arguments
+            # Restart with sanitized arguments
             if sys.platform.startswith("win"):
                 # Windows
-                subprocess.Popen([sys.executable] + sys.argv)
+                subprocess.Popen(safe_argv)
             else:
                 # Unix-like systems
-                os.execv(sys.executable, [sys.executable] + sys.argv)
+                os.execv(sys.executable, safe_argv)
 
         except Exception:
             # If restart fails, just exit gracefully
