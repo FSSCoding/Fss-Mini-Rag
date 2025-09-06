@@ -81,22 +81,26 @@ FSS-Mini-RAG offers **two distinct experiences** optimized for different use cas
 
 **Step 1: Install**
 ```bash
-# Linux/macOS
-./install_mini_rag.sh
+# Clone the repository
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
 
-# Windows  
-install_windows.bat
+# Install using pip (creates global rag-mini command)
+python3 -m venv .venv
+source .venv/bin/activate    # Linux/macOS
+# .venv\Scripts\activate     # Windows
+pip install -e .
 ```
 
 **Step 2: Start Using**
 ```bash
-# Beginners: Interactive interface
-./rag-tui                    # Linux/macOS
-rag.bat                      # Windows
+# Navigate to any project and search
+cd ~/my-project
+rag-mini init .              # Index current project
+rag-mini search . "authentication logic"
 
-# Experienced users: Direct commands
-./rag-mini index ~/project   # Index your project
-./rag-mini search ~/project "your query"
+# Or use the legacy interface
+./rag-tui                    # Interactive interface
 ```
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.
