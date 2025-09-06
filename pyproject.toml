@@ -38,8 +38,34 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mini-rag"
+name = "fss-mini-rag"
 version = "2.1.0"
+description = "Educational RAG system that actually works! Two modes: fast synthesis for quick answers, deep exploration for learning."
+authors = [
+    {name = "Brett Fox", email = "brett@fsscoding.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+keywords = ["rag", "search", "ai", "llm", "embeddings", "semantic-search", "code-search"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Tools",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/FSSCoding/Fss-Mini-Rag"
+Repository = "https://github.com/FSSCoding/Fss-Mini-Rag"
+Issues = "https://github.com/FSSCoding/Fss-Mini-Rag/issues"
 
 [project.scripts]
 rag-mini = "mini_rag.cli:cli"

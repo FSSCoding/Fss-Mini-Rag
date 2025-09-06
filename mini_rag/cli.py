@@ -84,7 +84,7 @@ def show_index_guidance(query_path: Path, found_index_path: Path) -> None:
     console.print()
 
 
-@click.group()
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 @click.option("--quiet", "-q", is_flag=True, help="Suppress output")
 def cli(verbose: bool, quiet: bool):
@@ -106,7 +106,7 @@ def cli(verbose: bool, quiet: bool):
         logging.getLogger().setLevel(logging.ERROR)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--path",
     "-p",
@@ -155,7 +155,8 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
         ) as progress:
             # Initialize embedder
             task = progress.add_task("[cyan]Loading embedding model...", total=None)
-            embedder = CodeEmbedder(model_name=model)
+            # Use default model if None is passed
+            embedder = CodeEmbedder(model_name=model) if model else CodeEmbedder()
             progress.update(task, completed=True)
 
             # Create indexer
@@ -190,7 +191,7 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("query")
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option("--top-k", "-k", type=int, default=10, help="Maximum results to show")
@@ -336,7 +337,7 @@ def search(
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 def stats(path: str):
     """Show index statistics."""
@@ -406,7 +407,7 @@ def stats(path: str):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 def debug_schema(path: str):
     """Debug vector database schema and sample data."""
@@ -476,7 +477,7 @@ def debug_schema(path: str):
         console.print(f"[red]Error: {e}[/red]")
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option(
     "--delay",
@@ -569,7 +570,7 @@ def watch(path: str, delay: float, silent: bool):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("function_name")
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option("--top-k", "-k", type=int, default=5, help="Maximum results")
@@ -591,7 +592,7 @@ def find_function(function_name: str, path: str, top_k: int):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("class_name")
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option("--top-k", "-k", type=int, default=5, help="Maximum results")
@@ -613,7 +614,7 @@ def find_class(class_name: str, path: str, top_k: int):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 def update(path: str):
     """Update index for changed files."""
@@ -643,7 +644,7 @@ def update(path: str):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--show-code", "-c", is_flag=True, help="Show example code")
 def info(show_code: bool):
     """Show information about Mini RAG."""
@@ -697,7 +698,7 @@ rag-mini stats"""
         console.print(syntax)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option("--port", type=int, default=7777, help="Server port")
 def server(path: str, port: int):
@@ -724,7 +725,7 @@ def server(path: str, port: int):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option("--port", type=int, default=7777, help="Server port")
 @click.option("--discovery", "-d", is_flag=True, help="Run codebase discovery analysis")

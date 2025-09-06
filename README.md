@@ -3,6 +3,29 @@
 > **A lightweight, educational RAG system that actually works**  
 > *Built for beginners who want results, and developers who want to understand how RAG really works*
 
+## 🚀 **Quick Start - Install in 30 Seconds**
+
+**Linux/macOS** (tested on Ubuntu 22.04, macOS 13+):
+```bash
+curl -fsSL https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.sh | bash
+```
+
+**Windows** (tested on Windows 10/11):
+```powershell
+iwr https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.ps1 -UseBasicParsing | iex
+```
+
+**Then immediately start using it:**
+```bash
+# Create your first RAG index
+rag-mini init
+
+# Search your codebase  
+rag-mini search "authentication logic"
+```
+
+*These installers automatically handle dependencies and provide helpful guidance if anything goes wrong.*
+
 ## Demo
 
 ![FSS-Mini-RAG Demo](recordings/fss-mini-rag-demo-20250812_161410.gif)
@@ -109,16 +132,22 @@ source .venv/bin/activate    # Linux/macOS
 source .venv/bin/activate
 ```
 
-**Step 2: Start Using**
+**Step 2: Create an Index & Start Using**
 ```bash
-# Navigate to any project and search
+# Navigate to any project and create an index
 cd ~/my-project
-rag-mini init -p .           # Index current project  
-rag-mini search -p . "authentication logic"
+rag-mini init                # Create index for current directory
+# OR: rag-mini init -p /path/to/project  (specify path)
 
-# Or use the legacy interface (from installation directory)
-./rag-tui                    # Interactive interface
+# Now search your codebase
+rag-mini search "authentication logic"
+rag-mini search "how does login work"
+
+# Or use the interactive interface (from installation directory)  
+./rag-tui                    # Interactive TUI interface
 ```
+
+> **💡 Global Command**: After installation, `rag-mini` works from anywhere. It includes intelligent path detection to find nearby indexes and guide you to the right location.
 
 That's it. No external dependencies, no configuration required, no PhD in computer science needed.
 
@@ -168,9 +197,54 @@ That's it. No external dependencies, no configuration required, no PhD in comput
 
 ## Installation Options
 
-### 🎯 Copy & Paste Installation (Guaranteed to Work) 
+### 🚀 One-Line Installers (Recommended)
 
-Perfect for beginners - these commands work on any fresh Ubuntu, Windows, or Mac system:
+**The easiest way to install FSS-Mini-RAG** - these scripts automatically handle uv, pipx, or pip:
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.sh | bash
+```
+
+**Windows PowerShell:**
+```powershell
+iwr https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.ps1 -UseBasicParsing | iex
+```
+
+*These scripts install uv (fast package manager) when possible, fall back to pipx, then pip. No Python knowledge required!*
+
+### 📦 Manual Installation Methods
+
+**With uv (fastest, ~2-3 seconds):**
+```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install FSS-Mini-RAG
+uv tool install fss-mini-rag
+```
+
+**With pipx (clean, isolated):**
+```bash
+# pipx keeps tools isolated from your system Python
+pipx install fss-mini-rag
+```
+
+**With pip (classic):**
+```bash
+pip install --user fss-mini-rag
+```
+
+**Single file (no Python knowledge needed):**
+Download the latest `rag-mini.pyz` from [releases](https://github.com/FSSCoding/Fss-Mini-Rag/releases) and run:
+```bash
+python rag-mini.pyz --help
+python rag-mini.pyz init
+python rag-mini.pyz search "your query"
+```
+
+### 🎯 Development Installation (From Source)
+
+Perfect for contributors or if you want the latest features:
 
 **Fresh Ubuntu/Debian System:**
 ```bash

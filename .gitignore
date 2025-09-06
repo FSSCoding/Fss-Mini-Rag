@@ -74,6 +74,8 @@ config.local.yml
 test_output/
 temp_test_*/
 .test_*
+test_environments/
+test_results_*.json
 
 # Backup files
 *.bak
