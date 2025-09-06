@@ -85,10 +85,11 @@ FSS-Mini-RAG offers **two distinct experiences** optimized for different use cas
 git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
 cd Fss-Mini-Rag
 
-# Install using pip (creates global rag-mini command)
+# Install dependencies and package
 python3 -m venv .venv
 source .venv/bin/activate    # Linux/macOS
 # .venv\Scripts\activate     # Windows
+pip install -r requirements.txt
 pip install .
 ```
 
