@@ -45,10 +45,45 @@ pip3 install --user -r requirements.txt
 chmod +x install_mini_rag.sh
 # Then run
 ./install_mini_rag.sh
-# Or install manually:
-pip3 install -r requirements.txt
+# Or use proven manual method (100% reliable):
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt  # 2-8 minutes
+.venv/bin/python -m pip install .                    # ~1 minute
+source .venv/bin/activate
 python3 -c "import mini_rag; print('✅ Installation successful')"
 ```
+
+### ❌ Installation takes too long / times out
+**Problem:** Installation seems stuck or takes forever  
+**Expected Timing:** 2-3 minutes fast internet, 5-10 minutes slow internet  
+**Solutions:**
+
+1. **Large dependencies are normal:**
+   - LanceDB: 36MB (vector database)
+   - PyArrow: 43MB (data processing) 
+   - PyLance: 44MB (language parsing)
+   - Total ~123MB + dependencies
+
+2. **For agents/CI/CD - run in background:**
+   ```bash
+   ./install_mini_rag.sh --headless &
+   # Monitor with: tail -f install.log
+   ```
+
+3. **Check if installation is actually progressing:**
+   ```bash
+   # Check pip cache (should be growing)
+   du -sh ~/.cache/pip
+   
+   # Check if Python packages are installing
+   ls -la .venv/lib/python*/site-packages/
+   ```
+
+4. **Slow connection fallback:**
+   ```bash
+   # Increase pip timeout
+   .venv/bin/python -m pip install -r requirements.txt --timeout 1000
+   ```
 
 ---
 

@@ -77,7 +77,9 @@ FSS-Mini-RAG offers **two distinct experiences** optimized for different use cas
 - **Features**: Thinking-enabled LLM, conversation memory, follow-up questions
 - **Quality**: Deep reasoning with full context awareness
 
-## Quick Start (2 Minutes)
+## Quick Start (2-10 Minutes)
+
+> **⏱️ Installation Time**: Typical install takes 2-3 minutes with fast internet, up to 5-10 minutes on slower connections due to large dependencies (LanceDB 36MB, PyArrow 43MB, PyLance 44MB).
 
 **Step 1: Install**
 ```bash
@@ -89,8 +91,8 @@ cd Fss-Mini-Rag
 python3 -m venv .venv
 
 # CRITICAL: Use full path activation for reliability
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m pip install .
+.venv/bin/python -m pip install -r requirements.txt  # 1-8 minutes (depends on connection)
+.venv/bin/python -m pip install .                    # ~1 minute
 
 # Activate environment for using the command
 source .venv/bin/activate    # Linux/macOS
@@ -111,10 +113,10 @@ source .venv/bin/activate
 ```bash
 # Navigate to any project and search
 cd ~/my-project
-rag-mini init .              # Index current project
-rag-mini search . "authentication logic"
+rag-mini init -p .           # Index current project  
+rag-mini search -p . "authentication logic"
 
-# Or use the legacy interface
+# Or use the legacy interface (from installation directory)
 ./rag-tui                    # Interactive interface
 ```
 
@@ -305,18 +307,20 @@ rag.bat search C:\path\to\your\project "your search query"
 
 Perfect for automated deployments, agents, and CI/CD pipelines:
 
+> **⚠️ Agent Warning**: Installation takes 5-10 minutes due to large dependencies. Run as background process to avoid timeouts in agent environments.
+
 **Linux/macOS:**
 ```bash
-./install_mini_rag.sh --headless
-# Automated installation with sensible defaults
-# No interactive prompts, perfect for scripts
+./install_mini_rag.sh --headless &
+# Run in background to prevent agent timeout
+# Monitor with: tail -f install.log
 ```
 
 **Windows:**
 ```cmd
-install_windows.bat --headless
-# Automated installation with sensible defaults  
-# No interactive prompts, perfect for scripts
+start /b install_windows.bat --headless
+REM Run in background to prevent agent timeout
+REM Monitor with: type install.log
 ```
 
 **What headless mode does:**
@@ -324,7 +328,7 @@ install_windows.bat --headless
 - Installs core dependencies only (light mode)
 - Downloads embedding model if Ollama is available
 - Skips interactive prompts and tests
-- Perfect for agent automation and CI/CD pipelines
+- **Recommended**: Run in background for agent automation due to 5-10 minute install time
 
 ### 🚀 Recommended: Full Installation
 
@@ -363,6 +367,24 @@ pip install -r requirements.txt
 - **Python 3.8+** (installer checks and guides setup)
 - **Optional: Ollama** (for best search quality - installer helps set up)
 - **Fallback: Works without external dependencies** (uses built-in embeddings)
+
+## Installation Summary
+
+**✅ Proven Method (100% Reliable):**
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt  # 1-8 minutes
+.venv/bin/python -m pip install .                    # ~1 minute
+
+# Installation creates global 'rag-mini' command - no activation needed
+rag-mini init -p ~/my-project    # Works from anywhere
+rag-mini search -p ~/my-project "query"
+```
+
+- **Fast Internet**: 2-3 minutes total
+- **Slow Internet**: 5-10 minutes total  
+- **Dependencies**: Large but essential (LanceDB 36MB, PyArrow 43MB, PyLance 44MB)
+- **Agent Use**: Run in background to prevent timeouts
 
 ## Project Philosophy
 

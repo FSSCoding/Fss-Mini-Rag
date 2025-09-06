@@ -1,25 +1,12 @@
-# Lightweight Mini RAG - Ollama Edition
-# Removed: torch, transformers, sentence-transformers (5.2GB+ saved)
-
-# Core vector database and data handling
-lancedb>=0.5.0
-pandas>=2.0.0
-numpy>=1.24.0
-pyarrow>=14.0.0
-
-# File monitoring and system utilities
-watchdog>=3.0.0
-requests>=2.28.0
-
-# CLI interface and output
-click>=8.1.0
-rich>=13.0.0
-
-# Configuration management
-PyYAML>=6.0.0
-
-# Text search utilities (lightweight)
-rank-bm25>=0.2.2
-
-# System monitoring
+# Lightweight Mini RAG - Simplified versions
+lancedb
+pandas
+numpy
+pyarrow
+watchdog
+requests
+click
+rich
+PyYAML
+rank-bm25
 psutil

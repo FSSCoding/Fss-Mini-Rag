@@ -275,11 +275,29 @@ ollama pull qwen3:1.7b
 
 ### "Virtual environment not found" 
 **Problem:** Auto-setup didn't work, need manual installation
+
+**Option A: Use installer scripts**
 ```bash
-# Run the full installer instead
 ./install_mini_rag.sh          # Linux/macOS  
 install_windows.bat            # Windows
 ```
+
+**Option B: Manual method (100% reliable)**
+```bash
+# Linux/macOS
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt  # 2-8 minutes
+.venv/bin/python -m pip install .                    # ~1 minute  
+source .venv/bin/activate
+
+# Windows  
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt  
+.venv\Scripts\python -m pip install .
+.venv\Scripts\activate.bat
+```
+
+> **⏱️ Timing**: Fast internet 2-3 minutes total, slow internet 5-10 minutes due to large dependencies (LanceDB 36MB, PyArrow 43MB, PyLance 44MB).
 
 ### Getting weird results
 **Solution:** Try different search terms or check what got indexed

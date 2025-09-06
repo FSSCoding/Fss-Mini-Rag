@@ -110,6 +110,10 @@ def check_and_warn_venv(script_name: str = "script", force_exit: bool = False) -
     Returns:
         True if in correct venv, False otherwise
     """
+    # Skip venv warning if running through global wrapper
+    if os.environ.get("FSS_MINI_RAG_GLOBAL_WRAPPER"):
+        return True
+        
     is_correct, message = check_correct_venv()
 
     if not is_correct:

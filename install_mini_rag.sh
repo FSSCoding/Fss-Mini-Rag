@@ -9,6 +9,8 @@ HEADLESS_MODE=false
 if [[ "$1" == "--headless" ]]; then
     HEADLESS_MODE=true
     echo "🤖 Running in headless mode - using defaults for automation"
+    echo "⚠️  WARNING: Installation may take 5-10 minutes due to large dependencies"
+    echo "💡 For agents: Run as background process to avoid timeouts"
 elif [[ "$1" == "--help" || "$1" == "-h" ]]; then
     echo ""
     echo "FSS-Mini-RAG Installation Script"
@@ -956,12 +958,115 @@ main() {
     setup_desktop_icon
     
     if test_installation; then
+        install_global_wrapper
         show_completion
     else
         print_error "Installation test failed"
         echo "Please check error messages and try again."
         exit 1
     fi
+}
+
+# Install global wrapper script for system-wide access
+install_global_wrapper() {
+    print_info "Installing global rag-mini command..."
+    
+    # Create the wrapper script
+    cat > /tmp/rag-mini-wrapper << 'EOF'
+#!/bin/bash
+# FSS-Mini-RAG Global Wrapper Script
+# Automatically handles virtual environment activation
+
+# Find the installation directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Common installation paths to check
+INSTALL_PATHS=(
+    "/opt/fss-mini-rag"
+    "/usr/local/lib/fss-mini-rag"
+    "$(dirname "$SCRIPT_DIR")/lib/fss-mini-rag"
+    "$HOME/.local/lib/fss-mini-rag"
+)
+
+# Add current directory if it looks like an FSS-Mini-RAG installation
+if [ -f "$(pwd)/.venv/bin/rag-mini" ] && [ -f "$(pwd)/requirements.txt" ]; then
+    INSTALL_PATHS+=("$(pwd)")
+fi
+
+# Find the actual installation
+FSS_MINI_RAG_HOME=""
+for path in "${INSTALL_PATHS[@]}"; do
+    if [ -f "$path/.venv/bin/rag-mini" ] && [ -f "$path/requirements.txt" ]; then
+        FSS_MINI_RAG_HOME="$path"
+        break
+    fi
+done
+
+# If not found in standard paths, try to find it
+if [ -z "$FSS_MINI_RAG_HOME" ]; then
+    # Try to find by looking for the venv with rag-mini
+    FSS_MINI_RAG_HOME=$(find /opt /usr/local /home -maxdepth 4 -name ".venv" -type d 2>/dev/null | while read venv_dir; do
+        if [ -f "$venv_dir/bin/rag-mini" ] && [ -f "$(dirname "$venv_dir")/requirements.txt" ]; then
+            dirname "$venv_dir"
+            break
+        fi
+    done | head -1)
+fi
+
+# Error if still not found
+if [ -z "$FSS_MINI_RAG_HOME" ] || [ ! -f "$FSS_MINI_RAG_HOME/.venv/bin/rag-mini" ]; then
+    echo "❌ FSS-Mini-RAG installation not found!"
+    echo ""
+    echo "Expected to find .venv/bin/rag-mini in one of:"
+    printf "  %s\n" "${INSTALL_PATHS[@]}"
+    echo ""
+    echo "Please reinstall FSS-Mini-RAG:"
+    echo "  ./install_mini_rag.sh"
+    exit 1
+fi
+
+# Activate virtual environment and run rag-mini with all arguments
+cd "$FSS_MINI_RAG_HOME"
+source .venv/bin/activate
+
+# Suppress virtual environment warnings since we handle activation
+export FSS_MINI_RAG_GLOBAL_WRAPPER=1
+exec .venv/bin/rag-mini "$@"
+EOF
+
+    # Install the wrapper globally
+    if [[ "$HEADLESS_MODE" == "true" ]] || [[ -w "/usr/local/bin" ]]; then
+        # Headless mode or we have write permissions - install directly
+        sudo cp /tmp/rag-mini-wrapper /usr/local/bin/rag-mini
+        sudo chmod +x /usr/local/bin/rag-mini
+        print_success "✅ Global rag-mini command installed"
+        echo -e "${CYAN}You can now use 'rag-mini' from anywhere on your system!${NC}"
+    else
+        # Ask user permission for system-wide installation
+        echo ""
+        echo -e "${YELLOW}Install rag-mini globally?${NC}"
+        echo "This will allow you to run 'rag-mini' from anywhere on your system."
+        echo ""
+        echo -n "Install globally? [Y/n]: "
+        read -r install_global
+        
+        if [[ ! $install_global =~ ^[Nn]$ ]]; then
+            if sudo cp /tmp/rag-mini-wrapper /usr/local/bin/rag-mini && sudo chmod +x /usr/local/bin/rag-mini; then
+                print_success "✅ Global rag-mini command installed"
+                echo -e "${CYAN}You can now use 'rag-mini' from anywhere on your system!${NC}"
+            else
+                print_error "❌ Failed to install global command"
+                echo -e "${YELLOW}You can still use rag-mini from the installation directory${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Skipped global installation${NC}"
+            echo -e "${CYAN}You can use rag-mini from the installation directory${NC}"
+        fi
+    fi
+    
+    # Clean up
+    rm -f /tmp/rag-mini-wrapper
+    echo ""
 }
 
 # Run main function

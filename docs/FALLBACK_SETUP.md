@@ -2,32 +2,38 @@
 
 This RAG system can operate in three modes:
 
-## 🚀 **Mode 1: Ollama Only (Recommended - Lightweight)**
+## 🚀 **Mode 1: Standard Installation (Recommended)**
 ```bash
-pip install -r requirements-light.txt
-# Requires: ollama serve running with nomic-embed-text model
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt  # 2-8 minutes
+.venv/bin/python -m pip install .                    # ~1 minute
+source .venv/bin/activate
 ```
-- **Size**: ~426MB total  
-- **Performance**: Fastest (leverages Ollama)
-- **Network**: Uses local Ollama server
+- **Size**: ~123MB total (LanceDB 36MB + PyArrow 43MB + PyLance 44MB)  
+- **Performance**: Excellent hybrid embedding system
+- **Timing**: 2-3 minutes fast internet, 5-10 minutes slow internet
 
-## 🔄 **Mode 2: Hybrid (Best of Both Worlds)** 
+## 🔄 **Mode 2: Light Installation (Alternative)** 
 ```bash
-pip install -r requirements-full.txt  
-# Works with OR without Ollama
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-light.txt  # If available
+.venv/bin/python -m pip install .
+source .venv/bin/activate
 ```
-- **Size**: ~3GB total (includes ML fallback)
-- **Resilience**: Automatic fallback if Ollama unavailable
-- **Performance**: Ollama speed when available, ML fallback when needed
+- **Size**: ~426MB total (includes basic dependencies only)
+- **Requires**: Ollama server running locally
+- **Use case**: Minimal installations, edge devices
 
-## 🛡️ **Mode 3: ML Only (Maximum Compatibility)**
+## 🛡️ **Mode 3: Full Installation (Maximum Features)**
 ```bash
-pip install -r requirements-full.txt
-# Disable Ollama fallback in config
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-full.txt  # If available
+.venv/bin/python -m pip install .
+source .venv/bin/activate
 ```
-- **Size**: ~3GB total
-- **Compatibility**: Works anywhere, no external dependencies
-- **Use case**: Offline environments, embedded systems
+- **Size**: ~3GB total (includes all ML fallbacks)
+- **Compatibility**: Works anywhere, all features enabled  
+- **Use case**: Offline environments, complete feature set
 
 ## 🔧 **Configuration**
 

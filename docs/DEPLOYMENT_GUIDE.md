@@ -132,7 +132,10 @@ pip install --upgrade pip
 # Clone and install FSS-Mini-RAG
 git clone https://github.com/your-repo/fss-mini-rag
 cd fss-mini-rag
-pip install -r requirements.txt
+
+# Install dependencies (5-15 minutes due to compilation)
+python -m pip install -r requirements.txt  # Large downloads + ARM compilation
+python -m pip install .                    # ~1 minute
 
 # Quick start
 python -m mini_rag index /storage/emulated/0/Documents/myproject
@@ -371,8 +374,8 @@ install_windows.bat
 # Raspberry Pi
 ./install_mini_rag.sh
 
-# Android (Termux)
-pkg install python git && pip install -r requirements.txt
+# Android (Termux) - 5-15 minutes due to ARM compilation
+pkg install python git && python -m pip install -r requirements.txt && python -m pip install .
 
 # Any Docker platform
 docker run -it fss-mini-rag

@@ -10,6 +10,8 @@ set "HEADLESS_MODE=false"
 if "%1"=="--headless" (
     set "HEADLESS_MODE=true"
     echo 🤖 Running in headless mode - using defaults for automation
+    echo ⚠️  WARNING: Installation may take 5-10 minutes due to large dependencies
+    echo 💡 For agents: Run as background process to avoid timeouts
 ) else if "%1"=="--help" (
     goto show_help
 ) else if "%1"=="-h" (
