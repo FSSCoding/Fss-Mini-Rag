@@ -38,6 +38,52 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 
+def find_nearby_index(start_path: Path = None) -> Optional[Path]:
+    """
+    Find .mini-rag index in current directory or up to 2 levels up.
+    
+    Args:
+        start_path: Starting directory to search from (default: current directory)
+        
+    Returns:
+        Path to directory containing .mini-rag, or None if not found
+    """
+    if start_path is None:
+        start_path = Path.cwd()
+    
+    current = start_path.resolve()
+    
+    # Search current directory and up to 2 levels up
+    for level in range(3):  # 0, 1, 2 levels up
+        rag_dir = current / ".mini-rag"
+        if rag_dir.exists() and rag_dir.is_dir():
+            return current
+        
+        # Move up one level
+        parent = current.parent
+        if parent == current:  # Reached filesystem root
+            break
+        current = parent
+    
+    return None
+
+
+def show_index_guidance(query_path: Path, found_index_path: Path) -> None:
+    """Show helpful guidance when index is found in a different location."""
+    relative_path = found_index_path.relative_to(Path.cwd()) if found_index_path != Path.cwd() else Path(".")
+    
+    console.print(f"\n[yellow]📍 Found FSS-Mini-RAG index in:[/yellow] [blue]{found_index_path}[/blue]")
+    console.print(f"[dim]Current directory:[/dim] [dim]{query_path}[/dim]")
+    console.print()
+    console.print("[green]🚀 To search the index, navigate there first:[/green]")
+    console.print(f"   [bold]cd {relative_path}[/bold]")
+    console.print(f"   [bold]rag-mini search 'your query here'[/bold]")
+    console.print()
+    console.print("[cyan]💡 Or specify the path directly:[/cyan]")  
+    console.print(f"   [bold]rag-mini search -p {found_index_path} 'your query here'[/bold]")
+    console.print()
+
+
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 @click.option("--quiet", "-q", is_flag=True, help="Suppress output")
@@ -153,7 +199,7 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
 )
 @click.option("--lang", multiple=True, help="Filter by language (python, javascript, etc.)")
 @click.option("--show-content", "-c", is_flag=True, help="Show code content in results")
-@click.option("--show-per", is_flag=True, help="Show performance metrics")
+@click.option("--show-perf", is_flag=True, help="Show performance metrics")
 def search(
     query: str,
     path: str,
@@ -166,10 +212,21 @@ def search(
     """Search codebase using semantic similarity."""
     project_path = Path(path).resolve()
 
-    # Check if indexed
+    # Check if indexed at specified path
     rag_dir = project_path / ".mini-rag"
     if not rag_dir.exists():
-        console.print("[red]Error:[/red] Project not indexed. Run 'rag-mini init' first.")
+        # Try to find nearby index if searching from current directory
+        if path == ".":
+            nearby_index = find_nearby_index()
+            if nearby_index:
+                show_index_guidance(project_path, nearby_index)
+                sys.exit(0)
+        
+        console.print(f"[red]Error:[/red] No FSS-Mini-RAG index found at [blue]{project_path}[/blue]")
+        console.print()
+        console.print("[yellow]💡 To create an index:[/yellow]")
+        console.print(f"   [bold]rag-mini init -p {project_path}[/bold]")
+        console.print()
         sys.exit(1)
 
     # Get performance monitor
@@ -714,7 +771,18 @@ def status(path: str, port: int, discovery: bool):
             console.print(f"   • Error: {e}")
     else:
         console.print("   • Status: [red]❌ Not indexed[/red]")
-        console.print("   • Run 'rag-mini init' to initialize")
+        
+        # Try to find nearby index if checking current directory  
+        if path == ".":
+            nearby_index = find_nearby_index()
+            if nearby_index:
+                console.print(f"   • Found index in: [blue]{nearby_index}[/blue]")
+                relative_path = nearby_index.relative_to(Path.cwd()) if nearby_index != Path.cwd() else Path(".")
+                console.print(f"   • Use: [bold]cd {relative_path} && rag-mini status[/bold]")
+            else:
+                console.print("   • Run 'rag-mini init' to initialize")
+        else:
+            console.print("   • Run 'rag-mini init' to initialize")
 
     # Check server status
     console.print("\n[bold]🚀 Server Status:[/bold]")
