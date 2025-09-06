@@ -89,7 +89,7 @@ cd Fss-Mini-Rag
 python3 -m venv .venv
 source .venv/bin/activate    # Linux/macOS
 # .venv\Scripts\activate     # Windows
-pip install -e .
+pip install .
 ```
 
 **Step 2: Start Using**
