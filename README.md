@@ -89,8 +89,21 @@ cd Fss-Mini-Rag
 python3 -m venv .venv
 source .venv/bin/activate    # Linux/macOS
 # .venv\Scripts\activate     # Windows
-pip install -r requirements.txt
-pip install .
+
+# Use python -m pip for reliability (handles externally-managed-environment errors)
+python -m pip install -r requirements.txt
+python -m pip install .
+```
+
+**If you get "externally-managed-environment" error:**
+```bash
+# Verify virtual environment is active
+which python  # Should show .venv/bin/python
+python -m pip --version  # Should show .venv path
+
+# If still failing, use override (safe in virtual environment)
+python -m pip install -r requirements.txt --break-system-packages
+python -m pip install . --break-system-packages
 ```
 
 **Step 2: Start Using**
