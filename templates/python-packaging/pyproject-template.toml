@@ -1,0 +1,102 @@
+# Reusable pyproject.toml template for Python packages
+# Copy this file and customize the marked sections
+
+[tool.isort]
+profile = "black"
+line_length = 95
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+# CUSTOMIZE: Update paths for your project structure
+src_paths = ["your_package", "tests", "examples", "scripts"]
+known_first_party = ["your_package"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+skip = [".venv", ".venv-linting", "__pycache__", ".git"]
+skip_glob = ["*.egg-info/*", "build/*", "dist/*"]
+
+[tool.black]
+line-length = 95
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | \.venv-linting
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# CUSTOMIZE: Package name (will be on PyPI)
+name = "your-package-name"
+# CUSTOMIZE: Version number
+version = "1.0.0"
+# CUSTOMIZE: Description
+description = "A brief description of your package"
+authors = [
+    # CUSTOMIZE: Your details
+    {name = "Your Name", email = "your.email@example.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+# CUSTOMIZE: Minimum Python version
+requires-python = ">=3.8"
+# CUSTOMIZE: Keywords for PyPI search
+keywords = ["keyword1", "keyword2", "category"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    # CUSTOMIZE: Add relevant topics
+    "Topic :: Software Development :: Tools",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+# CUSTOMIZE: Update with your repository URLs
+Homepage = "https://github.com/YOUR-USERNAME/YOUR-REPO"
+Repository = "https://github.com/YOUR-USERNAME/YOUR-REPO"
+Issues = "https://github.com/YOUR-USERNAME/YOUR-REPO/issues"
+
+[project.scripts]
+# CUSTOMIZE: CLI command name and entry point
+your-cli-command = "your_package.cli:main"
+
+[tool.setuptools]
+# CUSTOMIZE: List your package directories
+packages = ["your_package"]
+
+# Optional: Dependencies section (if you have requirements.txt, you might add this)
+# [project.dependencies]
+# requests = ">=2.25.0"
+# click = ">=8.0.0"
+
+# Optional: Development dependencies
+# [project.optional-dependencies]
+# dev = [
+#     "pytest>=6.0.0",
+#     "black>=22.0.0",
+#     "isort>=5.0.0",
+#     "mypy>=1.0.0",
+# ]

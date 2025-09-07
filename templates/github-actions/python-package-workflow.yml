@@ -1,0 +1,261 @@
+# Reusable GitHub Actions Workflow for Python Package Publishing
+# Copy this to .github/workflows/ and customize the marked sections
+
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install build twine cibuildwheel
+    
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.16
+      env:
+        # CUSTOMIZE: Adjust Python versions for your project
+        CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
+        CIBW_SKIP: "pp* *musllinux* *i686* *win32*"
+        CIBW_ARCHS_MACOS: "x86_64 arm64"
+        CIBW_ARCHS_LINUX: "x86_64"
+        CIBW_ARCHS_WINDOWS: "AMD64"
+        # CUSTOMIZE: Update command name for your CLI tool
+        CIBW_TEST_COMMAND: "your-cli-command --help"
+        CIBW_TEST_SKIP: "*arm64*"  # Skip tests on arm64 due to emulation issues
+        
+    - name: Build source distribution
+      if: matrix.os == 'ubuntu-latest'
+      run: python -m build --sdist
+    
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
+        
+    - name: Upload source distribution
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: sdist
+        path: ./dist/*.tar.gz
+
+  build-zipapp:
+    name: Build zipapp (.pyz)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+    
+    - name: Build zipapp
+      run: python scripts/build_pyz.py
+    
+    - name: Upload zipapp
+      uses: actions/upload-artifact@v4
+      with:
+        name: zipapp
+        # CUSTOMIZE: Update .pyz filename for your project
+        path: dist/your-tool.pyz
+
+  test-installation:
+    name: Test installation methods
+    needs: [build-wheels, build-zipapp]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.8', '3.11', '3.12']
+        exclude:
+          # Reduce test matrix size
+          - os: windows-latest
+            python-version: '3.8'
+          - os: macos-latest
+            python-version: '3.8'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Download wheels
+      uses: actions/download-artifact@v4
+      with:
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/
+    
+    - name: Test wheel installation
+      shell: bash
+      run: |
+        # Find the appropriate wheel for this OS and Python version
+        wheel_file=$(ls wheelhouse/*.whl | head -1)
+        echo "Testing wheel: $wheel_file"
+        
+        # Install the wheel
+        python -m pip install "$wheel_file"
+        
+        # CUSTOMIZE: Update command name for your CLI tool
+        your-cli-command --help
+        echo "✅ Wheel installation test passed"
+    
+    - name: Download zipapp (Ubuntu only)
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/download-artifact@v4
+      with:
+        name: zipapp
+        path: ./
+    
+    - name: Test zipapp (Ubuntu only)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        # CUSTOMIZE: Update .pyz filename for your project
+        python your-tool.pyz --help
+        echo "✅ Zipapp test passed"
+
+  publish:
+    name: Publish to PyPI
+    needs: [build-wheels, test-installation]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment: release
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Prepare distribution files
+      run: |
+        mkdir -p dist/
+        cp wheels-*/**.whl dist/
+        cp sdist/*.tar.gz dist/
+        ls -la dist/
+    
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        skip-existing: true
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-wheels, build-zipapp, test-installation]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets/
+        
+        # CUSTOMIZE: Update .pyz filename for your project
+        cp your-tool.pyz release-assets/
+        
+        # Copy a few representative wheels
+        cp wheels-ubuntu-latest/*cp311*x86_64*.whl release-assets/ || true
+        cp wheels-windows-latest/*cp311*amd64*.whl release-assets/ || true
+        cp wheels-macos-*/*cp311*x86_64*.whl release-assets/ || true
+        cp wheels-macos-*/*cp311*arm64*.whl release-assets/ || true
+        
+        # Copy source distribution
+        cp sdist/*.tar.gz release-assets/
+        
+        ls -la release-assets/
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Simple changelog generation - you might want to use a dedicated action
+        echo "## Changes" > CHANGELOG.md
+        git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" >> CHANGELOG.md
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        cat CHANGELOG.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release-assets/*
+        body: |
+          ## Installation Options
+          
+          ### 🚀 One-line installers (Recommended)
+          
+          **Linux/macOS:**
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install.sh | bash
+          ```
+          
+          **Windows PowerShell:**
+          ```powershell
+          iwr https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install.ps1 -UseBasicParsing | iex
+          ```
+          
+          ### 📦 Manual installation
+          
+          **With uv (fastest):**
+          ```bash
+          uv tool install YOUR-PACKAGE-NAME
+          ```
+          
+          **With pipx:**
+          ```bash
+          pipx install YOUR-PACKAGE-NAME
+          ```
+          
+          **With pip:**
+          ```bash
+          pip install --user YOUR-PACKAGE-NAME
+          ```
+          
+          **Single file (no Python knowledge needed):**
+          Download `your-tool.pyz` and run with `python your-tool.pyz`
+          
+          ${{ steps.changelog.outputs.CHANGELOG }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
