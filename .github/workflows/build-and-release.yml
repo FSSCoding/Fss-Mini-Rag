@@ -48,14 +48,14 @@ jobs:
       run: python -m build --sdist
     
     - name: Upload wheels
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wheels-${{ matrix.os }}
         path: ./wheelhouse/*.whl
         
     - name: Upload source distribution
       if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sdist
         path: ./dist/*.tar.gz
@@ -81,7 +81,7 @@ jobs:
       run: python scripts/build_pyz.py
     
     - name: Upload zipapp
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: zipapp
         path: dist/rag-mini.pyz
@@ -110,7 +110,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     
     - name: Download wheels
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: wheels-${{ matrix.os }}
         path: ./wheelhouse/
@@ -131,7 +131,7 @@ jobs:
     
     - name: Download zipapp (Ubuntu only)
       if: matrix.os == 'ubuntu-latest'
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: zipapp
         path: ./
@@ -151,7 +151,7 @@ jobs:
     
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
     
     - name: Prepare distribution files
       run: |
@@ -178,7 +178,7 @@ jobs:
         fetch-depth: 0
     
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
     
     - name: Prepare release assets
       run: |
