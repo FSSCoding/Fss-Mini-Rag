@@ -185,10 +185,11 @@ class TestSmartRanking(unittest.TestCase):
         # Mock file stats for different modification times
         now = datetime.now()
 
-        def mock_stat_side_effect(file_path):
+        def mock_stat_side_effect(path_self=None):
             mock_stat_obj = MagicMock()
+            path_str = str(path_self) if path_self else ""
 
-            if "README" in str(file_path):
+            if "README" in path_str:
                 # Recent file (2 days ago)
                 recent_time = (now - timedelta(days=2)).timestamp()
                 mock_stat_obj.st_mtime = recent_time
@@ -199,8 +200,7 @@ class TestSmartRanking(unittest.TestCase):
 
             return mock_stat_obj
 
-        # Apply mock to Path.stat for each result
-        mock_stat.side_effect = lambda: mock_stat_side_effect("dummy")
+        mock_stat.side_effect = mock_stat_side_effect
 
         # Patch the Path constructor to return mocked paths
         with patch.object(Path, "stat", side_effect=mock_stat_side_effect):

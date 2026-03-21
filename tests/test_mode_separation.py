@@ -117,14 +117,16 @@ def process_login_request(username: str, password: str) -> dict:
         """Test that thinking mode cannot be toggled at runtime."""
         synthesizer = LLMSynthesizer(enable_thinking=False)
 
-        # Should not have public methods to toggle thinking
+        # Should not have public methods to toggle thinking at runtime
+        # (enable_thinking is a config attribute set at init, not a toggle method)
         thinking_methods = [
             method
             for method in dir(synthesizer)
-            if "thinking" in method.lower() and not method.startswith("_")
+            if "thinking" in method.lower()
+            and not method.startswith("_")
+            and callable(getattr(synthesizer, method, None))
         ]
 
-        # The only thinking-related attribute should be the readonly enable_thinking
         self.assertEqual(
             len(thinking_methods), 0, "Should not have public thinking toggle methods"
         )
