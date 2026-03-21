@@ -10,7 +10,7 @@
 
 **Linux/macOS:**
 ```bash
-./install_mini_rag.sh
+./install.sh
 ```
 
 **Windows:**
@@ -278,7 +278,7 @@ ollama pull qwen3:1.7b
 
 **Option A: Use installer scripts**
 ```bash
-./install_mini_rag.sh          # Linux/macOS  
+./install.sh          # Linux/macOS  
 install_windows.bat            # Windows
 ```
 

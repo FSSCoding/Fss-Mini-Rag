@@ -22,7 +22,7 @@ ollama serve
 **Problem:** Script files aren't executable  
 **Solution:**
 ```bash
-chmod +x rag-mini.py rag-tui.py install_mini_rag.sh
+chmod +x rag-mini.py rag-tui.py install.sh
 # Or run with python directly:
 python3 rag-mini.py --help
 ```
@@ -38,13 +38,13 @@ pip3 install --user -r requirements.txt
 ```
 
 ### ❌ Installation script fails
-**Problem:** `./install_mini_rag.sh` doesn't work  
+**Problem:** `./install.sh` doesn't work  
 **Solution:**
 ```bash
 # Make it executable first
-chmod +x install_mini_rag.sh
+chmod +x install.sh
 # Then run
-./install_mini_rag.sh
+./install.sh
 # Or use proven manual method (100% reliable):
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt  # 2-8 minutes
@@ -66,7 +66,7 @@ python3 -c "import mini_rag; print('✅ Installation successful')"
 
 2. **For agents/CI/CD - run in background:**
    ```bash
-   ./install_mini_rag.sh --headless &
+   ./install.sh --headless &
    # Monitor with: tail -f install.log
    ```
 

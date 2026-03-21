@@ -7,10 +7,10 @@
 
 | Platform | Status | AI Features | Installation | Notes |
 |----------|--------|-------------|--------------|-------|
-| **Linux** | ✅ Full | ✅ Full | `./install_mini_rag.sh` | Primary platform |
+| **Linux** | ✅ Full | ✅ Full | `./install.sh` | Primary platform |
 | **Windows** | ✅ Full | ✅ Full | `install_windows.bat` | Desktop shortcuts |
-| **macOS** | ✅ Full | ✅ Full | `./install_mini_rag.sh` | Works perfectly |
-| **Raspberry Pi** | ✅ Excellent | ✅ AI ready | `./install_mini_rag.sh` | ARM64 optimized |
+| **macOS** | ✅ Full | ✅ Full | `./install.sh` | Works perfectly |
+| **Raspberry Pi** | ✅ Excellent | ✅ AI ready | `./install.sh` | ARM64 optimized |
 | **Android (Termux)** | ✅ Good | 🟡 Limited | Manual install | Terminal interface |
 | **iOS (a-Shell)** | 🟡 Limited | ❌ Text only | Manual install | Sandbox limitations |
 | **Docker** | ✅ Excellent | ✅ Full | Dockerfile | Any platform |
@@ -20,7 +20,7 @@
 ### 🐧 **Linux** (Primary Platform)
 ```bash
 # Full installation with AI features
-./install_mini_rag.sh
+./install.sh
 
 # What you get:
 # ✅ Desktop shortcuts (.desktop files)
@@ -44,7 +44,7 @@ install_windows.bat
 ### 🍎 **macOS** (Excellent Support)
 ```bash
 # Same as Linux - works perfectly
-./install_mini_rag.sh
+./install.sh
 
 # Additional macOS optimizations:
 brew install python3           # If needed
@@ -70,7 +70,7 @@ brew install ollama           # For AI features
 ```bash
 # On Raspberry Pi OS (64-bit recommended)
 sudo apt update && sudo apt upgrade
-./install_mini_rag.sh
+./install.sh
 
 # The installer automatically detects ARM and optimizes:
 # ✅ Suggests lightweight models (qwen3:0.6b)
@@ -239,7 +239,7 @@ docker run -p 7777:7777 fss-mini-rag python -m mini_rag server
 **GitHub Codespaces:**
 ```bash
 # Works in any Codespace
-./install_mini_rag.sh
+./install.sh
 # Perfect for searching your workspace
 ```
 
@@ -363,7 +363,7 @@ llm:
 ### Desktop Users
 ```bash
 # Linux/macOS
-./install_mini_rag.sh
+./install.sh
 
 # Windows  
 install_windows.bat
@@ -372,7 +372,7 @@ install_windows.bat
 ### Edge/Mobile Users
 ```bash
 # Raspberry Pi
-./install_mini_rag.sh
+./install.sh
 
 # Android (Termux) - 5-15 minutes due to ARM compilation
 pkg install python git && python -m pip install -r requirements.txt && python -m pip install .

@@ -207,7 +207,7 @@ flowchart TD
     
     Fail[💔 Graceful Failure] --> Help[📖 Show Installation Help]
     Help --> Manual[🔧 Manual Instructions]
-    Help --> Installer[📋 ./install_mini_rag.sh]
+    Help --> Installer[📋 ./install.sh]
     Help --> Issues[🚨 Common Issues + Solutions]
     
     Ready --> Index[📁 Index Projects]

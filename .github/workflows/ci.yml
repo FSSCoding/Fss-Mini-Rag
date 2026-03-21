@@ -71,7 +71,7 @@ jobs:
         # Run the actual test suite
         if [ -f "tests/test_fixes.py" ]; then
           echo "$OK Running comprehensive test suite..."
-          python tests/test_fixes.py || echo "$SKIP Test suite completed with warnings"
+          python tests/test_fixes.py
         else
           echo "$SKIP test_fixes.py not found, running basic tests only"
         fi
@@ -121,18 +121,15 @@ jobs:
         "
       shell: bash
         
-    - name: Test CLI commands
+    - name: Test CLI entry point
       run: |
-        # Set OS-appropriate emojis
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          OK="[OK]"
+          source .venv/Scripts/activate
         else
-          OK="✅"
+          source .venv/bin/activate
         fi
-        
-        echo "$OK Checking for CLI files..."
-        ls -la rag* || dir rag* || echo "CLI files may not be present"
-        echo "$OK CLI check completed - this is expected in CI environment"
+        pip install -e .
+        rag-mini --help
       shell: bash
 
   security-scan:
@@ -147,13 +144,10 @@ jobs:
         python-version: '3.11'
         
     - name: Install security tools
-      run: |
-        pip install bandit || echo "Failed to install bandit"
-        
+      run: pip install bandit
+
     - name: Run security scan
-      run: |
-        # Scan for security issues (non-failing)
-        bandit -r . -ll || echo "✅ Security scan completed"
+      run: bandit -r mini_rag/ -ll
           
   auto-update-check:
     runs-on: ubuntu-latest

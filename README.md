@@ -385,31 +385,7 @@ Perfect for automated deployments, agents, and CI/CD pipelines:
 
 **Linux/macOS:**
 ```bash
-./install_mini_rag.sh --headless &
-# Run in background to prevent agent timeout
-# Monitor with: tail -f install.log
-```
-
-**Windows:**
-```cmd
-start /b install_windows.bat --headless
-REM Run in background to prevent agent timeout
-REM Monitor with: type install.log
-```
-
-**What headless mode does:**
-- Uses existing virtual environment if available
-- Installs core dependencies only (light mode)
-- Downloads embedding model if Ollama is available
-- Skips interactive prompts and tests
-- **Recommended**: Run in background for agent automation due to 5-10 minute install time
-
-### 🚀 Recommended: Full Installation
-
-**Linux/macOS:**
-```bash
-./install_mini_rag.sh
-# Handles Python setup, dependencies, optional AI models
+curl -fsSL https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.sh | bash
 ```
 
 **Windows:**
