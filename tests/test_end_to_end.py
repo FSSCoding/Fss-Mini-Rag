@@ -25,11 +25,10 @@ CORPUS_DIR = Path(__file__).parent / "corpus"
 
 
 def _fast_embedder():
-    """Create a hash-only embedder for fast testing (no network calls)."""
-    emb = OllamaEmbedder(
-        base_url="http://localhost:1",  # unreachable = instant hash fallback
-        enable_fallback=False,
-    )
+    """Create embedder for testing. Uses whatever is available."""
+    emb = OllamaEmbedder()
+    if emb.mode == "unavailable":
+        pytest.skip("No embedding provider available for end-to-end tests")
     return emb
 
 
@@ -129,7 +128,7 @@ def indexed_corpus(tmp_path_factory):
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest)
 
-    # Index with hash-based embeddings for speed (no Ollama dependency)
+    # Index with auto-detected embedder
     embedder = _fast_embedder()
     indexer = ProjectIndexer(project_dir, embedder=embedder)
     stats = indexer.index_project()

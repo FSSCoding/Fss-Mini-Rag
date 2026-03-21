@@ -36,7 +36,7 @@ class OllamaEmbedder:
     """Embedding provider with OpenAI-compatible endpoint support.
 
     Supports LM Studio, vLLM, OpenAI, Ollama, and any OpenAI-compatible
-    embedding API. Falls back to local ML models or hash embeddings.
+    embedding API. Falls back to local ML models if available.
     """
 
     def __init__(
@@ -55,8 +55,8 @@ class OllamaEmbedder:
             model_name: Model name for the embedding API
             base_url: Base URL for API (LM Studio: localhost:1234/v1,
                       Ollama: localhost:11434, OpenAI: api.openai.com/v1)
-            enable_fallback: Whether to use ML/hash fallback if API fails
-            provider: "openai" (OpenAI-compatible), "ollama", "ml", "hash"
+            enable_fallback: Whether to use ML fallback if API fails
+            provider: "openai" (OpenAI-compatible), "ollama", "ml"
             api_key: API key (required for OpenAI, optional for local)
             embedding_dim: Expected embedding dimension
         """
@@ -71,21 +71,21 @@ class OllamaEmbedder:
         # State tracking
         self.ollama_available = False
         self.fallback_embedder = None
-        self.mode = "unknown"  # "openai", "ollama", "fallback", or "hash"
+        self.mode = "unavailable"  # "openai", "ollama", "fallback", or "unavailable"
 
         self._initialize_providers()
 
     def _initialize_providers(self):
-        """Initialize embedding providers in priority order."""
-        if self.provider == "hash":
-            self.mode = "hash"
-            logger.info("Using hash-based embeddings (configured)")
-            return
+        """Initialize embedding providers in priority order.
 
+        Tries configured provider first, then ML fallback.
+        If nothing works, mode stays "unavailable" and semantic search
+        is skipped (BM25 keyword search still works).
+        """
         if self.provider == "ml":
             if self._try_ml_fallback():
                 return
-            self.mode = "hash"
+            logger.warning("ML provider requested but not available")
             return
 
         # Try the configured provider (openai-compatible or ollama)
@@ -108,12 +108,17 @@ class OllamaEmbedder:
             except Exception as e:
                 logger.debug(f"OpenAI-compatible endpoint not available: {e}")
 
-        # Fallback chain
+        # ML fallback
         if self._try_ml_fallback():
             return
 
-        self.mode = "hash"
-        logger.info("Using hash-based embeddings (all providers unavailable)")
+        # Nothing available - semantic search will be skipped, BM25 only
+        self.mode = "unavailable"
+        logger.warning(
+            "No embedding provider available. Semantic search disabled. "
+            "BM25 keyword search will still work. "
+            "Start an embedding server (e.g. LM Studio) for full search quality."
+        )
 
     def _try_ml_fallback(self) -> bool:
         """Attempt to initialize ML fallback. Returns True if successful."""
@@ -351,7 +356,11 @@ class OllamaEmbedder:
         elif self.mode == "fallback" and self.fallback_embedder:
             return self._get_fallback_embedding(text)
         else:
-            return self._hash_embedding(text)
+            raise RuntimeError(
+                "No embedding provider available. "
+                "Start an embedding server (e.g. LM Studio) or install "
+                "sentence-transformers for local ML embeddings."
+            )
 
     def _get_openai_embedding(self, text: str) -> np.ndarray:
         """Get embedding from OpenAI-compatible endpoint."""
@@ -376,10 +385,10 @@ class OllamaEmbedder:
             logger.error(f"OpenAI-compatible API failed: {e}")
             if self.enable_fallback and self.fallback_embedder:
                 return self._get_fallback_embedding(text)
-            return self._hash_embedding(text)
+            raise RuntimeError(f"Embedding API request failed: {e}")
         except (ValueError, KeyError, IndexError) as e:
             logger.error(f"Invalid response from embedding API: {e}")
-            return self._hash_embedding(text)
+            raise RuntimeError(f"Invalid embedding API response: {e}")
 
     def _get_ollama_embedding(self, text: str) -> np.ndarray:
         """Get embedding from Ollama API."""
@@ -401,15 +410,14 @@ class OllamaEmbedder:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Ollama API request failed: {e}")
-            # Degrade gracefully - try fallback if available
-            if self.mode == "ollama" and self.enable_fallback and self.fallback_embedder:
+            if self.enable_fallback and self.fallback_embedder:
                 logger.info("Falling back to ML embeddings due to Ollama failure")
-                self.mode = "fallback"  # Switch mode temporarily
+                self.mode = "fallback"
                 return self._get_fallback_embedding(text)
-            return self._hash_embedding(text)
+            raise RuntimeError(f"Ollama API request failed: {e}")
         except (ValueError, KeyError) as e:
             logger.error(f"Invalid response from Ollama: {e}")
-            return self._hash_embedding(text)
+            raise RuntimeError(f"Invalid Ollama response: {e}")
 
     def _get_fallback_embedding(self, text: str) -> np.ndarray:
         """Get embedding from ML fallback."""
@@ -458,31 +466,7 @@ class OllamaEmbedder:
 
         except Exception as e:
             logger.error(f"Fallback embedding failed: {e}")
-            return self._hash_embedding(text)
-
-    def _hash_embedding(self, text: str) -> np.ndarray:
-        """Generate deterministic hash-based embedding as fallback."""
-        import hashlib
-
-        # Create deterministic hash
-        hash_obj = hashlib.sha256(text.encode("utf-8"))
-        hash_bytes = hash_obj.digest()
-
-        # Convert to numbers and normalize
-        hash_nums = np.frombuffer(hash_bytes, dtype=np.uint8)
-
-        # Expand to target dimension using repetition
-        while len(hash_nums) < self.embedding_dim:
-            hash_nums = np.concatenate([hash_nums, hash_nums])
-
-        # Take exactly the dimension we need
-        embedding = hash_nums[: self.embedding_dim].astype(np.float32)
-
-        # Normalize to [-1, 1] range
-        embedding = (embedding / 127.5) - 1.0
-
-        logger.debug(f"Using hash fallback embedding for text: {text[:50]}...")
-        return embedding
+            raise RuntimeError(f"ML fallback embedding failed: {e}")
 
     def embed_code(self, code: Union[str, List[str]], language: str = "python") -> np.ndarray:
         """
@@ -607,10 +591,7 @@ class OllamaEmbedder:
                 return index, result
             except Exception as e:
                 logger.error(f"Failed to embed content at index {index}: {e}")
-                # Return with hash fallback
-                result = file_dict.copy()
-                result["embedding"] = self._hash_embedding(content)
-                return index, result
+                raise
 
         # Create indexed items to preserve order
         indexed_items = list(enumerate(file_contents))
@@ -661,7 +642,7 @@ class OllamaEmbedder:
         return self.embedding_dim
 
     def get_mode(self) -> str:
-        """Return current embedding mode: 'openai', 'ollama', 'fallback', or 'hash'."""
+        """Return current embedding mode: 'openai', 'ollama', 'fallback', or 'unavailable'."""
         return self.mode
 
     def get_status(self) -> Dict[str, Any]:
@@ -694,8 +675,8 @@ class OllamaEmbedder:
                 "method": f"ML Fallback ({status['fallback_model']})",
                 "status": "working",
             }
-        if mode == "hash":
-            return {"method": "Hash-based (basic similarity)", "status": "working"}
+        if mode == "unavailable":
+            return {"method": "No provider (BM25 keyword search only)", "status": "degraded"}
         return {"method": "Unknown", "status": "error"}
 
     def warmup(self):

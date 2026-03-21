@@ -65,7 +65,7 @@ class EmbeddingConfig:
     your provider. For Ollama, use base_url="http://localhost:11434/v1".
     """
 
-    provider: str = "openai"  # "openai" (OpenAI-compatible), "ollama", "ml", "hash"
+    provider: str = "openai"  # "openai" (OpenAI-compatible), "ollama", "ml"
     base_url: str = "http://localhost:1234/v1"  # LM Studio default
     model: str = "auto"  # Auto-detect from endpoint
     api_key: Optional[str] = None  # API key (if required by provider)
@@ -527,7 +527,7 @@ class ConfigManager:
                 "# Works with LM Studio, vLLM, OpenAI, or any compatible proxy",
                 "# For Ollama: set provider to 'ollama' and base_url to 'http://localhost:11434'",
                 "embedding:",
-                f"  provider: {config_dict['embedding']['provider']}  # 'openai', 'ollama', 'ml', 'hash'",
+                f"  provider: {config_dict['embedding']['provider']}  # 'openai', 'ollama', 'ml'",
                 f"  base_url: {config_dict['embedding']['base_url']}",
                 f"  model: {config_dict['embedding']['model']}",
                 f"  batch_size: {config_dict['embedding']['batch_size']}",

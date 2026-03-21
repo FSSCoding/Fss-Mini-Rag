@@ -9,12 +9,53 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import re
+
 import numpy as np
 import pandas as pd
 from rank_bm25 import BM25Okapi
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
+
+# CamelCase boundary pattern: split "getAuthManager" -> ["get", "auth", "manager"]
+_CAMEL_SPLIT = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def _tokenize_for_bm25(text: str) -> List[str]:
+    """Tokenize text for BM25 with code-aware splitting.
+
+    Splits on:
+    - Whitespace
+    - Underscores (snake_case -> [snake, case])
+    - CamelCase boundaries (getAuth -> [get, auth])
+    - Non-alphanumeric characters (dots, slashes, etc.)
+
+    Keeps original compound tokens alongside split parts for exact matching.
+    """
+    # Split on non-alphanumeric (except underscores), preserve case for camelCase
+    raw_tokens = re.split(r"[^a-zA-Z0-9_]+", text)
+
+    tokens = []
+    for token in raw_tokens:
+        if not token:
+            continue
+
+        # Keep the original token (lowered)
+        tokens.append(token.lower())
+
+        # Split snake_case
+        if "_" in token:
+            parts = [p.lower() for p in token.split("_") if p]
+            if len(parts) > 1:
+                tokens.extend(parts)
+
+        # Split camelCase (before lowering)
+        camel_parts = _CAMEL_SPLIT.split(token)
+        if len(camel_parts) > 1:
+            tokens.extend(p.lower() for p in camel_parts if p)
+
+    return tokens
 
 # Optional LanceDB import
 try:
@@ -180,8 +221,8 @@ class CodeSearcher:
                 # Create searchable text combining content, name, and type
                 searchable_text = f"{row['content']} {row['name'] or ''} {row['chunk_type']}"
 
-                # Tokenize for BM25 (simple word splitting)
-                tokens = searchable_text.lower().split()
+                # Tokenize for BM25 (code-aware splitting)
+                tokens = _tokenize_for_bm25(searchable_text)
 
                 self.chunk_texts.append(tokens)
                 self.chunk_ids.append(idx)
@@ -284,7 +325,7 @@ class CodeSearcher:
         if not self.bm25 or not self.chunk_texts:
             return []
 
-        query_tokens = query.lower().split()
+        query_tokens = _tokenize_for_bm25(query)
         scores = self.bm25.get_scores(query_tokens)
 
         # Get top_k indices by BM25 score
@@ -397,8 +438,8 @@ class CodeSearcher:
         result_lists = []
 
         # 1. Semantic search (vector similarity)
-        # Skip if embedder is in hash mode (random noise hurts fusion)
-        use_semantic = self.embedder.get_mode() != "hash"
+        # Skip semantic search if no embedding provider available
+        use_semantic = self.embedder.get_mode() not in ("unavailable", "hash")
 
         if use_semantic:
             query_embedding = self.embedder.embed_query(search_query)
