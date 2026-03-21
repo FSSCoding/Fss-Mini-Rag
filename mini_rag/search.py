@@ -404,11 +404,76 @@ class CodeSearcher:
         # Apply diversity constraints
         diverse_results = self._apply_diversity_constraints(hybrid_results, top_k)
 
+        # Consolidate results from same file (fill small gaps between chunks)
+        diverse_results = self._consolidate_same_file_results(diverse_results)
+
         # Add context if requested
         if include_context:
             diverse_results = self._add_context_to_results(diverse_results, results_df)
 
         return diverse_results
+
+    def _consolidate_same_file_results(
+        self, results: List[SearchResult], gap_threshold: int = 1
+    ) -> List[SearchResult]:
+        """
+        Merge adjacent or near-adjacent chunks from the same file into
+        contiguous passages. Follows the Fss-Rag gap-filling pattern.
+
+        When search returns chunks at lines [10-20] and [22-35] from the same
+        file, they represent one logical passage and should be merged for
+        better context.
+
+        Args:
+            results: Search results to consolidate
+            gap_threshold: Max gap in lines between chunks to merge (default 1)
+
+        Returns:
+            Consolidated results with merged adjacent chunks
+        """
+        if len(results) <= 1:
+            return results
+
+        # Group results by file
+        from collections import defaultdict
+        by_file = defaultdict(list)
+        standalone = []
+
+        for r in results:
+            by_file[r.file_path].append(r)
+
+        consolidated = []
+
+        for file_path, file_results in by_file.items():
+            if len(file_results) == 1:
+                consolidated.extend(file_results)
+                continue
+
+            # Sort by start_line
+            file_results.sort(key=lambda r: r.start_line)
+
+            # Merge adjacent chunks
+            merged = [file_results[0]]
+            for current in file_results[1:]:
+                prev = merged[-1]
+
+                # Check if chunks are adjacent or overlapping
+                gap = current.start_line - prev.end_line
+                if gap <= gap_threshold + 1:  # +1 because line N end and N+1 start = adjacent
+                    # Merge: combine content, extend range, keep best score
+                    prev.content = prev.content + "\n" + current.content
+                    prev.end_line = max(prev.end_line, current.end_line)
+                    prev.score = max(prev.score, current.score)
+                    if current.name and prev.name and current.name != prev.name:
+                        prev.name = f"{prev.name} + {current.name}"
+                else:
+                    merged.append(current)
+
+            consolidated.extend(merged)
+
+        # Re-sort by score (merging may have changed scores)
+        consolidated.sort(key=lambda r: r.score, reverse=True)
+        return consolidated
 
     def _smart_rerank(self, results: List[SearchResult]) -> List[SearchResult]:
         """
