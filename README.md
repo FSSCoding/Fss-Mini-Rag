@@ -1,9 +1,9 @@
 # FSS-Mini-RAG <img src="assets/Fss_Mini_Rag.png" alt="FSS-Mini-RAG Logo" width="40" height="40">
 
-> **A lightweight, educational RAG system that actually works**  
-> *Built for beginners who want results, and developers who want to understand how RAG really works*
+> **A lightweight, educational RAG system that actually works**
+> *Distilled from 2 years of building production RAG systems. Designed to be understood, modified, and used.*
 
-## 🚀 **Quick Start**
+## Quick Start
 
 ```bash
 git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
@@ -19,251 +19,143 @@ rag-mini init                          # Index current directory
 rag-mini search "authentication logic" # Search your codebase
 ```
 
-**Windows:** Use `python -m venv .venv` and `.venv\Scripts\activate.bat`, or run `install_windows.bat` for guided setup.
+**Windows:** Use `.venv\Scripts\activate.bat`, or run `install_windows.bat` for guided setup.
 
-> **Install time:** 2-5 minutes depending on internet speed. Dependencies total ~120MB.
+> Install time: 2-5 minutes. Dependencies total ~120MB.
 
 ## Demo
 
 ![FSS-Mini-RAG Demo](recordings/fss-mini-rag-demo-20250812_161410.gif)
 
-*See it in action: index a project and search semantically in seconds*
-
-## How It Works
+## Architecture
 
 ```mermaid
-flowchart TD
-    Start([🚀 Start FSS-Mini-RAG]) --> Interface{Choose Interface}
-    
-    Interface -->|Beginners| TUI[🖥️ Interactive TUI<br/>./rag-tui]
-    Interface -->|Power Users| CLI[⚡ Advanced CLI<br/>./rag-mini <command>]
-    
-    TUI --> SelectFolder[📁 Select Folder to Index]
-    CLI --> SelectFolder
-    
-    SelectFolder --> Index[🔍 Index Documents<br/>Creates searchable database]
-    
-    Index --> Ready{📚 Ready to Search}
-    
-    Ready -->|Quick Answers| Search[🔍 Search Mode<br/>Fast semantic search]
-    Ready -->|Deep Analysis| Explore[🧠 Explore Mode<br/>AI-powered analysis]
-    
-    Search --> SearchResults[📋 Instant Results<br/>Ranked by relevance]
-    Explore --> ExploreResults[💬 AI Conversation<br/>Context + reasoning]
-    
-    SearchResults --> More{Want More?}
-    ExploreResults --> More
-    
-    More -->|Different Query| Ready
-    More -->|Advanced Features| CLI
-    More -->|Done| End([✅ Success!])
-    
-    CLI -.->|Full Power| AdvancedFeatures[⚡ Advanced Features:<br/>• Batch processing<br/>• Custom parameters<br/>• Automation scripts<br/>• Background server]
-    
-    style Start fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
-    style CLI fill:#fff9c4,stroke:#f57c00,stroke-width:3px
-    style AdvancedFeatures fill:#fff9c4,stroke:#f57c00,stroke-width:2px
-    style Search fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
-    style Explore fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
-    style End fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+flowchart LR
+    Files[Your Code] --> Chunker[Smart Chunker]
+    Chunker --> Embedder[Embedding API]
+    Embedder --> LanceDB[(LanceDB)]
+
+    Query[Search Query] --> Semantic[Semantic Search]
+    Query --> BM25[BM25 Full Index]
+    LanceDB --> Semantic
+    Semantic --> RRF[RRF Fusion]
+    BM25 --> RRF
+    RRF --> Results[Ranked Results]
 ```
 
-## What This Is
+**Dual-pipeline search**: Semantic and BM25 keyword search run independently against the full index, then merge via Reciprocal Rank Fusion. Keyword matches are found even when embeddings miss, and semantic matches are found even when keywords don't match exactly.
 
-FSS-Mini-RAG is a distilled, lightweight implementation of a production-quality RAG (Retrieval Augmented Generation) search system. Born from 2 years of building, refining, and tuning RAG systems - from enterprise-scale solutions handling 14,000 queries/second to lightweight implementations that anyone can install and understand.
+## Key Features
 
-**The Problem This Solves**: Most RAG implementations are either too simple (poor results) or too complex (impossible to understand and modify). This bridges that gap.
+### Search
+- **Independent semantic + BM25** with RRF fusion (no shortlist bottleneck)
+- **Code-aware tokenizer** - splits `snake_case` and `CamelCase` for better keyword matching
+- **Auto-calibrating score labels** - human-readable quality indicators (HIGH/GOOD/FAIR/LOW)
+- **Result consolidation** - adjacent chunks from the same file merged into passages
 
-## Two Powerful Modes
+### Chunking
+- **Python**: AST-based extraction with module headers, inter-function code, and docstrings
+- **Markdown**: Paragraph-based splitting with code block preservation and header hierarchy
+- **Section boundaries preserved** - regulatory/compliance documents stay properly separated
+- **File overview chunks** - one per file listing all functions/classes for "what's in this file" queries
 
-FSS-Mini-RAG offers **two distinct experiences** optimized for different use cases:
+### Embeddings
+- **OpenAI-compatible endpoint** (works with LM Studio, vLLM, OpenAI, or any proxy)
+- **Auto-detection** - queries `/v1/models` and selects the best embedding model
+- **Two profiles**: `precision` (MiniLM, literal matching) or `conceptual` (Nomic, semantic depth)
+- **No fake fallbacks** - if no provider is available, says so honestly (BM25 still works)
 
-### 🚀 **Synthesis Mode** - Fast & Consistent
+### Benchmarked
+
+Tested with A/B comparison across 3 embedding models on 2 collections:
+
+| Model | Dim | Index Speed | Precision | Profile |
+|-------|-----|-------------|-----------|---------|
+| MiniLM L6 v2 | 384 | 21 files/s | **100%** | precision (default) |
+| Nomic v1.5 | 768 | 12 files/s | 90% | conceptual |
+| Granite 107M | 384 | 17 files/s | 95% | precision |
+
+Search time: ~15-20ms per query (warm). Cold start: ~600ms.
+
+## Two Search Modes
+
+### Synthesis Mode - Fast Answers
 ```bash
-./rag-mini search ~/project "authentication logic" --synthesize
+rag-mini search "authentication logic" --synthesize
 ```
-- **Perfect for**: Quick answers, code discovery, fast lookups
-- **Speed**: Lightning fast responses (no thinking overhead)
-- **Quality**: Consistent, reliable results
 
-### 🧠 **Exploration Mode** - Deep & Interactive  
+### Exploration Mode - Deep Analysis
 ```bash
-./rag-mini explore ~/project
+rag-mini explore ~/project
 > How does authentication work in this codebase?
-> Why is the login function slow?
 > What security concerns should I be aware of?
 ```
-- **Perfect for**: Learning codebases, debugging, detailed analysis
-- **Features**: Thinking-enabled LLM, conversation memory, follow-up questions
-- **Quality**: Deep reasoning with full context awareness
 
-## Quick Start (2-10 Minutes)
+## Installation
 
-> **⏱️ Installation Time**: Typical install takes 2-3 minutes with fast internet, up to 5-10 minutes on slower connections due to large dependencies (LanceDB 36MB, PyArrow 43MB, PyLance 44MB).
-
-**Step 1: Install**
+### From Source (Recommended)
 ```bash
-# Clone the repository
 git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
 cd Fss-Mini-Rag
-
-# Install dependencies and package
 python3 -m venv .venv
-
-# CRITICAL: Use full path activation for reliability
-.venv/bin/python -m pip install -r requirements.txt  # 1-8 minutes (depends on connection)
-.venv/bin/python -m pip install .                    # ~1 minute
-
-# Activate environment for using the command
-source .venv/bin/activate    # Linux/macOS
-# .venv\Scripts\activate     # Windows
-```
-
-**If you get "externally-managed-environment" error:**
-```bash
-# Use direct path method (bypasses system restrictions entirely)
-.venv/bin/python -m pip install -r requirements.txt --break-system-packages
-.venv/bin/python -m pip install . --break-system-packages
-
-# Then activate for using the command
 source .venv/bin/activate
-```
-
-**Step 2: Create an Index & Start Using**
-```bash
-# Navigate to any project and create an index
-cd ~/my-project
-rag-mini init                # Create index for current directory
-# OR: rag-mini init -p /path/to/project  (specify path)
-
-# Now search your codebase
-rag-mini search "authentication logic"
-rag-mini search "how does login work"
-
-# Or use the interactive interface (from installation directory)  
-./rag-tui                    # Interactive TUI interface
-```
-
-> **💡 Global Command**: After installation, `rag-mini` works from anywhere. It includes intelligent path detection to find nearby indexes and guide you to the right location.
-
-That's it. No external dependencies, no configuration required, no PhD in computer science needed.
-
-## What Makes This Different
-
-### For Beginners
-- **Just works** - Zero configuration required
-- **Multiple interfaces** - TUI for learning, CLI for speed
-- **Educational** - Shows you CLI commands as you use the TUI
-- **Solid results** - Finds code by meaning, not just keywords
-
-### For Developers
-- **Hackable** - Clean, documented code you can actually modify
-- **Configurable** - YAML config for everything, or change the code directly
-- **Multiple embedding options** - Ollama, ML models, or hash-based
-- **Production patterns** - Streaming, batching, error handling, monitoring
-
-### For Learning
-- **Complete technical documentation** - How chunking, embedding, and search actually work
-- **Educational tests** - See the system in action with real examples
-- **No magic** - Every decision explained, every component documented
-
-## Usage Examples
-
-### Find Code by Concept
-```bash
-./rag-mini search ~/project "user authentication"
-# Finds: login functions, auth middleware, session handling, password validation
-```
-
-### Natural Language Queries  
-```bash
-./rag-mini search ~/project "error handling for database connections"
-# Finds: try/catch blocks, connection pool error handlers, retry logic
-```
-
-### Development Workflow
-```bash
-./rag-mini index ~/new-project              # Index once
-./rag-mini search ~/new-project "API endpoints"   # Search as needed
-./rag-mini status ~/new-project            # Check index health
-```
-
-![FSS-Mini-RAG Search Demo](recordings/fss-mini-rag-demo-20250812_160725.gif)
-
-*Advanced usage: semantic search with synthesis and exploration modes*
-
-## Installation Options
-
-### 🎯 From Source (Recommended)
-
-```bash
-git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
-cd Fss-Mini-Rag
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate.bat
 pip install -r requirements.txt
 pip install -e .
 ```
 
-### 📦 From PyPI (Coming Soon)
+### From PyPI (Coming Soon)
+> `pip install fss-mini-rag` will be available once published.
 
-> Package manager install (`pip install fss-mini-rag`) will be available once published to PyPI. See [Issue #10](https://gitea.bobai.com.au/BobAi/Fss-Rag-Mini/issues/10) for status.
+### Optional: Embedding Server
 
-### 🖥️ Windows Interactive Installer
+FSS-Mini-RAG works with any OpenAI-compatible embedding endpoint. Recommended: [LM Studio](https://lmstudio.ai/) with the MiniLM L6 v2 embedding model loaded.
 
-```cmd
-install_windows.bat
-```
-
-Guided setup with prompts, virtual environment creation, and dependency installation.
-
-### Optional: Install Ollama for Best Search Quality
-
-Ollama provides high-quality semantic embeddings. Without it, FSS-Mini-RAG falls back to hash-based embeddings (still works, just less accurate).
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull nomic-embed-text
-```
-
+Without an embedding server, BM25 keyword search still works - you just don't get semantic similarity.
 
 ## System Requirements
 
 - **Python 3.8+**
-- **Optional: Ollama** (for best search quality - without it, uses hash-based embeddings)
+- **Embedding server** (LM Studio, Ollama, vLLM, or OpenAI) for semantic search
 - Works on Linux, macOS, and Windows
 
-## Project Philosophy
+## Configuration
 
-This implementation prioritizes:
+Settings in `.mini-rag/config.yaml`:
 
-1. **Educational Value** - You can understand and modify every part
-2. **Practical Results** - Actually finds relevant code, not just keyword matches  
-3. **Zero Friction** - Works out of the box, configurable when needed
-4. **Real-world Patterns** - Production techniques in beginner-friendly code
+```yaml
+embedding:
+  provider: openai          # openai, ollama, or ml
+  base_url: http://localhost:1234/v1
+  model: auto               # auto-detects best available
+  profile: precision        # precision or conceptual
 
-## What's Inside
+chunking:
+  max_size: 2000            # characters per chunk
+  min_size: 150
 
-- **Hybrid embedding system** - Ollama → ML → Hash fallbacks
-- **Smart chunking** - Language-aware code parsing 
-- **Vector + keyword search** - Best of both worlds
-- **Streaming architecture** - Handles large codebases efficiently
-- **Multiple interfaces** - TUI, CLI, Python API, server mode
+server:
+  port: 7777
 
-## Next Steps
-
-- **New users**: Run `./rag-tui` (Linux/macOS) or `rag.bat` (Windows) for guided experience
-- **Developers**: Read [`TECHNICAL_GUIDE.md`](docs/TECHNICAL_GUIDE.md) for implementation details
-- **Contributors**: Clone the repo and run `make dev-install` for development setup
+search:
+  default_top_k: 10
+  enable_bm25: true
+```
 
 ## Documentation
 
-- **[Getting Started](docs/GETTING_STARTED.md)** - Get running in 5 minutes
-- **[Visual Diagrams](docs/DIAGRAMS.md)** - 📊 System flow charts and architecture diagrams
-- **[TUI Guide](docs/TUI_GUIDE.md)** - Complete walkthrough of the friendly interface  
-- **[Technical Guide](docs/TECHNICAL_GUIDE.md)** - How the system actually works
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Fix common issues
-- **[Beginner Glossary](docs/BEGINNER_GLOSSARY.md)** - Friendly terms and concepts
+- **[Getting Started](docs/GETTING_STARTED.md)** - First steps guide
+- **[Technical Guide](docs/TECHNICAL_GUIDE.md)** - Architecture and internals
+- **[Visual Diagrams](docs/DIAGRAMS.md)** - System flow charts
+- **[TUI Guide](docs/TUI_GUIDE.md)** - Interactive interface walkthrough
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Beginner Glossary](docs/BEGINNER_GLOSSARY.md)** - Plain-English terminology
+
+## Project Philosophy
+
+1. **Educational** - You can understand and modify every part
+2. **Practical** - Actually finds relevant code, not just keyword matches
+3. **Honest** - No fake fallbacks, clear error messages, benchmarked results
+4. **Hackable** - Clean code, YAML config, Python API
 
 ## License
 
@@ -271,4 +163,4 @@ MIT - Use it, learn from it, build on it.
 
 ---
 
-*Built by someone who got frustrated with RAG implementations that were either too simple to be useful or too complex to understand. This is the system I wish I'd found when I started.*
+*Distilled from production RAG systems handling 14,000 queries/second. Built by someone who got frustrated with RAG implementations that were either too simple to be useful or too complex to understand.*
