@@ -67,7 +67,7 @@ class EmbeddingConfig:
 
     provider: str = "openai"  # "openai" (OpenAI-compatible), "ollama", "ml", "hash"
     base_url: str = "http://localhost:1234/v1"  # LM Studio default
-    model: str = "text-embedding-nomic-embed-text-v1.5"  # LM Studio model name
+    model: str = "auto"  # Auto-detect from endpoint, or specify model name
     api_key: Optional[str] = None  # API key (if required by provider)
     embedding_dim: int = 768  # Embedding dimension
     batch_size: int = 32

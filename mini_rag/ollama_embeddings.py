@@ -41,7 +41,7 @@ class OllamaEmbedder:
 
     def __init__(
         self,
-        model_name: str = "text-embedding-nomic-embed-text-v1.5",
+        model_name: str = "auto",
         base_url: str = "http://localhost:1234/v1",
         enable_fallback: bool = True,
         provider: str = "openai",
@@ -128,14 +128,85 @@ class OllamaEmbedder:
             logger.warning(f"ML fallback failed: {e}")
             return False
 
+    def discover_models(self) -> Dict[str, List[str]]:
+        """Discover available models from the endpoint.
+
+        Queries GET /v1/models (OpenAI-compatible) or GET /api/tags (Ollama)
+        and classifies models as embedding or llm based on naming patterns.
+
+        Returns:
+            Dict with "embedding" and "llm" lists of model IDs.
+        """
+        embedding_models = []
+        llm_models = []
+
+        try:
+            headers = {}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            if self.provider == "ollama":
+                response = requests.get(
+                    f"{self.base_url}/api/tags", headers=headers, timeout=5
+                )
+                response.raise_for_status()
+                models = [m["name"] for m in response.json().get("models", [])]
+            else:
+                response = requests.get(
+                    f"{self.base_url}/models", headers=headers, timeout=5
+                )
+                response.raise_for_status()
+                models = [m["id"] for m in response.json().get("data", [])]
+
+            # Classify models
+            embedding_patterns = ("embed", "embedding", "bge-", "e5-", "gte-")
+            for model in models:
+                model_lower = model.lower()
+                if any(p in model_lower for p in embedding_patterns):
+                    embedding_models.append(model)
+                else:
+                    llm_models.append(model)
+
+        except Exception as e:
+            logger.debug(f"Model discovery failed: {e}")
+
+        return {"embedding": embedding_models, "llm": llm_models}
+
+    def _auto_select_embedding_model(self) -> Optional[str]:
+        """Auto-detect the best embedding model from the endpoint."""
+        discovered = self.discover_models()
+        embedding_models = discovered["embedding"]
+
+        if not embedding_models:
+            return None
+
+        # Prefer nomic, then bge, then whatever's first
+        for preferred in ("nomic", "bge", "e5", "gte", "minilm"):
+            for model in embedding_models:
+                if preferred in model.lower():
+                    return model
+
+        return embedding_models[0]
+
     def _verify_openai_connection(self):
-        """Verify OpenAI-compatible endpoint is reachable."""
+        """Verify OpenAI-compatible endpoint is reachable and find embedding model."""
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
+        # If model is "auto", discover available models
+        if self.model_name == "auto":
+            detected = self._auto_select_embedding_model()
+            if detected:
+                self.model_name = detected
+                logger.info(f"Auto-detected embedding model: {self.model_name}")
+            else:
+                raise ValueError(
+                    f"No embedding models found at {self.base_url}. "
+                    f"Load an embedding model (e.g. nomic-embed-text) in your server."
+                )
+
         try:
-            # Test with a minimal embedding request
             response = requests.post(
                 f"{self.base_url}/embeddings",
                 headers=headers,
@@ -144,7 +215,6 @@ class OllamaEmbedder:
             )
             response.raise_for_status()
             data = response.json()
-            # Verify response format
             if "data" in data and len(data["data"]) > 0:
                 emb = data["data"][0].get("embedding", [])
                 if emb:
