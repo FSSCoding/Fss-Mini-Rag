@@ -111,6 +111,10 @@ REPOSITORY_SUMMARY.md
 config-hash-test.yaml
 repo-review/
 .archive/
+working-documents/
+fss-mini-rag-prompts/
+.mini-rag/
+.venv-linting/
 
 # Analysis and scanning results (should not be committed)
 docs/live-analysis/

@@ -8,9 +8,9 @@
 
 | Command | Purpose | Example |
 |---------|---------|---------|
-| `rag-mini index <project_path>` | Index a project for search | `rag-mini index /MASTERFOLDER/Coding/Fss-Mini-Rag` |
-| `rag-mini search <project_path> "query"` | Semantic + keyword search | `rag-mini search /MASTERFOLDER/Coding/Fss-Mini-Rag "index"` |
-| `rag-mini status <project_path>` | Check project indexing status | `rag-mini status /MASTERFOLDER/Coding/Fss-Mini-Rag` |
+| `rag-mini index <project_path>` | Index a project for search | `rag-mini index ~/my-project` |
+| `rag-mini search <project_path> "query"` | Semantic + keyword search | `rag-mini search ~/my-project "index"` |
+| `rag-mini status <project_path>` | Check project indexing status | `rag-mini status ~/my-project` |
 
 ## When to Use RAG Search
 

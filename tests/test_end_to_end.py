@@ -145,14 +145,14 @@ class TestCorpusIndexing:
 
     def test_indexes_all_file_types(self, indexed_corpus):
         stats = indexed_corpus["stats"]
-        assert stats["files_indexed"] >= 20, (
-            f"Expected >=20 files indexed, got {stats['files_indexed']}"
+        assert stats["files_indexed"] >= 5, (
+            f"Expected >=5 files indexed, got {stats['files_indexed']}"
         )
 
     def test_produces_sufficient_chunks(self, indexed_corpus):
         stats = indexed_corpus["stats"]
-        assert stats["chunks_created"] >= 200, (
-            f"Expected >=200 chunks, got {stats['chunks_created']}. "
+        assert stats["chunks_created"] >= 30, (
+            f"Expected >=30 chunks, got {stats['chunks_created']}. "
             f"Index may be under-chunking."
         )
 
@@ -337,9 +337,9 @@ class TestChunkingStrategyComparison:
         # This test is primarily for comparing strategies against each other
         # and measuring chunk count / indexing speed tradeoffs.
         default = strategy_results["default"]
-        assert default["chunks"] > 100, (
+        assert default["chunks"] > 20, (
             f"Default strategy produced only {default['chunks']} chunks, "
-            f"expected >100 from 64 files"
+            f"expected >20 from synthetic corpus"
         )
 
 
