@@ -149,10 +149,12 @@ class CodeSearcher:
         """
         self.project_path = Path(project_path).resolve()
         self.rag_dir = self.project_path / ".mini-rag"
-        self.embedder = embedder or CodeEmbedder()
 
-        # Verify embedding model matches what was used to index
-        self._check_embedding_match()
+        # Use provided embedder, or create one matching the indexed model
+        if embedder:
+            self.embedder = embedder
+        else:
+            self.embedder = self._create_matching_embedder()
 
         # Load configuration and initialize query expander
         config_manager = ConfigManager(project_path)
@@ -168,34 +170,37 @@ class CodeSearcher:
         self._connect()
         self._build_bm25_index()
 
-    def _check_embedding_match(self):
-        """Verify the current embedder matches the model used to build the index."""
+    def _create_matching_embedder(self) -> CodeEmbedder:
+        """Create an embedder matching the model used to build the index.
+
+        Reads the manifest to find what model/provider was used for indexing,
+        then creates an embedder with those exact settings. Falls back to
+        auto-detection if manifest doesn't have embedding info.
+        """
         manifest_path = self.rag_dir / "manifest.json"
-        if not manifest_path.exists():
-            return
+        if manifest_path.exists():
+            try:
+                import json
+                with open(manifest_path, "r") as f:
+                    manifest = json.load(f)
 
-        try:
-            import json
-            with open(manifest_path, "r") as f:
-                manifest = json.load(f)
+                index_emb = manifest.get("embedding", {})
+                if index_emb.get("model") and index_emb.get("mode") != "unavailable":
+                    emb = CodeEmbedder(model_name=index_emb["model"])
+                    if emb.mode != "unavailable":
+                        logger.info(
+                            f"Using indexed model: {index_emb['model']} "
+                            f"(dim={emb.embedding_dim})"
+                        )
+                        return emb
+                    logger.warning(
+                        f"Index was built with {index_emb['model']} but it's "
+                        f"not available. Falling back to auto-detection."
+                    )
+            except Exception:
+                pass
 
-            index_emb = manifest.get("embedding", {})
-            if not index_emb:
-                return  # Old index without embedding info
-
-            index_model = index_emb.get("model", "")
-            index_dim = index_emb.get("dim", 0)
-            current_dim = self.embedder.embedding_dim
-
-            if index_dim and current_dim and index_dim != current_dim:
-                logger.warning(
-                    f"Embedding dimension mismatch: index was built with "
-                    f"{index_model} (dim={index_dim}), but current embedder "
-                    f"uses {self.embedder.model_name} (dim={current_dim}). "
-                    f"Re-index with 'rag-mini init --force' for accurate results."
-                )
-        except Exception:
-            pass  # Don't block search if manifest is unreadable
+        return CodeEmbedder()
 
     def _connect(self):
         """Connect to the LanceDB database."""
