@@ -206,13 +206,21 @@ class ProjectIndexer:
                 "created_at": datetime.now().isoformat(),
             },
             "embedding": {
-                "provider": "ollama",
+                "provider": (
+                    self.embedder.provider
+                    if hasattr(self.embedder, "provider")
+                    else "openai"
+                ),
                 "model": (
                     self.embedder.model_name
                     if hasattr(self.embedder, "model_name")
-                    else "nomic-embed-text:latest"
+                    else "auto"
                 ),
-                "base_url": "http://localhost:11434",
+                "base_url": (
+                    self.embedder.base_url
+                    if hasattr(self.embedder, "base_url")
+                    else "http://localhost:1234/v1"
+                ),
                 "batch_size": 4,
                 "max_workers": 4,
             },
@@ -263,19 +271,26 @@ class ProjectIndexer:
     def _apply_config(self, config: Dict[str, Any]):
         """Apply configuration settings to the indexer."""
         try:
-            # Apply embedding settings
+            # Apply embedding settings - but DON'T override if embedder
+            # already initialized successfully (it already found a working provider)
             if "embedding" in config:
                 emb_config = config["embedding"]
-                if hasattr(self.embedder, "model_name"):
-                    self.embedder.model_name = emb_config.get(
-                        "model", self.embedder.model_name
-                    )
-                if hasattr(self.embedder, "base_url"):
-                    self.embedder.base_url = emb_config.get("base_url", self.embedder.base_url)
-                if hasattr(self.embedder, "provider"):
-                    self.embedder.provider = emb_config.get("provider", self.embedder.provider)
-                if hasattr(self.embedder, "api_key"):
-                    self.embedder.api_key = emb_config.get("api_key", self.embedder.api_key)
+                already_connected = getattr(self.embedder, "mode", "unavailable") not in ("unavailable", "unknown")
+
+                if not already_connected:
+                    # Embedder failed to connect - try config settings
+                    if hasattr(self.embedder, "model_name"):
+                        self.embedder.model_name = emb_config.get("model", self.embedder.model_name)
+                    if hasattr(self.embedder, "base_url"):
+                        self.embedder.base_url = emb_config.get("base_url", self.embedder.base_url)
+                    if hasattr(self.embedder, "provider"):
+                        self.embedder.provider = emb_config.get("provider", self.embedder.provider)
+                    if hasattr(self.embedder, "api_key"):
+                        self.embedder.api_key = emb_config.get("api_key", self.embedder.api_key)
+                    # Re-initialize with new settings
+                    self.embedder._initialize_providers()
+
+                # Always apply non-connection settings
                 if hasattr(self.embedder, "_profile"):
                     self.embedder._profile = emb_config.get("profile", self.embedder._profile)
 
