@@ -5,51 +5,46 @@
 
 ## Installation (Choose Your Adventure)
 
-### 🎯 **Option 1: Full Installation (Recommended)**
-*Gets you everything working reliably with desktop shortcuts and AI features*
+### 🎯 **Option 1: Install from Source (Recommended)**
+*Clone the repo, set up a virtual environment, and install dependencies*
 
 **Linux/macOS:**
 ```bash
-./install.sh
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
 ```
 
 **Windows:**
+```cmd
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+pip install -e .
+```
+
+**What this does:**
+- Creates an isolated Python environment
+- Installs all dependencies (LanceDB, PyArrow, Rich, etc.)
+- Makes `rag-mini` command available in the virtual environment
+
+**Time needed:** 2-5 minutes (depends on internet speed for downloading dependencies)
+
+---
+
+### 🚀 **Option 2: Windows Interactive Installer**
+*Guided setup with prompts*
+
 ```cmd
 install_windows.bat
 ```
 
-**What this does:**
-- Sets up Python environment automatically
-- Installs all dependencies 
-- Downloads AI models (with your permission)
-- Creates desktop shortcuts and application menu entries
-- Tests everything works
-- Gives you an interactive tutorial
-
-**Time needed:** 5-10 minutes (depending on AI model downloads)
-
----
-
-### 🚀 **Option 2: Copy & Try (Experimental)**
-*Just copy the folder and run - may work, may need manual setup*
-
-**Linux/macOS:**
-```bash
-# Copy folder anywhere and try running
-./rag-mini index ~/my-project
-# Auto-setup attempts to create virtual environment
-# Falls back with clear instructions if it fails
-```
-
-**Windows:**
-```cmd
-# Copy folder anywhere and try running  
-rag.bat index C:\my-project
-# Auto-setup attempts to create virtual environment
-# Shows helpful error messages if manual install needed
-```
-
-**Time needed:** 30 seconds if it works, 10 minutes if you need manual setup
+**Time needed:** 5-10 minutes
 
 ---
 
