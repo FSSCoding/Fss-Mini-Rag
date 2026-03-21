@@ -830,53 +830,52 @@ class CodeSearcher:
 
         return results[:top_k]
 
+    def _find_by_name(self, name: str, chunk_types: List[str], top_k: int) -> List[SearchResult]:
+        """Find chunks by direct name matching against the index.
+
+        Scans the full index for exact name matches - doesn't rely on
+        semantic search which can miss in large indexes.
+        """
+        if not self.table:
+            return []
+
+        df = self.table.to_pandas()
+        name_lower = name.lower()
+
+        # Filter by chunk type and name match
+        mask = (
+            df["chunk_type"].isin(chunk_types)
+            & df["name"].fillna("").str.lower().str.contains(name_lower, regex=False)
+        )
+        matches = df[mask]
+
+        results = []
+        for _, row in matches.iterrows():
+            results.append(self._row_to_search_result(row, score=1.0))
+
+        # Sort by how closely the name matches (exact > contains)
+        results.sort(key=lambda r: (
+            0 if r.name and r.name.lower().split(":")[0].strip() == name_lower else 1,
+            r.file_path,
+        ))
+
+        return results[:top_k]
+
     def get_function(self, function_name: str, top_k: int = 5) -> List[SearchResult]:
-        """
-        Search for a specific function by name.
-
-        Args:
-            function_name: Name of the function to find
-            top_k: Maximum number of results
-
-        Returns:
-            List of matching functions
-        """
-        # Create a targeted query
-        query = f"function {function_name} implementation definition"
-
-        # Search with filters
-        results = self.search(query, top_k=top_k * 2, chunk_types=["function", "method"])
-
-        # Further filter by name
-        filtered = []
-        for result in results:
-            if result.name and function_name.lower() in result.name.lower():
-                filtered.append(result)
-
-        return filtered[:top_k]
+        """Find a specific function by name (direct index scan)."""
+        return self._find_by_name(
+            function_name,
+            chunk_types=["function", "method", "async_function"],
+            top_k=top_k,
+        )
 
     def get_class(self, class_name: str, top_k: int = 5) -> List[SearchResult]:
-        """
-        Search for a specific class by name.
-
-        Args:
-            class_name: Name of the class to find
-            top_k: Maximum number of results
-
-        Returns:
-            List of matching classes
-        """
-        # Create a targeted query
-        query = f"class {class_name} definition implementation"
-
-        # Search with filters
-        results = self.search(query, top_k=top_k * 2, chunk_types=["class"])
-
-        # Further filter by name
-        filtered = []
-        for result in results:
-            if result.name and class_name.lower() in result.name.lower():
-                filtered.append(result)
+        """Find a specific class by name (direct index scan)."""
+        return self._find_by_name(
+            class_name,
+            chunk_types=["class"],
+            top_k=top_k,
+        )
 
         return filtered[:top_k]
 

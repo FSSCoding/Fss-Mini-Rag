@@ -260,18 +260,8 @@ class OllamaEmbedder:
             response = requests.get(f"{self.base_url}/api/tags", timeout=5)
             response.raise_for_status()
         except requests.exceptions.ConnectionError:
-            print("🔌 Ollama Service Unavailable")
-            print("   Ollama provides AI embeddings that make semantic search possible")
-            print("   Start Ollama: ollama serve")
-            print("   Install models: ollama pull nomic-embed-text")
-            print()
-            raise ConnectionError("Ollama service not running. Start with: ollama serve")
+            raise ConnectionError("Ollama service not running")
         except requests.exceptions.Timeout:
-            print("⏱️ Ollama Service Timeout")
-            print("   Ollama is taking too long to respond")
-            print("   Check if Ollama is overloaded: ollama ps")
-            print("   Restart if needed: killall ollama && ollama serve")
-            print()
             raise ConnectionError("Ollama service timeout")
 
         # Check if our model is available
@@ -279,12 +269,7 @@ class OllamaEmbedder:
         model_names = [model["name"] for model in models]
 
         if self.model_name not in model_names:
-            print(f"📦 Model '{self.model_name}' Not Found")
-            print("   Embedding models convert text into searchable vectors")
-            print(f"   Download model: ollama pull {self.model_name}")
-            if model_names:
-                print(f"   Available models: {', '.join(model_names[:3])}")
-            print()
+            logger.info(f"Model '{self.model_name}' not found in Ollama. Available: {', '.join(model_names[:3])}")
             # Try to pull the model
             self._pull_model()
 

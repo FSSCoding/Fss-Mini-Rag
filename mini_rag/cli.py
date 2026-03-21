@@ -28,9 +28,9 @@ from .windows_console_fix import fix_windows_console
 # Fix Windows console for proper emoji/Unicode support
 fix_windows_console()
 
-# Set up logging
+# Set up logging - default WARNING, verbose flag enables INFO/DEBUG
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(message)s",
     handlers=[RichHandler(rich_tracebacks=True)],
 )
@@ -102,6 +102,8 @@ def cli(verbose: bool, quiet: bool):
 
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+    elif not quiet:
+        logging.getLogger().setLevel(logging.WARNING)
     elif quiet:
         logging.getLogger().setLevel(logging.ERROR)
 
@@ -675,25 +677,27 @@ def info(show_code: bool):
     """Show information about Mini RAG."""
     # Create info panel
     info_text = """
-[bold cyan]Mini RAG[/bold cyan] - Local Semantic Code Search
+[bold cyan]FSS-Mini-RAG[/bold cyan] - Lightweight Semantic Code Search
 
-[bold]Features:[/bold]
-• Fast code indexing with AST-aware chunking
-• Semantic search using CodeBERT embeddings
-• Real-time file watching and incremental updates
-• Language-aware parsing for Python, JS, Go, and more
-• MCP integration for the development environment
+[bold]Search:[/bold]
+• Independent semantic + BM25 keyword search with RRF fusion
+• Code-aware tokenizer (splits snake_case, CamelCase)
+• Auto-calibrating score labels (HIGH/GOOD/FAIR/LOW)
 
-[bold]How it works:[/bold]
-1. Indexes your codebase into semantic chunks
-2. Stores vectors locally in .mini-rag/ directory
-3. Enables natural language search across your code
-4. Updates automatically as you modify files
+[bold]Chunking:[/bold]
+• Python: AST-based with module headers, docstrings
+• Markdown: Paragraph-based with code block preservation
+• Section boundaries preserved for document search
+
+[bold]Embeddings:[/bold]
+• OpenAI-compatible endpoint (LM Studio, vLLM, OpenAI)
+• Auto-detects models, precision/conceptual profiles
+• MiniLM default (384d), Nomic for conceptual depth
 
 [bold]Performance:[/bold]
-• Indexing: ~50-100 files/second
-• Search: <50ms latency
-• Storage: ~200MB for 10k files
+• Indexing: ~20 files/second with embeddings
+• Search: ~15-20ms per query
+• Cold start: ~600ms
 """
 
     panel = Panel(info_text, title="About Mini RAG", border_style="cyan")
