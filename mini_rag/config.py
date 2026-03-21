@@ -58,13 +58,24 @@ class FilesConfig:
 
 @dataclass
 class EmbeddingConfig:
-    """Configuration for embedding generation."""
+    """Configuration for embedding generation.
 
-    preferred_method: str = "ollama"  # "ollama", "ml", "hash", "auto"
+    Default uses OpenAI-compatible endpoint (works with LM Studio, vLLM,
+    OpenAI, or any compatible proxy). Set base_url and model to match
+    your provider. For Ollama, use base_url="http://localhost:11434/v1".
+    """
+
+    provider: str = "openai"  # "openai" (OpenAI-compatible), "ollama", "ml", "hash"
+    base_url: str = "http://localhost:1234/v1"  # LM Studio default
+    model: str = "text-embedding-nomic-embed-text-v1.5"  # LM Studio model name
+    api_key: Optional[str] = None  # API key (if required by provider)
+    embedding_dim: int = 768  # Embedding dimension
+    batch_size: int = 32
+    # Legacy Ollama settings (used when provider="ollama")
     ollama_model: str = "nomic-embed-text"
     ollama_host: str = "localhost:11434"
+    # Optional local ML model (used when provider="ml")
     ml_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    batch_size: int = 32
 
 
 @dataclass
@@ -511,13 +522,14 @@ class ConfigManager:
                 "  include_patterns:",
                 '    - "**/*"                  # Include all files by default',
                 "",
-                "# Embedding generation settings",
+                "# Embedding settings (OpenAI-compatible endpoint)",
+                "# Works with LM Studio, vLLM, OpenAI, or any compatible proxy",
+                "# For Ollama: set provider to 'ollama' and base_url to 'http://localhost:11434'",
                 "embedding:",
-                f"  preferred_method: {config_dict['embedding']['preferred_method']}  # Method",
-                f"  ollama_model: {config_dict['embedding']['ollama_model']}",
-                f"  ollama_host: {config_dict['embedding']['ollama_host']}",
-                f"  ml_model: {config_dict['embedding']['ml_model']}",
-                f"  batch_size: {config_dict['embedding']['batch_size']}  # Per batch",
+                f"  provider: {config_dict['embedding']['provider']}  # 'openai', 'ollama', 'ml', 'hash'",
+                f"  base_url: {config_dict['embedding']['base_url']}",
+                f"  model: {config_dict['embedding']['model']}",
+                f"  batch_size: {config_dict['embedding']['batch_size']}",
                 "",
                 "# Search behavior settings",
                 "search:",

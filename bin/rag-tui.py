@@ -1573,7 +1573,7 @@ Your suggested question (under 10 words):"""
                 print(f"   📁 Chunk size: {config.chunking.max_size} characters")
                 print(f"   🔄 Chunking strategy: {config.chunking.strategy}")
                 print(f"   🔍 Search results: {config.search.default_top_k} results")
-                print(f"   📊 Embedding method: {config.embedding.preferred_method}")
+                print(f"   📊 Embedding provider: {config.embedding.provider}")
                 print(
                     f"   🚀 Query expansion: {'enabled' if config.search.expand_queries else 'disabled'}"
                 )

@@ -34,7 +34,8 @@ class TestConfigDefaults:
 
     def test_embedding_defaults(self):
         config = EmbeddingConfig()
-        assert config.preferred_method == "ollama"
+        assert config.provider == "openai"
+        assert "1234" in config.base_url  # LM Studio default port
 
     def test_rag_config_initializes_all_sections(self):
         config = RAGConfig()

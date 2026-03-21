@@ -1,6 +1,11 @@
 """
-Hybrid code embedding module - Ollama primary with ML fallback.
-Tries Ollama first, falls back to local ML stack if needed.
+Embedding module with OpenAI-compatible endpoint support.
+
+Priority chain:
+1. OpenAI-compatible endpoint (LM Studio, vLLM, OpenAI, any proxy)
+2. Ollama (legacy, via config)
+3. Local ML models (sentence-transformers, if installed)
+4. Hash-based deterministic fallback (always available)
 """
 
 import logging
@@ -28,62 +33,131 @@ except ImportError:
 
 
 class OllamaEmbedder:
-    """Hybrid embeddings: Ollama primary with ML fallback."""
+    """Embedding provider with OpenAI-compatible endpoint support.
+
+    Supports LM Studio, vLLM, OpenAI, Ollama, and any OpenAI-compatible
+    embedding API. Falls back to local ML models or hash embeddings.
+    """
 
     def __init__(
         self,
-        model_name: str = "nomic-embed-text:latest",
-        base_url: str = "http://localhost:11434",
+        model_name: str = "text-embedding-nomic-embed-text-v1.5",
+        base_url: str = "http://localhost:1234/v1",
         enable_fallback: bool = True,
+        provider: str = "openai",
+        api_key: Optional[str] = None,
+        embedding_dim: int = 768,
     ):
         """
-        Initialize the hybrid embedder.
+        Initialize the embedder.
 
         Args:
-            model_name: Ollama model to use for embeddings
-            base_url: Base URL for Ollama API
-            enable_fallback: Whether to use ML fallback if Ollama fails
+            model_name: Model name for the embedding API
+            base_url: Base URL for API (LM Studio: localhost:1234/v1,
+                      Ollama: localhost:11434, OpenAI: api.openai.com/v1)
+            enable_fallback: Whether to use ML/hash fallback if API fails
+            provider: "openai" (OpenAI-compatible), "ollama", "ml", "hash"
+            api_key: API key (required for OpenAI, optional for local)
+            embedding_dim: Expected embedding dimension
         """
         self.model_name = model_name
-        self.base_url = base_url
-        self.embedding_dim = 768  # Standard for nomic-embed-text
+        self.base_url = base_url.rstrip("/")
+        self.embedding_dim = embedding_dim
         self.enable_fallback = enable_fallback and FALLBACK_AVAILABLE
+        self.provider = provider
+        self.api_key = api_key
 
         # State tracking
         self.ollama_available = False
         self.fallback_embedder = None
-        self.mode = "unknown"  # "ollama", "fallback", or "hash"
+        self.mode = "unknown"  # "openai", "ollama", "fallback", or "hash"
 
-        # Try to initialize Ollama first
         self._initialize_providers()
 
     def _initialize_providers(self):
         """Initialize embedding providers in priority order."""
-        # Try Ollama first
-        try:
-            self._verify_ollama_connection()
-            self.ollama_available = True
-            self.mode = "ollama"
-            logger.info(f"✅ Ollama embeddings active: {self.model_name}")
-        except Exception as e:
-            logger.debug(f"Ollama not available: {e}")
-            self.ollama_available = False
+        if self.provider == "hash":
+            self.mode = "hash"
+            logger.info("Using hash-based embeddings (configured)")
+            return
 
-            # Try ML fallback
-            if self.enable_fallback:
-                try:
-                    self._initialize_fallback_embedder()
-                    self.mode = "fallback"
-                    logger.info(
-                        f"✅ ML fallback active: {self.fallback_embedder.model_type if hasattr(self.fallback_embedder, 'model_type') else 'transformer'}"
-                    )
-                except Exception as fallback_error:
-                    logger.warning(f"ML fallback failed: {fallback_error}")
-                    self.mode = "hash"
-                    logger.info("⚠️ Using hash-based embeddings (deterministic fallback)")
-            else:
-                self.mode = "hash"
-                logger.info("⚠️ Using hash-based embeddings (no fallback enabled)")
+        if self.provider == "ml":
+            if self._try_ml_fallback():
+                return
+            self.mode = "hash"
+            return
+
+        # Try the configured provider (openai-compatible or ollama)
+        if self.provider == "ollama":
+            try:
+                self._verify_ollama_connection()
+                self.ollama_available = True
+                self.mode = "ollama"
+                logger.info(f"Ollama embeddings active: {self.model_name}")
+                return
+            except Exception as e:
+                logger.debug(f"Ollama not available: {e}")
+        else:
+            # OpenAI-compatible endpoint (LM Studio, vLLM, OpenAI, etc.)
+            try:
+                self._verify_openai_connection()
+                self.mode = "openai"
+                logger.info(f"OpenAI-compatible embeddings active: {self.model_name} at {self.base_url}")
+                return
+            except Exception as e:
+                logger.debug(f"OpenAI-compatible endpoint not available: {e}")
+
+        # Fallback chain
+        if self._try_ml_fallback():
+            return
+
+        self.mode = "hash"
+        logger.info("Using hash-based embeddings (all providers unavailable)")
+
+    def _try_ml_fallback(self) -> bool:
+        """Attempt to initialize ML fallback. Returns True if successful."""
+        if not self.enable_fallback:
+            return False
+        try:
+            self._initialize_fallback_embedder()
+            self.mode = "fallback"
+            model_type = getattr(self.fallback_embedder, 'model_type', 'transformer')
+            logger.info(f"ML fallback active: {model_type}")
+            return True
+        except Exception as e:
+            logger.warning(f"ML fallback failed: {e}")
+            return False
+
+    def _verify_openai_connection(self):
+        """Verify OpenAI-compatible endpoint is reachable."""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        try:
+            # Test with a minimal embedding request
+            response = requests.post(
+                f"{self.base_url}/embeddings",
+                headers=headers,
+                json={"model": self.model_name, "input": "test"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json()
+            # Verify response format
+            if "data" in data and len(data["data"]) > 0:
+                emb = data["data"][0].get("embedding", [])
+                if emb:
+                    self.embedding_dim = len(emb)
+                    return
+            raise ValueError("Invalid embedding response format")
+        except requests.exceptions.ConnectionError:
+            raise ConnectionError(
+                f"Cannot connect to embedding endpoint at {self.base_url}. "
+                f"Ensure your embedding server is running."
+            )
+        except requests.exceptions.Timeout:
+            raise ConnectionError(f"Embedding endpoint at {self.base_url} timed out.")
 
     def _verify_ollama_connection(self):
         """Verify Ollama server is running and model is available."""
@@ -188,12 +262,41 @@ class OllamaEmbedder:
 
     def _get_embedding(self, text: str) -> np.ndarray:
         """Get embedding using the best available provider."""
-        if self.mode == "ollama" and self.ollama_available:
+        if self.mode == "openai":
+            return self._get_openai_embedding(text)
+        elif self.mode == "ollama" and self.ollama_available:
             return self._get_ollama_embedding(text)
         elif self.mode == "fallback" and self.fallback_embedder:
             return self._get_fallback_embedding(text)
         else:
-            # Hash fallback
+            return self._hash_embedding(text)
+
+    def _get_openai_embedding(self, text: str) -> np.ndarray:
+        """Get embedding from OpenAI-compatible endpoint."""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/embeddings",
+                headers=headers,
+                json={"model": self.model_name, "input": text},
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            embedding = data["data"][0]["embedding"]
+            return np.array(embedding, dtype=np.float32)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OpenAI-compatible API failed: {e}")
+            if self.enable_fallback and self.fallback_embedder:
+                return self._get_fallback_embedding(text)
+            return self._hash_embedding(text)
+        except (ValueError, KeyError, IndexError) as e:
+            logger.error(f"Invalid response from embedding API: {e}")
             return self._hash_embedding(text)
 
     def _get_ollama_embedding(self, text: str) -> np.ndarray:
@@ -476,13 +579,16 @@ class OllamaEmbedder:
         return self.embedding_dim
 
     def get_mode(self) -> str:
-        """Return current embedding mode: 'ollama', 'fallback', or 'hash'."""
+        """Return current embedding mode: 'openai', 'ollama', 'fallback', or 'hash'."""
         return self.mode
 
     def get_status(self) -> Dict[str, Any]:
         """Get detailed status of the embedding system."""
         return {
             "mode": self.mode,
+            "provider": self.provider,
+            "model": self.model_name,
+            "base_url": self.base_url,
             "ollama_available": self.ollama_available,
             "fallback_available": FALLBACK_AVAILABLE and self.enable_fallback,
             "fallback_model": (
@@ -491,16 +597,15 @@ class OllamaEmbedder:
                 else None
             ),
             "embedding_dim": self.embedding_dim,
-            "ollama_model": self.model_name if self.mode == "ollama" else None,
-            "ollama_url": self.base_url if self.mode == "ollama" else None,
         }
 
     def get_embedding_info(self) -> Dict[str, str]:
-        """Get human-readable embedding system information for installer."""
-        status = self.get_status()
-        mode = status.get("mode", "unknown")
+        """Get human-readable embedding system information."""
+        mode = self.mode
+        if mode == "openai":
+            return {"method": f"OpenAI-compatible ({self.model_name} at {self.base_url})", "status": "working"}
         if mode == "ollama":
-            return {"method": f"Ollama ({status['ollama_model']})", "status": "working"}
+            return {"method": f"Ollama ({self.model_name})", "status": "working"}
         # Treat legacy/alternate naming uniformly
         if mode in ("fallback", "ml"):
             return {
