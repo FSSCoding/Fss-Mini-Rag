@@ -51,8 +51,6 @@ class RAGServer:
 
                 if sys.platform == "win32":
                     # Windows: Find and kill process using netstat
-                    import subprocess
-
                     try:
                         # Get process ID using the port
                         result = subprocess.run(
@@ -74,8 +72,6 @@ class RAGServer:
                         print(f"   ️  Could not auto-kill process: {e}")
                 else:
                     # Unix/Linux: Use lsof and kill
-                    import subprocess
-
                     try:
                         result = subprocess.run(
                             ["lsof", "-ti", f":{self.port}"],

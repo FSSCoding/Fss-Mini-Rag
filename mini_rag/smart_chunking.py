@@ -81,7 +81,6 @@ class SmartChunkingStrategy:
     def get_smart_defaults(self, project_stats: Dict[str, Any]) -> Dict[str, Any]:
         """Generate smart defaults based on project language distribution."""
         languages = project_stats.get("languages", {})
-        # sum(languages.values())  # Unused variable removed
 
         # Determine primary language
         primary_lang = max(languages.items(), key=lambda x: x[1])[0] if languages else "python"
