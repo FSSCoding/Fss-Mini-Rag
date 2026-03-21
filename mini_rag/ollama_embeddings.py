@@ -192,6 +192,12 @@ class OllamaEmbedder:
         if not embedding_models:
             return None
 
+        # Exclude multimodal/VL models from auto-selection
+        # (cross-modal text-to-image doesn't work with quantized VL models)
+        text_only = [m for m in embedding_models
+                     if not any(kw in m.lower() for kw in ("vl", "clip", "visual"))]
+        candidates = text_only if text_only else embedding_models
+
         # Profile-based preference order
         profile = getattr(self, '_profile', 'precision')
         if profile == "conceptual":
@@ -200,11 +206,11 @@ class OllamaEmbedder:
             preferences = ("minilm", "granite", "nomic", "bge", "e5", "gte")
 
         for preferred in preferences:
-            for model in embedding_models:
+            for model in candidates:
                 if preferred in model.lower():
                     return model
 
-        return embedding_models[0]
+        return candidates[0]
 
     def _verify_openai_connection(self):
         """Verify OpenAI-compatible endpoint is reachable and find embedding model."""
