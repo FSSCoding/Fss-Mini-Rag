@@ -201,6 +201,7 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
 @click.option("--lang", multiple=True, help="Filter by language (python, javascript, etc.)")
 @click.option("--show-content", "-c", is_flag=True, help="Show code content in results")
 @click.option("--show-perf", is_flag=True, help="Show performance metrics")
+@click.option("--port", type=int, default=None, help="Server port (default: from config or 7777)")
 def search(
     query: str,
     path: str,
@@ -209,6 +210,7 @@ def search(
     lang: tuple,
     show_content: bool,
     show_perf: bool,
+    port: int,
 ):
     """Search codebase using semantic similarity."""
     project_path = Path(path).resolve()
@@ -234,7 +236,7 @@ def search(
     monitor = get_monitor() if show_perf else None
 
     # Check if server is running
-    client = RAGClient()
+    client = RAGClient(port)
     use_server = client.is_running()
 
     try:
@@ -700,7 +702,7 @@ rag-mini stats"""
 
 @cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
-@click.option("--port", type=int, default=7777, help="Server port")
+@click.option("--port", type=int, default=None, help="Server port (default: from config or 7777)")
 def server(path: str, port: int):
     """Start persistent RAG server (keeps model loaded)."""
     project_path = Path(path).resolve()
@@ -712,10 +714,12 @@ def server(path: str, port: int):
         sys.exit(1)
 
     try:
+        from .config import ServerConfig
+        resolved_port = port if port is not None else ServerConfig().port
         console.print(f"[bold cyan]Starting RAG server for:[/bold cyan] {project_path}")
-        console.print(f"[dim]Port: {port}[/dim]\n")
+        console.print(f"[dim]Port: {resolved_port}[/dim]\n")
 
-        start_server(project_path, port)
+        start_server(project_path, resolved_port)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Server stopped by user[/yellow]")
@@ -727,7 +731,7 @@ def server(path: str, port: int):
 
 @cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
-@click.option("--port", type=int, default=7777, help="Server port")
+@click.option("--port", type=int, default=None, help="Server port (default: from config or 7777)")
 @click.option("--discovery", "-d", is_flag=True, help="Run codebase discovery analysis")
 def status(path: str, port: int, discovery: bool):
     """Show comprehensive RAG system status with optional codebase discovery."""
@@ -790,7 +794,7 @@ def status(path: str, port: int, discovery: bool):
     client = RAGClient(port)
 
     if client.is_running():
-        console.print(f"   • Status: [green]✅ Running on port {port}[/green]")
+        console.print(f"   • Status: [green]✅ Running on port {client.port}[/green]")
 
         # Try to get server info
         try:
@@ -803,7 +807,7 @@ def status(path: str, port: int, discovery: bool):
         except Exception as e:
             console.print(f"   • [yellow]Server responding but with issues: {e}[/yellow]")
     else:
-        console.print(f"   • Status: [red]❌ Not running on port {port}[/red]")
+        console.print(f"   • Status: [red]❌ Not running on port {client.port}[/red]")
         console.print("   • Run 'rag-mini server' to start the server")
 
     # Run codebase discovery if requested

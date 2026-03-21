@@ -121,6 +121,14 @@ class LLMConfig:
 
 
 @dataclass
+class ServerConfig:
+    """Configuration for RAG server."""
+
+    port: int = 7777
+    host: str = "127.0.0.1"
+
+
+@dataclass
 class UpdateConfig:
     """Configuration for auto-update system."""
 
@@ -141,6 +149,7 @@ class RAGConfig:
     embedding: EmbeddingConfig = None
     search: SearchConfig = None
     llm: LLMConfig = None
+    server: ServerConfig = None
     updates: UpdateConfig = None
 
     def __post_init__(self):
@@ -156,6 +165,8 @@ class RAGConfig:
             self.search = SearchConfig()
         if self.llm is None:
             self.llm = LLMConfig()
+        if self.server is None:
+            self.server = ServerConfig()
         if self.updates is None:
             self.updates = UpdateConfig()
 

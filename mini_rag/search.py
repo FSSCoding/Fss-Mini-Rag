@@ -729,6 +729,23 @@ class CodeSearcher:
 
         return filtered[:top_k]
 
+    @staticmethod
+    def _score_label(score: float) -> str:
+        """Interpret search score with a human-readable quality label.
+
+        Thresholds based on Fss-Rag quality evaluation benchmarks.
+        """
+        if score >= 0.7:
+            return "[bold green]HIGH[/bold green]"
+        elif score >= 0.5:
+            return "[green]GOOD[/green]"
+        elif score >= 0.3:
+            return "[yellow]FAIR[/yellow]"
+        elif score >= 0.1:
+            return "[dim yellow]LOW[/dim yellow]"
+        else:
+            return "[dim]WEAK[/dim]"
+
     def display_results(
         self,
         results: List[SearchResult],
@@ -749,15 +766,16 @@ class CodeSearcher:
 
         # Create table
         table = Table(title=f"Search Results ({len(results)} matches)")
-        table.add_column("Score", style="cyan", width=6)
+        table.add_column("Score", style="cyan", width=12)
         table.add_column("File", style="blue")
         table.add_column("Type", style="green", width=10)
         table.add_column("Name", style="magenta")
         table.add_column("Lines", style="yellow", width=10)
 
         for result in results:
+            score_label = self._score_label(result.score)
             table.add_row(
-                f"{result.score:.3f}",
+                f"{result.score:.3f} {score_label}",
                 result.file_path,
                 result.chunk_type,
                 result.name or "-",

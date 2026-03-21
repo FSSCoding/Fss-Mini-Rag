@@ -237,7 +237,15 @@ class RAGServer:
 class RAGClient:
     """Client to communicate with RAG server."""
 
-    def __init__(self, port: int = 7777):
+    DEFAULT_PORT = 7777
+
+    def __init__(self, port: int = None):
+        if port is None:
+            try:
+                from .config import ServerConfig
+                port = ServerConfig().port
+            except Exception:
+                port = self.DEFAULT_PORT
         self.port = port
         self.use_legacy = False
 
