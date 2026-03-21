@@ -180,8 +180,8 @@ class OllamaEmbedder:
         if not embedding_models:
             return None
 
-        # Prefer nomic, then bge, then whatever's first
-        for preferred in ("nomic", "bge", "e5", "gte", "minilm"):
+        # Prefer MiniLM (fast, high precision), then nomic, then others
+        for preferred in ("minilm", "nomic", "bge", "e5", "gte"):
             for model in embedding_models:
                 if preferred in model.lower():
                     return model
