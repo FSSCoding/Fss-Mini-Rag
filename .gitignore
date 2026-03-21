@@ -110,6 +110,7 @@ dmypy.json
 REPOSITORY_SUMMARY.md
 config-hash-test.yaml
 repo-review/
+.archive/
 
 # Analysis and scanning results (should not be committed)
 docs/live-analysis/
