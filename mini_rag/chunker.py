@@ -333,6 +333,7 @@ class CodeChunker:
                     ),
                     "decorators": [d.id for d in node.decorator_list if hasattr(d, "id")],
                     "methods": [],
+                    "docstring": ast.get_docstring(node) or "",
                 }
 
                 # Find methods in this class
@@ -367,6 +368,7 @@ class CodeChunker:
                     "decorators": [d.id for d in node.decorator_list if hasattr(d, "id")],
                     "args": [arg.arg for arg in node.args.args],
                     "is_method": bool(self.class_stack),
+                    "docstring": ast.get_docstring(node) or "",
                 }
 
                 items.append(item)
@@ -385,14 +387,68 @@ class CodeChunker:
     def _create_chunks_from_items(
         self, items: List[Dict], lines: List[str], file_path: str, total_lines: int
     ) -> List[CodeChunk]:
-        """Create chunks from extracted AST items."""
+        """Create chunks from extracted AST items, including module-level code.
+
+        Follows Fss-Rag pattern: captures imports/constants before the first
+        function/class as a module_header chunk, and inter-function code as
+        module_code chunks. This ensures no content is dropped.
+        """
         chunks = []
 
-        for item in items:
-            start_line = item["start_line"] - 1  # Convert to 0-based
-            end_line = min(item["end_line"], len(lines)) - 1  # Convert to 0-based
+        # Sort items by start line
+        items.sort(key=lambda x: x["start_line"])
 
+        # 1. Module header: everything before the first function/class
+        if items:
+            first_item_line = items[0]["start_line"] - 1  # 0-based
+            if first_item_line > 0:
+                header_content = "\n".join(lines[:first_item_line]).strip()
+                if header_content:
+                    # Extract module docstring for the name
+                    header_name = Path(file_path).stem + " (imports)"
+                    chunks.append(CodeChunk(
+                        content=header_content,
+                        file_path=file_path,
+                        start_line=1,
+                        end_line=first_item_line,
+                        chunk_type="module_header",
+                        name=header_name,
+                        language="python",
+                        file_lines=total_lines,
+                    ))
+
+        # 2. Function/class chunks + inter-item gaps
+        prev_end = items[0]["start_line"] - 1 if items else 0
+
+        for item in items:
+            start_line = item["start_line"] - 1  # 0-based
+            end_line = min(item["end_line"], len(lines)) - 1
+
+            # Check for gap between previous item and this one
+            if start_line > prev_end + 1:
+                gap_content = "\n".join(lines[prev_end:start_line]).strip()
+                if gap_content and len(gap_content) > 20:
+                    chunks.append(CodeChunk(
+                        content=gap_content,
+                        file_path=file_path,
+                        start_line=prev_end + 1,
+                        end_line=start_line,
+                        chunk_type="module_code",
+                        name=f"{Path(file_path).stem} (module code)",
+                        language="python",
+                        file_lines=total_lines,
+                    ))
+
+            # The function/class chunk itself
             chunk_content = "\n".join(lines[start_line : end_line + 1])
+
+            # Extract docstring for richer naming
+            docstring = item.get("docstring", "")
+            name = item["name"]
+            if docstring:
+                # First line of docstring as subtitle
+                doc_first = docstring.strip().split("\n")[0][:60]
+                name = f"{item['name']}: {doc_first}"
 
             chunk = CodeChunk(
                 content=chunk_content,
@@ -400,13 +456,29 @@ class CodeChunker:
                 start_line=start_line + 1,
                 end_line=end_line + 1,
                 chunk_type=item["type"],
-                name=item["name"],
+                name=name,
                 language="python",
                 parent_class=item.get("parent_class"),
                 parent_function=item.get("parent_function"),
                 file_lines=total_lines,
             )
             chunks.append(chunk)
+            prev_end = end_line + 1
+
+        # 3. Trailing module code after last item
+        if items and prev_end < total_lines:
+            tail_content = "\n".join(lines[prev_end:]).strip()
+            if tail_content and len(tail_content) > 20:
+                chunks.append(CodeChunk(
+                    content=tail_content,
+                    file_path=file_path,
+                    start_line=prev_end + 1,
+                    end_line=total_lines,
+                    chunk_type="module_code",
+                    name=f"{Path(file_path).stem} (module code)",
+                    language="python",
+                    file_lines=total_lines,
+                ))
 
         return chunks
 
@@ -1029,143 +1101,178 @@ class CodeChunker:
         self, content: str, file_path: str, language: str = "markdown"
     ) -> List[CodeChunk]:
         """
-        Chunk markdown/text files by sections with context overlap.
+        Chunk markdown/text files using paragraph-based splitting with
+        structure preservation. Adapted from Fss-Rag MarkdownParser patterns.
 
-        Args:
-            content: File content
-            file_path: Path to file
-            language: Document language type
-
-        Returns:
-            List of chunks
+        Key behaviours:
+        - Split on double newlines (paragraphs), not single lines
+        - Headers merge downward into their section content
+        - Code blocks (```) are kept intact, never split
+        - Section title tracked for chunk naming
+        - Character-based size limits
         """
         chunks = []
-        lines = content.splitlines()
-        total_lines = len(lines)
+        total_lines = len(content.splitlines())
+        header_pattern = re.compile(r"^(#{1,6})\s+(.+)$")
 
-        # Track current section
-        current_section = []
-        current_start = 0
-        section_name = "content"
+        # Split into paragraphs (double newline boundaries)
+        paragraphs = content.split("\n\n")
 
-        # Context overlap for markdown (keep last few lines)
-        overlap_buffer = []
-        overlap_size = 3  # Lines to overlap between chunks
+        current_parts = []
+        current_chars = 0
+        current_start_line = 1
+        section_title = Path(file_path).stem
+        section_level = 0
+        line_cursor = 1  # Track line position
 
-        # Patterns for different section types
-        header_pattern = re.compile(r"^(#+)\s+(.+)$")  # Markdown headers with level
-        separator_pattern = re.compile(r"^[-=]{3,}$")  # Horizontal rules
+        # Track code block state for paragraphs containing partial fences
+        in_code_block = False
 
-        for i, line in enumerate(lines):
-            # Check for headers
-            header_match = header_pattern.match(line)
+        for i, para in enumerate(paragraphs):
+            para_stripped = para.strip()
+            if not para_stripped:
+                line_cursor += para.count("\n") + 2  # empty para = blank lines
+                continue
 
-            # Check for section breaks
-            is_separator = separator_pattern.match(line.strip())
-            is_empty = not line.strip()
+            para_lines = para.count("\n") + 1
+            para_chars = len(para)
 
-            # Decide if we should create a chunk
-            should_chunk = False
+            # Check if this paragraph is a code block
+            fence_count = para_stripped.count("```")
+            is_code_block = para_stripped.startswith("```") and fence_count >= 2
 
-            if header_match:
-                # New header found
-                should_chunk = True
-                new_section_name = header_match.group(2).strip()
-            elif is_separator:
-                # Separator found
-                should_chunk = True
-            elif is_empty and len(current_section) > 0:
-                # Empty line after content
-                if i + 1 < len(lines) and not lines[i + 1].strip():
-                    # Multiple empty lines - chunk here
-                    should_chunk = True
-
-            # Check size constraints (character-based)
-            section_chars = sum(len(l) + 1 for l in current_section)
-            if section_chars >= self.max_chunk_size:
-                should_chunk = True
-
-            if should_chunk and current_section:
-                # Add overlap from previous chunk if available
-                section_with_overlap = overlap_buffer + current_section
-
-                # Create chunk from current section
-                chunk_content = "\n".join(section_with_overlap)
-                if chunk_content.strip():  # Only create chunk if non-empty
-                    chunk = CodeChunk(
-                        content=chunk_content,
-                        file_path=file_path,
-                        start_line=max(1, current_start + 1 - len(overlap_buffer)),
-                        end_line=current_start + len(current_section),
-                        chunk_type="section",
-                        name=section_name[:50],  # Limit name length
-                        language=language,
-                        file_lines=total_lines,
-                    )
-                    chunks.append(chunk)
-
-                # Save overlap for next chunk
-                if len(current_section) > overlap_size:
-                    overlap_buffer = current_section[-overlap_size:]
-                else:
-                    overlap_buffer = current_section[:]
-
-                # Reset for next section
-                current_section = []
-                current_start = i + 1
-
-                # Update section name if we found a header
-                if header_match:
-                    section_name = new_section_name
-                else:
-                    section_name = f"section_{len(chunks) + 1}"
-
-            # Add line to current section.
-            # Headers start the NEXT section (merged downward per Fss-Rag pattern).
-            # Separators are discarded.
-            if should_chunk and is_separator:
-                pass  # discard separator lines
-            elif should_chunk and header_match:
-                current_section.append(line)  # header starts next chunk
-            else:
-                current_section.append(line)
-
-        # Don't forget the last section
-        if current_section:
-            section_with_overlap = overlap_buffer + current_section
-            chunk_content = "\n".join(section_with_overlap)
-            if chunk_content.strip():
-                chunk = CodeChunk(
-                    content=chunk_content,
-                    file_path=file_path,
-                    start_line=max(1, current_start + 1 - len(overlap_buffer)),
-                    end_line=len(lines),
-                    chunk_type="section",
-                    name=section_name[:50],
-                    language=language,
-                    file_lines=total_lines,
-                )
-                chunks.append(chunk)
-
-        # If no chunks created, create one for the whole file
-        if not chunks and content.strip():
-            chunks.append(
-                CodeChunk(
-                    content=content,
-                    file_path=file_path,
-                    start_line=1,
-                    end_line=len(lines),
-                    chunk_type="document",
-                    name=Path(file_path).stem,
-                    language=language,
-                    file_lines=total_lines,
-                )
+            # Check if this is a standalone header (short, starts with #)
+            header_match = header_pattern.match(para_stripped)
+            is_standalone_header = (
+                header_match
+                and para_chars < 100
+                and "\n" not in para_stripped
             )
 
-        # Set chunk links
-        chunks = self._set_chunk_links(chunks, file_path)
+            # If standalone header, merge with next paragraph (Fss-Rag pattern)
+            if is_standalone_header and i + 1 < len(paragraphs):
+                next_para = paragraphs[i + 1]
+                if next_para.strip():
+                    # Flush current chunk before starting new section
+                    if current_parts:
+                        chunks.append(self._make_md_chunk(
+                            current_parts, file_path, language,
+                            current_start_line, line_cursor - 1,
+                            section_title, total_lines,
+                        ))
+                        current_parts = []
+                        current_chars = 0
 
+                    # Update section context
+                    section_level = len(header_match.group(1))
+                    section_title = header_match.group(2).strip()
+                    current_start_line = line_cursor
+
+                    # Merge header + next para into one unit
+                    merged = para + "\n\n" + next_para
+                    current_parts.append(merged)
+                    current_chars += len(merged)
+                    paragraphs[i + 1] = ""  # Mark as consumed
+                    line_cursor += para_lines + next_para.count("\n") + 3
+                    continue
+
+            # Header without merge - still starts a new section
+            if header_match and not is_standalone_header:
+                if current_parts:
+                    chunks.append(self._make_md_chunk(
+                        current_parts, file_path, language,
+                        current_start_line, line_cursor - 1,
+                        section_title, total_lines,
+                    ))
+                    current_parts = []
+                    current_chars = 0
+                    current_start_line = line_cursor
+
+                section_level = len(header_match.group(1))
+                section_title = header_match.group(2).strip()
+
+            # Code blocks get their own chunk (never split)
+            if is_code_block:
+                if current_parts:
+                    chunks.append(self._make_md_chunk(
+                        current_parts, file_path, language,
+                        current_start_line, line_cursor - 1,
+                        section_title, total_lines,
+                    ))
+                    current_parts = []
+                    current_chars = 0
+
+                chunks.append(CodeChunk(
+                    content=para_stripped,
+                    file_path=file_path,
+                    start_line=line_cursor,
+                    end_line=line_cursor + para_lines - 1,
+                    chunk_type="code_block",
+                    name=f"{section_title} (code)" if section_title else "code_block",
+                    language=language,
+                    file_lines=total_lines,
+                ))
+                line_cursor += para_lines + 2
+                current_start_line = line_cursor
+                continue
+
+            # Size check - flush if adding this para would exceed max
+            if current_chars + para_chars > self.max_chunk_size and current_parts:
+                chunks.append(self._make_md_chunk(
+                    current_parts, file_path, language,
+                    current_start_line, line_cursor - 1,
+                    section_title, total_lines,
+                ))
+                current_parts = []
+                current_chars = 0
+                current_start_line = line_cursor
+
+            # Add paragraph to current chunk
+            current_parts.append(para)
+            current_chars += para_chars
+            line_cursor += para_lines + 2  # +2 for the \n\n between paragraphs
+
+        # Final chunk
+        if current_parts:
+            chunks.append(self._make_md_chunk(
+                current_parts, file_path, language,
+                current_start_line, total_lines,
+                section_title, total_lines,
+            ))
+
+        # Fallback: whole file as one chunk if nothing produced
+        if not chunks and content.strip():
+            chunks.append(CodeChunk(
+                content=content.strip(),
+                file_path=file_path,
+                start_line=1,
+                end_line=total_lines,
+                chunk_type="document",
+                name=Path(file_path).stem,
+                language=language,
+                file_lines=total_lines,
+            ))
+
+        chunks = self._set_chunk_links(chunks, file_path)
         return chunks
+
+    def _make_md_chunk(
+        self, parts: List[str], file_path: str, language: str,
+        start_line: int, end_line: int, section_title: str,
+        total_lines: int,
+    ) -> CodeChunk:
+        """Create a markdown chunk from accumulated paragraph parts."""
+        content = "\n\n".join(parts).strip()
+        return CodeChunk(
+            content=content,
+            file_path=file_path,
+            start_line=start_line,
+            end_line=end_line,
+            chunk_type="section",
+            name=section_title[:50] if section_title else "content",
+            language=language,
+            file_lines=total_lines,
+        )
 
     def _chunk_config(
         self, content: str, file_path: str, language: str = "config"

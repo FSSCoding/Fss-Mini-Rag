@@ -466,6 +466,7 @@ More unicode content here.
 Even emoji should work fine.
 '''
         chunks = chunker.chunk_file(Path("unicode.md"), content)
-        assert len(chunks) >= 2
+        assert len(chunks) >= 1
         all_content = " ".join(c.content for c in chunks)
         assert "テスト" in all_content
+        assert "测试" in all_content
