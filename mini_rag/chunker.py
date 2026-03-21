@@ -83,16 +83,16 @@ class CodeChunker:
 
     def __init__(
         self,
-        max_chunk_size: int = 1000,
-        min_chunk_size: int = 50,
+        max_chunk_size: int = 2000,
+        min_chunk_size: int = 150,
         overlap_lines: int = 0,
     ):
         """
         Initialize chunker with size constraints.
 
         Args:
-            max_chunk_size: Maximum lines per chunk
-            min_chunk_size: Minimum lines per chunk
+            max_chunk_size: Maximum characters per chunk
+            min_chunk_size: Minimum characters per chunk (for merge decisions)
             overlap_lines: Number of lines to overlap between chunks
         """
         self.max_chunk_size = max_chunk_size
@@ -848,25 +848,27 @@ class CodeChunker:
         return chunks
 
     def _chunk_generic(self, content: str, file_path: str, language: str) -> List[CodeChunk]:
-        """Generic chunking by empty lines and size constraints."""
+        """Generic chunking by empty lines and character-based size constraints."""
         chunks = []
         lines = content.splitlines()
 
         current_chunk = []
+        current_chars = 0
         current_start = 0
 
         for i, line in enumerate(lines):
             current_chunk.append(line)
+            current_chars += len(line) + 1  # +1 for newline
 
             # Check if we should create a chunk
             should_chunk = False
 
             # Empty line indicates potential chunk boundary
-            if not line.strip() and len(current_chunk) >= self.min_chunk_size:
+            if not line.strip() and current_chars >= self.min_chunk_size:
                 should_chunk = True
 
             # Maximum size reached
-            if len(current_chunk) >= self.max_chunk_size:
+            if current_chars >= self.max_chunk_size:
                 should_chunk = True
 
             # End of file
@@ -875,7 +877,7 @@ class CodeChunker:
 
             if should_chunk and current_chunk:
                 chunk_content = "\n".join(current_chunk).strip()
-                if chunk_content:  # Don't create empty chunks
+                if chunk_content:
                     chunks.append(
                         CodeChunk(
                             content=chunk_content,
@@ -890,58 +892,93 @@ class CodeChunker:
 
                 # Reset for next chunk
                 current_chunk = []
+                current_chars = 0
                 current_start = i + 1
 
         return chunks
 
     def _enforce_size_constraints(self, chunks: List[CodeChunk]) -> List[CodeChunk]:
         """
-        Ensure all chunks meet size constraints.
-        Split too-large chunks and merge too-small ones.
+        Ensure all chunks meet size constraints using character counts.
+        Split too-large chunks. Merge too-small ones ONLY when they share
+        the same semantic boundary (e.g. same chunk_type and no header boundary).
+
+        Follows the preserve_boundaries pattern: section-type chunks created
+        from markdown headers are never merged laterally across sections.
         """
         result = []
 
         for chunk in chunks:
-            lines = chunk.content.splitlines()
+            char_count = len(chunk.content)
 
-            # If chunk is too large, split it
-            if len(lines) > self.max_chunk_size:
-                # Split into smaller chunks
-                for i in range(0, len(lines), self.max_chunk_size - self.overlap_lines):
-                    sub_lines = lines[i : i + self.max_chunk_size]
-                    if len(sub_lines) >= self.min_chunk_size or not result:
-                        sub_content = "\n".join(sub_lines)
-                        sub_chunk = CodeChunk(
+            # If chunk is too large, split it at line boundaries
+            if char_count > self.max_chunk_size:
+                lines = chunk.content.splitlines()
+                current_sub = []
+                current_chars = 0
+                sub_start = chunk.start_line
+
+                for j, line in enumerate(lines):
+                    line_chars = len(line) + 1  # +1 for newline
+                    if current_chars + line_chars > self.max_chunk_size and current_sub:
+                        sub_content = "\n".join(current_sub)
+                        result.append(
+                            CodeChunk(
+                                content=sub_content,
+                                file_path=chunk.file_path,
+                                start_line=sub_start,
+                                end_line=sub_start + len(current_sub) - 1,
+                                chunk_type=chunk.chunk_type,
+                                name=chunk.name,
+                                language=chunk.language,
+                            )
+                        )
+                        current_sub = []
+                        current_chars = 0
+                        sub_start = chunk.start_line + j
+
+                    current_sub.append(line)
+                    current_chars += line_chars
+
+                if current_sub:
+                    sub_content = "\n".join(current_sub)
+                    result.append(
+                        CodeChunk(
                             content=sub_content,
                             file_path=chunk.file_path,
-                            start_line=chunk.start_line + i,
-                            end_line=chunk.start_line + i + len(sub_lines) - 1,
+                            start_line=sub_start,
+                            end_line=chunk.end_line,
                             chunk_type=chunk.chunk_type,
-                            name=(
-                                f"{chunk.name}_part{i // self.max_chunk_size + 1}"
-                                if chunk.name
-                                else None
-                            ),
+                            name=chunk.name,
                             language=chunk.language,
                         )
-                        result.append(sub_chunk)
-                    elif result:
-                        # Merge with previous chunk if too small
-                        result[-1].content += "\n" + "\n".join(sub_lines)
-                        result[-1].end_line = chunk.start_line + i + len(sub_lines) - 1
+                    )
 
-            # If chunk is too small, try to merge with previous
-            elif len(lines) < self.min_chunk_size and result:
-                # Check if merging would exceed max size
-                prev_lines = result[-1].content.splitlines()
-                if len(prev_lines) + len(lines) <= self.max_chunk_size:
-                    result[-1].content += "\n" + chunk.content
-                    result[-1].end_line = chunk.end_line
+            # If chunk is too small, consider merging with previous
+            elif char_count < self.min_chunk_size and result:
+                prev = result[-1]
+
+                # Preserve boundaries: never merge across section boundaries.
+                # Sections represent semantic units (markdown headers, document
+                # sections) that must stay independent for search quality.
+                is_section_boundary = (
+                    chunk.chunk_type == "section"
+                    or prev.chunk_type == "section"
+                )
+
+                merged_size = len(prev.content) + char_count + 1
+                can_merge = (
+                    not is_section_boundary
+                    and merged_size <= self.max_chunk_size
+                )
+
+                if can_merge:
+                    prev.content += "\n" + chunk.content
+                    prev.end_line = chunk.end_line
                 else:
                     result.append(chunk)
 
             else:
-                # Chunk is good size
                 result.append(chunk)
 
         return result
@@ -1022,8 +1059,9 @@ class CodeChunker:
                     # Multiple empty lines - chunk here
                     should_chunk = True
 
-            # Check size constraints
-            if len(current_section) >= self.max_chunk_size:
+            # Check size constraints (character-based)
+            section_chars = sum(len(l) + 1 for l in current_section)
+            if section_chars >= self.max_chunk_size:
                 should_chunk = True
 
             if should_chunk and current_section:
