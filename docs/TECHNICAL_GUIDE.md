@@ -39,23 +39,21 @@ graph LR
         Code --> Embed
         Text --> Embed
         
-        Embed --> Ollama[🤖 Ollama API]
-        Embed --> ML[🧠 ML Models] 
-        Embed --> Hash[#️⃣ Hash Fallback]
+        Embed --> API[OpenAI-Compatible API]
+        Embed --> ML[ML Models Fallback]
     end
-    
+
     subgraph "Storage & Search"
-        Ollama --> Store[(💾 LanceDB<br/>Vector Database)]
+        API --> Store[(LanceDB Vector Database)]
         ML --> Store
-        Hash --> Store
-        
-        Query[❓ Search Query] --> Vector[🎯 Vector Search]
-        Query --> Keyword[🔤 BM25 Search]
-        
-        Store --> Vector
-        Vector --> Hybrid[🔄 Hybrid Results]
-        Keyword --> Hybrid
-        Hybrid --> Ranked[📊 Ranked Output]
+
+        Query[Search Query] --> Semantic[Semantic Search]
+        Query --> BM25[BM25 Full Index]
+
+        Store --> Semantic
+        Semantic --> RRF[RRF Fusion]
+        BM25 --> RRF
+        RRF --> Ranked[Ranked Output]
     end
     
     style Files fill:#e3f2fd
@@ -67,7 +65,7 @@ graph LR
 
 1. **ProjectIndexer** (`indexer.py`) - Orchestrates the indexing pipeline
 2. **CodeChunker** (`chunker.py`) - Breaks files into meaningful pieces
-3. **OllamaEmbedder** (`ollama_embeddings.py`) - Converts text to vectors
+3. **OllamaEmbedder** (`ollama_embeddings.py`) - Converts text to vectors via OpenAI-compatible API
 4. **CodeSearcher** (`search.py`) - Finds and ranks relevant content
 5. **FileWatcher** (`watcher.py`) - Monitors changes for incremental updates
 
@@ -129,75 +127,41 @@ def _read_file_streaming(self, file_path: Path) -> str:
 
 ## The Embedding Pipeline
 
-### Three-Tier Embedding System
+### OpenAI-Compatible Endpoint (Default)
 
-The system implements graceful degradation across three embedding methods:
+The system uses any OpenAI-compatible embedding API as the primary provider. This works with LM Studio, vLLM, OpenAI, or any compatible proxy.
 
-#### Tier 1: Ollama (Best Quality)
+On startup, the embedder:
+1. Queries `GET /v1/models` to discover available models
+2. Auto-selects the best embedding model (prefers MiniLM for precision, Nomic for conceptual depth)
+3. Sends a test embedding request to verify the connection and detect dimension
+
 ```python
-def _get_ollama_embedding(self, text: str) -> Optional[np.ndarray]:
-    """High-quality embeddings using local Ollama server."""
-    try:
-        response = requests.post(
-            f"{self.ollama_host}/api/embeddings",
-            json={
-                "model": self.ollama_model,  # nomic-embed-text
-                "prompt": text
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            embedding = response.json()["embedding"]
-            return np.array(embedding, dtype=np.float32)
-            
-    except (requests.RequestException, KeyError, ValueError):
-        return None  # Fall back to next tier
+# Default: connects to LM Studio at localhost:1234
+embedder = OllamaEmbedder()  # Auto-detects model
+
+# Or specify explicitly
+embedder = OllamaEmbedder(
+    model_name="text-embedding-all-minilm-l6-v2-embedding",
+    base_url="http://localhost:1234/v1"
+)
 ```
 
-#### Tier 2: ML Models (Good Quality)
-```python
-def _get_ml_embedding(self, text: str) -> Optional[np.ndarray]:
-    """Fallback using sentence-transformers."""
-    try:
-        if not self.ml_model:
-            from sentence_transformers import SentenceTransformer
-            self.ml_model = SentenceTransformer(
-                'sentence-transformers/all-MiniLM-L6-v2'
-            )
-        
-        embedding = self.ml_model.encode(text)
-        
-        # Pad to 768 dimensions to match Ollama
-        if len(embedding) < 768:
-            padding = np.zeros(768 - len(embedding))
-            embedding = np.concatenate([embedding, padding])
-        
-        return embedding.astype(np.float32)
-        
-    except Exception:
-        return None  # Fall back to hash method
-```
+**Embedding profiles** (set in config.yaml):
+- `precision` (default): Prefers MiniLM (384 dim, 2x faster, better at literal code matching)
+- `conceptual`: Prefers Nomic (768 dim, better at "why does X happen" questions)
 
-#### Tier 3: Hash-Based (Always Works)
+**Fallback chain:** If the primary endpoint is unavailable, falls back to local ML models (sentence-transformers) if installed. If nothing is available, semantic search is disabled and BM25 keyword search runs solo.
+
+The index stores which model was used (`manifest.json`). If you search with a different model than what was indexed, you get a warning to re-index.
+
+### ML Fallback (Optional)
+
+If `sentence-transformers` is installed, it serves as a fallback when no API endpoint is available:
+
 ```python
-def _get_hash_embedding(self, text: str) -> np.ndarray:
-    """Deterministic hash-based embedding that always works."""
-    # Create deterministic 768-dimensional vector from text hash
-    hash_val = hashlib.sha256(text.encode()).hexdigest()
-    
-    # Convert hex to numbers
-    numbers = [int(hash_val[i:i+2], 16) for i in range(0, 64, 2)]
-    
-    # Expand to 768 dimensions with mathematical transformations
-    embedding = []
-    for i in range(768):
-        base_num = numbers[i % len(numbers)]
-        # Apply position-dependent transformations
-        transformed = (base_num * (i + 1)) % 256
-        embedding.append(transformed / 255.0)  # Normalize to [0,1]
-    
-    return np.array(embedding, dtype=np.float32)
+# Install optional ML support
+pip install sentence-transformers torch
 ```
 
 ### Batch Processing for Efficiency
@@ -337,58 +301,32 @@ def chunk_fixed_size(self, content: str, file_path: str) -> List[CodeChunk]:
 
 ### Hybrid Semantic + Keyword Search
 
-The search combines vector similarity with keyword matching:
+The search runs two independent pipelines and merges results with Reciprocal Rank Fusion (RRF). This ensures keyword matches are found even when embeddings are poor, and semantic matches are found even when keywords don't match exactly.
 
-```python
-def hybrid_search(self, query: str, top_k: int = 10) -> List[SearchResult]:
-    """Combine semantic and keyword search for best results."""
-    
-    # 1. Get semantic results using vector similarity
-    query_embedding = self.embedder.embed_text(query)
-    semantic_results = self.vector_search(query_embedding, top_k * 2)
-    
-    # 2. Get keyword results using BM25
-    keyword_results = self.keyword_search(query, top_k * 2)
-    
-    # 3. Combine and re-rank results
-    combined_results = self._merge_results(semantic_results, keyword_results)
-    
-    # 4. Apply final ranking
-    final_results = self._rank_results(combined_results, query)
-    
-    return final_results[:top_k]
-
-def _rank_results(self, results: List[SearchResult], query: str) -> List[SearchResult]:
-    """Advanced ranking combining multiple signals."""
-    query_terms = set(query.lower().split())
-    
-    for result in results:
-        # Base score from vector similarity
-        score = result.similarity_score
-        
-        # Boost for exact keyword matches
-        content_lower = result.content.lower()
-        keyword_matches = sum(1 for term in query_terms if term in content_lower)
-        keyword_boost = (keyword_matches / len(query_terms)) * 0.3
-        
-        # Boost for function/class names matching query
-        if result.chunk_type in ['function', 'class'] and result.name:
-            name_matches = sum(1 for term in query_terms 
-                             if term in result.name.lower())
-            name_boost = (name_matches / len(query_terms)) * 0.2
-        else:
-            name_boost = 0
-        
-        # Penalty for very short chunks (likely incomplete)
-        length_penalty = 0
-        if len(result.content) < 100:
-            length_penalty = 0.1
-        
-        # Final combined score
-        result.final_score = score + keyword_boost + name_boost - length_penalty
-    
-    return sorted(results, key=lambda r: r.final_score, reverse=True)
 ```
+Query -> [Semantic Pipeline] -> ranked results by cosine similarity
+      -> [BM25 Pipeline]    -> ranked results by term frequency (full index)
+      -> [RRF Fusion]       -> merged by rank position
+      -> [Smart Rerank]     -> minor boosts for important files
+      -> [Diversity Filter] -> prevent one file dominating
+      -> [Consolidation]    -> merge adjacent chunks from same file
+```
+
+**Reciprocal Rank Fusion (RRF):**
+```python
+# For each result appearing in any pipeline:
+rrf_score = sum(1 / (60 + rank_in_method)) for each method
+# Results appearing in BOTH methods score highest
+```
+
+**BM25 tokenizer** splits code identifiers for better matching:
+- `snake_case_function` -> `[snake_case_function, snake, case, function]`
+- `CamelCaseClass` -> `[camelcaseclass, camel, case, class]`
+- Searching "auth" matches `getAuthManager` and `auth_handler`
+
+**Score labels** auto-detect the scoring scale (RRF vs cosine) and display human-readable quality indicators (HIGH/GOOD/FAIR/LOW/WEAK) next to each result.
+
+If no embedding provider is available, semantic search is skipped and BM25 runs solo (honest degradation, no fake embeddings).
 
 ### Vector Database Operations
 

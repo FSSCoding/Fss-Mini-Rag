@@ -832,12 +832,17 @@ class ProjectIndexer:
                 logger.error(f"Failed to insert records: {e}")
                 raise
 
-        # Update manifest
+        # Update manifest with embedding info (so searcher can verify match)
         self.manifest["indexed_at"] = datetime.now().isoformat()
         self.manifest["file_count"] = len(self.manifest["files"])
         self.manifest["chunk_count"] = sum(
             f["chunks"] for f in self.manifest["files"].values()
         )
+        self.manifest["embedding"] = {
+            "model": self.embedder.model_name,
+            "dim": self.embedder.embedding_dim,
+            "mode": self.embedder.get_mode(),
+        }
         self._save_manifest()
 
         # Calculate statistics

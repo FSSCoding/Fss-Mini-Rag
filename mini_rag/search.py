@@ -151,6 +151,9 @@ class CodeSearcher:
         self.rag_dir = self.project_path / ".mini-rag"
         self.embedder = embedder or CodeEmbedder()
 
+        # Verify embedding model matches what was used to index
+        self._check_embedding_match()
+
         # Load configuration and initialize query expander
         config_manager = ConfigManager(project_path)
         self.config = config_manager.load_config()
@@ -164,6 +167,35 @@ class CodeSearcher:
         self.chunk_ids = []
         self._connect()
         self._build_bm25_index()
+
+    def _check_embedding_match(self):
+        """Verify the current embedder matches the model used to build the index."""
+        manifest_path = self.rag_dir / "manifest.json"
+        if not manifest_path.exists():
+            return
+
+        try:
+            import json
+            with open(manifest_path, "r") as f:
+                manifest = json.load(f)
+
+            index_emb = manifest.get("embedding", {})
+            if not index_emb:
+                return  # Old index without embedding info
+
+            index_model = index_emb.get("model", "")
+            index_dim = index_emb.get("dim", 0)
+            current_dim = self.embedder.embedding_dim
+
+            if index_dim and current_dim and index_dim != current_dim:
+                logger.warning(
+                    f"Embedding dimension mismatch: index was built with "
+                    f"{index_model} (dim={index_dim}), but current embedder "
+                    f"uses {self.embedder.model_name} (dim={current_dim}). "
+                    f"Re-index with 'rag-mini init --force' for accurate results."
+                )
+        except Exception:
+            pass  # Don't block search if manifest is unreadable
 
     def _connect(self):
         """Connect to the LanceDB database."""
@@ -519,14 +551,13 @@ class CodeSearcher:
         # Group results by file
         from collections import defaultdict
         by_file = defaultdict(list)
-        standalone = []
 
         for r in results:
             by_file[r.file_path].append(r)
 
         consolidated = []
 
-        for file_path, file_results in by_file.items():
+        for _, file_results in by_file.items():
             if len(file_results) == 1:
                 consolidated.extend(file_results)
                 continue

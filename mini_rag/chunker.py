@@ -595,7 +595,7 @@ class CodeChunker:
         if class_docstring and node.body:
             first_stmt = node.body[0]
             if isinstance(first_stmt, ast.Expr) and isinstance(
-                first_stmt.value, (ast.Str, ast.Constant)
+                first_stmt.value, ast.Constant
             ):
                 docstring_end = first_stmt.end_lineno - 1
 
@@ -1173,11 +1173,7 @@ class CodeChunker:
         current_chars = 0
         current_start_line = 1
         section_title = Path(file_path).stem
-        section_level = 0
         line_cursor = 1  # Track line position
-
-        # Track code block state for paragraphs containing partial fences
-        in_code_block = False
 
         for i, para in enumerate(paragraphs):
             para_stripped = para.strip()
@@ -1215,7 +1211,6 @@ class CodeChunker:
                         current_chars = 0
 
                     # Update section context
-                    section_level = len(header_match.group(1))
                     section_title = header_match.group(2).strip()
                     current_start_line = line_cursor
 
@@ -1239,7 +1234,6 @@ class CodeChunker:
                     current_chars = 0
                     current_start_line = line_cursor
 
-                section_level = len(header_match.group(1))
                 section_title = header_match.group(2).strip()
 
             # Code blocks get their own chunk (never split)
