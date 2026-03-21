@@ -189,7 +189,7 @@ class FastRAGServer:
             else:
                 # Unix/Linux: Enhanced process killing
                 result = subprocess.run(
-                    ["lso", "-ti", f":{self.port}"],
+                    ["lsof", "-ti", f":{self.port}"],
                     capture_output=True,
                     text=True,
                     timeout=3,
