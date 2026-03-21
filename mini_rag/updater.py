@@ -266,7 +266,7 @@ class UpdateChecker:
                 "rag-mini.py",
                 "rag-tui.py",
                 "requirements.txt",
-                "install_mini_rag.sh",
+                "install.sh",
                 "install_windows.bat",
                 "README.md",
                 "assets",
@@ -318,7 +318,7 @@ class UpdateChecker:
                     "rag-mini.py",
                     "rag-tui.py",
                     "requirements.txt",
-                    "install_mini_rag.sh",
+                    "install.sh",
                     "install_windows.bat",
                     "README.md",
                 ]

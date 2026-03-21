@@ -89,7 +89,7 @@ jobs:
         wget https://github.com/${{ github.repository }}/archive/refs/tags/$VERSION.zip
         unzip $VERSION.zip
         cd *-${VERSION#v}
-        ./install_mini_rag.sh
+        ./install.sh
         \`\`\`
         
         ### 🔄 Auto-Update

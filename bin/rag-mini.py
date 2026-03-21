@@ -43,7 +43,7 @@ except ImportError as e:
     print()
     print("1. Make sure you're in the FSS-Mini-RAG directory")
     print("2. Run the installer script:")
-    print("   ./install_mini_rag.sh")
+    print("   ./install.sh")
     print()
     print("Or if you want to install manually:")
     print("   python3 -m venv .venv")
@@ -199,7 +199,7 @@ def search_project(project_path: Path, query: str, top_k: int = 10, synthesize: 
 
             if len(content_lines) > 10:
                 print(f"     ... ({len(content_lines) - 10} more lines)")
-                print("     Use --verbose or rag-mini-enhanced for full context")
+                print("     Use --verbose for full context")
 
             print()
 

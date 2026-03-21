@@ -82,7 +82,7 @@ def show_venv_warning(script_name: str = "script") -> None:
         print("❌ No virtual environment found!")
         print()
         print("🛠️  Create one first:")
-        print("   ./install_mini_rag.sh")
+        print("   ./install.sh")
         print()
         print("📚 Or manually:")
         print(f"   python3 -m venv {expected_venv}")

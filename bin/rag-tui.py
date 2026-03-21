@@ -2289,16 +2289,8 @@ Your suggested question (under 10 words):"""
         print("   ./rag-mini status <project_path>        # Show status")
         print()
 
-        print("🎯 Enhanced Commands:")
-        print("   ./rag-mini-enhanced search <project_path> <query>  # Smart search")
-        print("   ./rag-mini-enhanced similar <project_path> <query> # Find patterns")
-        print("   ./rag-mini-enhanced analyze <project_path>         # Optimization")
-        print()
 
-        print("🛠️  Quick Scripts:")
-        print("   ./run_mini_rag.sh index <project_path>     # Simple indexing")
-        print("   ./run_mini_rag.sh search <project_path> <query>  # Simple search")
-        print()
+
 
         print("⚙️  Options:")
         print("   --force                    # Force complete re-index")
@@ -2544,7 +2536,7 @@ def main():
             print("❌ FSS-Mini-RAG dependencies not found!")
             print("")
             print("🔧 To fix this:")
-            print(f"   1. Run the installer: {script_dir}/install_mini_rag.sh")
+            print(f"   1. Run the installer: {script_dir}/install.sh")
             print(f"   2. Or use the wrapper script: {script_dir}/rag-tui")
             print("   3. Or activate the virtual environment first:")
             print(f"      cd {script_dir}")

@@ -215,6 +215,8 @@ iwr https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.ps1 -U
 
 ### 📦 Manual Installation Methods
 
+> **Note**: Package manager methods (`uv`, `pipx`, `pip install fss-mini-rag`) will be available once published to PyPI. Until then, use the one-line installers above or install from source.
+
 **With uv (fastest, ~2-3 seconds):**
 ```bash
 # Install uv if you don't have it
@@ -457,7 +459,7 @@ This implementation prioritizes:
 
 - **New users**: Run `./rag-tui` (Linux/macOS) or `rag.bat` (Windows) for guided experience
 - **Developers**: Read [`TECHNICAL_GUIDE.md`](docs/TECHNICAL_GUIDE.md) for implementation details
-- **Contributors**: See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup
+- **Contributors**: Clone the repo and run `make dev-install` for development setup
 
 ## Documentation
 
