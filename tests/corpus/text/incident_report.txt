@@ -1,0 +1,45 @@
+INCIDENT REPORT - IR-2026-0342
+Date: 2026-03-15
+Severity: P2 (High)
+Status: Resolved
+
+SUMMARY:
+Database connection pool exhaustion caused 503 errors for approximately
+12 minutes during peak traffic on the user authentication service.
+
+TIMELINE:
+14:23 UTC - Monitoring alerts triggered for elevated 5xx error rate
+14:25 UTC - On-call engineer acknowledged alert and began investigation
+14:28 UTC - Root cause identified: connection pool exhausted (20/20 connections in use)
+14:30 UTC - Temporary mitigation: increased pool_size from 20 to 50
+14:32 UTC - Error rate returning to normal
+14:35 UTC - Full recovery confirmed, all services healthy
+
+ROOT CAUSE:
+A deployment at 14:15 UTC introduced a code path that opened database
+connections without properly closing them in the error handling path.
+The connection leak accumulated over ~8 minutes until the pool was
+fully exhausted.
+
+The specific code change was in the user profile update handler which
+added a new database query for audit logging. The audit log write was
+wrapped in a try block but the connection release was only in the
+success path, not in the finally block.
+
+IMPACT:
+- 847 failed authentication requests during the incident window
+- 23 users reported being unable to log in
+- No data loss occurred
+- No security implications identified
+
+REMEDIATION:
+1. Hotfix deployed at 15:00 UTC moving connection release to finally block
+2. Added connection leak detection to monitoring system
+3. Added unit test for connection cleanup in error paths
+4. Scheduled code review of all database connection handling patterns
+
+LESSONS LEARNED:
+- Connection pool monitoring should alert at 80% utilization, not 100%
+- Error handling code paths need explicit testing for resource cleanup
+- Database connections should use context managers (with statements)
+  to guarantee cleanup regardless of exception handling

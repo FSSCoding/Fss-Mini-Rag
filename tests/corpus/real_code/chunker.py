@@ -286,28 +286,7 @@ class CodeChunker:
             # Merge with existing chunks, avoiding duplicates
             chunks = self._merge_chunks(chunks, fallback_chunks)
 
-        if chunks:
-            return chunks
-
-        fallback = self._chunk_python_fallback(content, file_path)
-        if fallback:
-            return fallback
-
-        # Last resort: treat the whole file as a single module chunk
-        if content.strip():
-            return [
-                CodeChunk(
-                    content=content.strip(),
-                    file_path=file_path,
-                    start_line=1,
-                    end_line=total_lines,
-                    chunk_type="module",
-                    name=Path(file_path).stem,
-                    language="python",
-                    file_lines=total_lines,
-                )
-            ]
-        return []
+        return chunks or self._chunk_python_fallback(content, file_path)
 
     def _extract_python_items(self, tree: ast.AST, lines: List[str]) -> List[Dict]:
         """Extract all functions and classes with metadata."""
@@ -1120,14 +1099,8 @@ class CodeChunker:
                 else:
                     section_name = f"section_{len(chunks) + 1}"
 
-            # Add line to current section.
-            # Headers start the NEXT section (merged downward per Fss-Rag pattern).
-            # Separators are discarded.
-            if should_chunk and is_separator:
-                pass  # discard separator lines
-            elif should_chunk and header_match:
-                current_section.append(line)  # header starts next chunk
-            else:
+            # Add line to current section
+            if not (should_chunk and (header_match or is_separator)):
                 current_section.append(line)
 
         # Don't forget the last section

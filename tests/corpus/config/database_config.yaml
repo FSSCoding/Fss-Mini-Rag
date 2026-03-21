@@ -1,0 +1,67 @@
+database:
+  primary:
+    host: db-primary.internal
+    port: 5432
+    name: app_production
+    user: app_service
+    pool_size: 20
+    max_overflow: 10
+    pool_timeout: 30
+    ssl_mode: require
+
+  replica:
+    host: db-replica.internal
+    port: 5432
+    name: app_production
+    user: app_readonly
+    pool_size: 10
+
+cache:
+  redis:
+    host: redis.internal
+    port: 6379
+    db: 0
+    max_connections: 50
+    socket_timeout: 5
+    retry_on_timeout: true
+    key_prefix: "app:"
+
+  ttl_defaults:
+    session: 3600
+    user_profile: 300
+    api_response: 60
+    static_content: 86400
+
+search:
+  elasticsearch:
+    hosts:
+      - es-node1.internal:9200
+      - es-node2.internal:9200
+    index_prefix: app_
+    number_of_shards: 3
+    number_of_replicas: 1
+    refresh_interval: 30s
+
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+    path: /metrics
+    labels:
+      environment: production
+      service: api-gateway
+
+  logging:
+    level: INFO
+    format: json
+    output: stdout
+    error_output: stderr
+    max_size_mb: 100
+    retention_days: 30
+
+  alerting:
+    pagerduty_key: "${PAGERDUTY_KEY}"
+    slack_webhook: "${SLACK_WEBHOOK_URL}"
+    email_recipients:
+      - ops@company.com
+      - oncall@company.com
