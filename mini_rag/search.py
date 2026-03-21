@@ -997,21 +997,29 @@ class CodeSearcher:
             console.print("\n[bold]Top Results:[/bold]\n")
 
             for i, result in enumerate(results[:3], 1):
-                console.print(
-                    f"[bold cyan]#{i}[/bold cyan] {result.file_path}:{result.start_line}"
-                )
-                console.print(f"[dim]Type: {result.chunk_type} | Name: {result.name}[/dim]")
+                if result.chunk_type == "image":
+                    # Image result - show file path prominently
+                    console.print(
+                        f"[bold cyan]#{i}[/bold cyan] [bold magenta][Image][/bold magenta] {result.file_path}"
+                    )
+                    console.print(f"[dim]{result.content}[/dim]")
+                    console.print()
+                else:
+                    console.print(
+                        f"[bold cyan]#{i}[/bold cyan] {result.file_path}:{result.start_line}"
+                    )
+                    console.print(f"[dim]Type: {result.chunk_type} | Name: {result.name}[/dim]")
 
-                # Display code with syntax highlighting
-                syntax = Syntax(
-                    result.format_for_display(max_content_lines),
-                    result.language,
-                    theme="monokai",
-                    line_numbers=True,
-                    start_line=result.start_line,
-                )
-                console.print(syntax)
-                console.print()
+                    # Display code with syntax highlighting
+                    syntax = Syntax(
+                        result.format_for_display(max_content_lines),
+                        result.language,
+                        theme="monokai",
+                        line_numbers=True,
+                        start_line=result.start_line,
+                    )
+                    console.print(syntax)
+                    console.print()
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get search index statistics."""

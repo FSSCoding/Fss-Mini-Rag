@@ -12,6 +12,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -467,6 +468,39 @@ class OllamaEmbedder:
         except Exception as e:
             logger.error(f"Fallback embedding failed: {e}")
             raise RuntimeError(f"ML fallback embedding failed: {e}")
+
+    @property
+    def supports_images(self) -> bool:
+        """Check if the current embedding model supports image inputs."""
+        if self.mode == "unavailable":
+            return False
+        model_lower = self.model_name.lower()
+        return any(kw in model_lower for kw in ("vl", "clip", "multimodal", "visual"))
+
+    def embed_image(self, image_path: Path) -> np.ndarray:
+        """Embed an image file using multimodal embedding model.
+
+        Reads the image, base64 encodes it, and sends as a data URI
+        to the OpenAI-compatible embedding endpoint. Only works with
+        multimodal models (Qwen VL, CLIP, etc).
+        """
+        import base64
+
+        if not self.supports_images:
+            raise RuntimeError(
+                f"Model {self.model_name} does not support image embeddings. "
+                f"Use a multimodal model like Qwen3-VL-Embedding."
+            )
+
+        with open(image_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+
+        ext = image_path.suffix.lstrip(".").lower()
+        if ext == "jpg":
+            ext = "jpeg"
+
+        data_uri = f"data:image/{ext};base64,{img_b64}"
+        return self._get_embedding(data_uri)
 
     def embed_code(self, code: Union[str, List[str]], language: str = "python") -> np.ndarray:
         """

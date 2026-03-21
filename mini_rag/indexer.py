@@ -117,6 +117,12 @@ class ProjectIndexer:
             "*.xml",
             "*.con",
             "*.config",
+            # Image files (multimodal embedding)
+            "*.png",
+            "*.jpg",
+            "*.jpeg",
+            "*.gif",
+            "*.webp",
             # Other text files
             "README",
             "LICENSE",
@@ -506,6 +512,62 @@ class ProjectIndexer:
 
         return files_to_index
 
+    def _process_image_file(self, file_path: Path) -> Optional[List[Dict[str, Any]]]:
+        """Process an image file for multimodal indexing.
+
+        Creates a single record per image with:
+        - Embedding from multimodal model (e.g. Qwen VL)
+        - Text content with filename/path for BM25 keyword matching
+        """
+        try:
+            file_size = file_path.stat().st_size
+            size_kb = file_size / 1024
+
+            # Skip very large images (>10MB)
+            if file_size > 10 * 1024 * 1024:
+                logger.warning(f"Skipping large image ({size_kb:.0f}KB): {file_path}")
+                return None
+
+            # Generate embedding from the image
+            embedding = self.embedder.embed_image(file_path)
+            expected_dim = self.embedder.get_embedding_dim()
+
+            if embedding.shape != (expected_dim,):
+                logger.error(f"Bad embedding dim for image {file_path}")
+                return None
+
+            # Create text content for BM25 (searchable by filename and path)
+            rel_path = normalize_relative_path(file_path, self.project_path)
+            parent = file_path.parent.name
+            content = f"[Image: {file_path.name}] {parent}/{file_path.name} ({size_kb:.0f}KB)"
+
+            record = {
+                "file_path": rel_path,
+                "absolute_path": normalize_path(file_path),
+                "chunk_id": f"{file_path.stem}_img_0",
+                "content": content,
+                "start_line": 0,
+                "end_line": 0,
+                "chunk_type": "image",
+                "name": file_path.name,
+                "language": "image",
+                "embedding": embedding,
+                "indexed_at": datetime.now().isoformat(),
+                "file_lines": 0,
+                "chunk_index": 0,
+                "total_chunks": 1,
+                "parent_class": "",
+                "parent_function": "",
+                "prev_chunk_id": "",
+                "next_chunk_id": "",
+            }
+
+            return [record]
+
+        except Exception as e:
+            logger.error(f"Failed to process image {file_path}: {e}")
+            return None
+
     def _process_file(
         self, file_path: Path, stream_threshold: int = 1024 * 1024
     ) -> Optional[List[Dict[str, Any]]]:
@@ -515,7 +577,17 @@ class ProjectIndexer:
             file_path: Path to the file to process
             stream_threshold: Files larger than this (in bytes) use streaming (default: 1MB)
         """
+        IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
         try:
+            # Route image files to multimodal processing
+            if file_path.suffix.lower() in IMAGE_EXTENSIONS:
+                if self.embedder.supports_images:
+                    return self._process_image_file(file_path)
+                else:
+                    logger.debug(f"Skipping image (model doesn't support multimodal): {file_path}")
+                    return None
+
             # Check file size for streaming decision
             file_size = file_path.stat().st_size
 
