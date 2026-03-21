@@ -73,7 +73,9 @@ class TestScoreLabel:
         assert "LOW" in label
 
     def test_weak_score(self):
-        label = CodeSearcher._score_label(0.05)
+        # With no max_score context, 0.05 is in RRF range (< 0.1)
+        # and 0.05 > 0.035 threshold = HIGH on RRF scale
+        label = CodeSearcher._score_label(0.05, max_score=1.0)  # Cosine scale
         assert "WEAK" in label
 
     def test_boundary_values(self):

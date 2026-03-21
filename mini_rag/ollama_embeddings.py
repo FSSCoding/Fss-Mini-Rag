@@ -66,6 +66,7 @@ class OllamaEmbedder:
         self.enable_fallback = enable_fallback and FALLBACK_AVAILABLE
         self.provider = provider
         self.api_key = api_key
+        self._profile = "precision"  # Set via config; affects auto-detection order
 
         # State tracking
         self.ollama_available = False
@@ -173,15 +174,26 @@ class OllamaEmbedder:
         return {"embedding": embedding_models, "llm": llm_models}
 
     def _auto_select_embedding_model(self) -> Optional[str]:
-        """Auto-detect the best embedding model from the endpoint."""
+        """Auto-detect the best embedding model from the endpoint.
+
+        Selection order depends on the embedding profile:
+        - precision: MiniLM > Granite > Nomic (literal matching, fast)
+        - conceptual: Nomic > BGE > E5 > MiniLM (semantic depth)
+        """
         discovered = self.discover_models()
         embedding_models = discovered["embedding"]
 
         if not embedding_models:
             return None
 
-        # Prefer MiniLM (fast, high precision), then nomic, then others
-        for preferred in ("minilm", "nomic", "bge", "e5", "gte"):
+        # Profile-based preference order
+        profile = getattr(self, '_profile', 'precision')
+        if profile == "conceptual":
+            preferences = ("nomic", "bge", "e5", "gte", "granite", "minilm")
+        else:
+            preferences = ("minilm", "granite", "nomic", "bge", "e5", "gte")
+
+        for preferred in preferences:
             for model in embedding_models:
                 if preferred in model.lower():
                     return model

@@ -844,21 +844,42 @@ class CodeSearcher:
         return filtered[:top_k]
 
     @staticmethod
-    def _score_label(score: float) -> str:
+    def _score_label(score: float, max_score: float = None) -> str:
         """Interpret search score with a human-readable quality label.
 
-        Thresholds based on Fss-Rag quality evaluation benchmarks.
+        Auto-detects scoring scale:
+        - RRF fusion scores: 0.01-0.05 range (rank-based)
+        - Cosine similarity scores: 0.1-1.0 range (distance-based)
+
+        Uses max_score from the result set to determine which scale applies.
         """
-        if score >= 0.7:
-            return "[bold green]HIGH[/bold green]"
-        elif score >= 0.5:
-            return "[green]GOOD[/green]"
-        elif score >= 0.3:
-            return "[yellow]FAIR[/yellow]"
-        elif score >= 0.1:
-            return "[dim yellow]LOW[/dim yellow]"
+        # Determine scale from max_score or the score itself
+        reference = max_score if max_score is not None else score
+
+        if reference < 0.1:
+            # RRF scale (rank-based fusion scores)
+            if score >= 0.035:
+                return "[bold green]HIGH[/bold green]"
+            elif score >= 0.025:
+                return "[green]GOOD[/green]"
+            elif score >= 0.018:
+                return "[yellow]FAIR[/yellow]"
+            elif score >= 0.010:
+                return "[dim yellow]LOW[/dim yellow]"
+            else:
+                return "[dim]WEAK[/dim]"
         else:
-            return "[dim]WEAK[/dim]"
+            # Cosine similarity scale
+            if score >= 0.7:
+                return "[bold green]HIGH[/bold green]"
+            elif score >= 0.5:
+                return "[green]GOOD[/green]"
+            elif score >= 0.3:
+                return "[yellow]FAIR[/yellow]"
+            elif score >= 0.1:
+                return "[dim yellow]LOW[/dim yellow]"
+            else:
+                return "[dim]WEAK[/dim]"
 
     def display_results(
         self,
@@ -886,8 +907,9 @@ class CodeSearcher:
         table.add_column("Name", style="magenta")
         table.add_column("Lines", style="yellow", width=10)
 
+        max_score = max(r.score for r in results) if results else 0.0
         for result in results:
-            score_label = self._score_label(result.score)
+            score_label = self._score_label(result.score, max_score)
             table.add_row(
                 f"{result.score:.3f} {score_label}",
                 result.file_path,

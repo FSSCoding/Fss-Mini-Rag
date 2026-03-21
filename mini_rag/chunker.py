@@ -186,6 +186,12 @@ class CodeChunker:
         # Ensure chunks meet size constraints
         chunks = self._enforce_size_constraints(chunks)
 
+        # Add file overview chunk (Fss-Rag pattern: one per file for "what's in this file" queries)
+        if chunks:
+            overview = self._create_file_overview(chunks, str(file_path), language, total_lines)
+            if overview:
+                chunks.insert(0, overview)
+
         # Set chunk links and indices for all chunks
         if chunks:
             for chunk in chunks:
@@ -1075,6 +1081,51 @@ class CodeChunker:
                 result.append(chunk)
 
         return result
+
+    def _create_file_overview(
+        self, chunks: List[CodeChunk], file_path: str, language: str, total_lines: int
+    ) -> Optional[CodeChunk]:
+        """Create a file overview chunk listing all functions/classes/sections.
+
+        Adapted from Fss-Rag document_overview pattern. Gives search an
+        entry point for "what does this file contain" queries.
+        """
+        if not chunks:
+            return None
+
+        # Collect names by type
+        names_by_type = {}
+        for chunk in chunks:
+            ct = chunk.chunk_type
+            if ct in ("module_header", "module_code", "file_overview"):
+                continue
+            name = chunk.name.split(":")[0].strip() if chunk.name else None
+            if name:
+                names_by_type.setdefault(ct, []).append(name)
+
+        if not names_by_type:
+            return None
+
+        # Build overview text
+        parts = [f"File: {Path(file_path).name} ({language})"]
+        for chunk_type, names in names_by_type.items():
+            label = chunk_type.replace("_", " ").title()
+            parts.append(f"{label} ({len(names)}): {', '.join(names[:15])}")
+            if len(names) > 15:
+                parts.append(f"  ... and {len(names) - 15} more")
+
+        overview_text = "\n".join(parts)
+
+        return CodeChunk(
+            content=overview_text,
+            file_path=file_path,
+            start_line=1,
+            end_line=1,
+            chunk_type="file_overview",
+            name=f"{Path(file_path).stem} (overview)",
+            language=language,
+            file_lines=total_lines,
+        )
 
     def _set_chunk_links(self, chunks: List[CodeChunk], file_path: str) -> List[CodeChunk]:
         """Set chunk indices and prev/next links for navigation."""

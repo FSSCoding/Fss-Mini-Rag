@@ -67,9 +67,10 @@ class EmbeddingConfig:
 
     provider: str = "openai"  # "openai" (OpenAI-compatible), "ollama", "ml", "hash"
     base_url: str = "http://localhost:1234/v1"  # LM Studio default
-    model: str = "auto"  # Auto-detect from endpoint (prefers MiniLM > Nomic)
+    model: str = "auto"  # Auto-detect from endpoint
     api_key: Optional[str] = None  # API key (if required by provider)
     embedding_dim: int = 768  # Embedding dimension
+    profile: str = "precision"  # "precision" (MiniLM, literal) or "conceptual" (Nomic, semantic)
     batch_size: int = 32
     # Legacy Ollama settings (used when provider="ollama")
     ollama_model: str = "nomic-embed-text"

@@ -270,6 +270,8 @@ class ProjectIndexer:
                     self.embedder.provider = emb_config.get("provider", self.embedder.provider)
                 if hasattr(self.embedder, "api_key"):
                     self.embedder.api_key = emb_config.get("api_key", self.embedder.api_key)
+                if hasattr(self.embedder, "_profile"):
+                    self.embedder._profile = emb_config.get("profile", self.embedder._profile)
 
             # Apply chunking settings
             if "chunking" in config:

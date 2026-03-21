@@ -49,7 +49,7 @@ class TestMarkdownChunking:
     def test_chunk_type_is_section(self, chunker, tmp_project):
         chunks = chunker.chunk_file(tmp_project / "README.md")
         for chunk in chunks:
-            assert chunk.chunk_type in ("section", "document")
+            assert chunk.chunk_type in ("section", "document", "file_overview")
 
     def test_regulatory_document_preserves_sections(self, chunker):
         """Critical test: regulatory documents must not collapse into one chunk."""
