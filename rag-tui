@@ -13,7 +13,7 @@ if [ ! -f "$PYTHON" ]; then
     echo "❌ Virtual environment not found at $SCRIPT_DIR/.venv"
     echo ""
     echo "🔧 To fix this:"
-    echo "   1. Run: ./install_mini_rag.sh"
+    echo "   1. Run: ./install.sh"
     echo "   2. Or manually: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
     exit 1
 fi
