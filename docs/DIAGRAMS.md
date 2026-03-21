@@ -135,49 +135,78 @@ flowchart TD
 
 ## Search Architecture
 
+Independent dual-pipeline search with Reciprocal Rank Fusion, adapted from the Fss-Rag hybrid search pattern. Semantic and keyword searches run independently against the full index, then results are merged by rank position.
+
 ```mermaid
 graph TB
-    Query[❓ User Query: "user authentication"] --> Process[🔧 Query Processing]
-    
-    Process --> Vector[🎯 Vector Search Path]
-    Process --> Keyword[🔤 Keyword Search Path]
-    
-    subgraph "Vector Pipeline"
-        Vector --> Embed[🧠 Query → Embedding]
-        Embed --> Similar[📊 Find Similar Vectors]
-        Similar --> VScore[📈 Similarity Scores]
+    Query[User Query] --> Expand[Query Expansion]
+    Expand --> QText[Expanded Query Text]
+
+    QText --> SemanticPath
+    QText --> KeywordPath
+
+    subgraph SemanticPath["Semantic Pipeline (Vector Search)"]
+        direction TB
+        SE[Embed Query via API] --> SV[Search LanceDB Vectors]
+        SV --> SR[Ranked by cosine distance]
     end
-    
-    subgraph "Keyword Pipeline" 
-        Keyword --> Terms[🔤 Extract Terms]
-        Terms --> BM25[📊 BM25 Algorithm]
-        BM25 --> KScore[📈 Keyword Scores]
+
+    subgraph KeywordPath["Keyword Pipeline (BM25 Full Index)"]
+        direction TB
+        KT[Tokenize Query] --> KB[Score ALL chunks with BM25]
+        KB --> KR[Ranked by term frequency]
     end
-    
-    subgraph "Hybrid Combination"
-        VScore --> Merge[🔄 Merge Results]
-        KScore --> Merge
-        Merge --> Rank[📊 Advanced Ranking]
-        Rank --> Boost[⬆️ Apply Boosts]
+
+    SR --> RRF
+    KR --> RRF
+
+    subgraph RRF["Reciprocal Rank Fusion"]
+        direction TB
+        R1["score = sum( 1/(60+rank) ) per method"]
+        R1 --> R2[Results appearing in BOTH methods score highest]
+        R2 --> R3[Sort by RRF score]
     end
-    
-    subgraph "Ranking Factors"
-        Boost --> Exact[🎯 Exact Matches +30%]
-        Boost --> Name[🏷️ Function Names +20%] 
-        Boost --> Length[📏 Content Length]
-        Boost --> Type[📝 Chunk Type]
-    end
-    
-    Exact --> Final[📋 Final Results]
-    Name --> Final
-    Length --> Final
-    Type --> Final
-    
-    Final --> Display[🖥️ Display to User]
-    
+
+    RRF --> Rerank[Smart Rerank]
+    Rerank --> Diversity[Diversity Filter]
+    Diversity --> Consolidate[Consolidate Adjacent Chunks]
+    Consolidate --> Display[Final Results with Score Labels]
+
     style Query fill:#e3f2fd
-    style Final fill:#e8f5e8
-    style Display fill:#f3e5f5
+    style RRF fill:#fff3e0
+    style Display fill:#e8f5e8
+```
+
+**Key design decisions (from Fss-Rag patterns):**
+
+- **Independent execution**: BM25 searches the FULL index, not just the vector shortlist. This means keyword matches are found even when embeddings are poor.
+- **RRF over weighted average**: Rank-based fusion works across different score distributions without normalization. A result at rank 1 in both methods scores higher than rank 1 in only one.
+- **Query analysis**: Fss-Rag uses `HybridSearchStrategy` to analyze query characteristics (technical terms boost keyword weight, conceptual questions boost semantic weight). Mini-rag uses fixed weights for simplicity.
+- **No hash mode in search**: If embedder is in hash mode (no real embeddings), semantic search is skipped entirely and only BM25 runs. Hash vectors are random noise that hurts fusion.
+
+## Embedding Provider Chain
+
+```mermaid
+flowchart TD
+    Init[CodeEmbedder Init] --> AutoDetect{Auto-detect models}
+    AutoDetect --> ListModels[GET /v1/models]
+    ListModels --> Classify{Classify models}
+    Classify --> EmbModels[Embedding models]
+    Classify --> LLMModels[LLM models]
+
+    EmbModels --> SelectBest[Prefer: nomic > bge > e5 > gte]
+    SelectBest --> TestEmbed[Test embedding request]
+    TestEmbed --> Success{Works?}
+
+    Success -->|Yes| OpenAI[Mode: openai]
+    Success -->|No| TryML{ML libs installed?}
+
+    TryML -->|Yes| MLMode[Mode: fallback]
+    TryML -->|No| Fail[ERROR: No embedding provider]
+
+    style OpenAI fill:#e8f5e8
+    style MLMode fill:#fff3e0
+    style Fail fill:#ffebee
 ```
 
 ## Installation Flow
@@ -207,7 +236,6 @@ flowchart TD
     
     Fail[💔 Graceful Failure] --> Help[📖 Show Installation Help]
     Help --> Manual[🔧 Manual Instructions]
-    Help --> Installer[📋 ./install.sh]
     Help --> Issues[🚨 Common Issues + Solutions]
     
     Ready --> Index[📁 Index Projects]
@@ -245,7 +273,7 @@ graph LR
     
     subgraph "Configuration Areas"
         Final --> Chunking[✂️ Text Chunking<br/>• Max/min sizes<br/>• Strategy (semantic/fixed)]
-        Final --> Embedding[🧠 Embeddings<br/>• Ollama settings<br/>• Fallback methods]
+        Final --> Embedding[🧠 Embeddings<br/>• OpenAI-compatible endpoint<br/>• Auto model detection<br/>• Provider: openai/ollama/ml]
         Final --> Search[🔍 Search Behavior<br/>• Result limits<br/>• Similarity thresholds]
         Final --> Files[📄 File Processing<br/>• Include/exclude patterns<br/>• Size limits]
         Final --> Streaming[🌊 Large File Handling<br/>• Streaming threshold<br/>• Memory management]
@@ -279,13 +307,13 @@ flowchart TD
     
     subgraph "Fallback Examples"
         direction TB
-        Ollama[🤖 Ollama Embeddings] -.-> ML[🧠 ML Models]
-        ML -.-> Hash[#️⃣ Hash-based]
-        
-        VenvFail[❌ Venv Creation] -.-> SystemPy[🐍 System Python]
-        
-        LargeFile[📚 Large File] -.-> Stream[🌊 Streaming Mode]
-        Stream -.-> Skip[⏭️ Skip File]
+        OpenAIEmb[OpenAI Endpoint] -.-> ML[ML Models]
+        ML -.-> NoEmbed[Error: No Provider]
+
+        VenvFail[Venv Creation] -.-> SystemPy[System Python]
+
+        LargeFile[Large File] -.-> Stream[Streaming Mode]
+        Stream -.-> Skip[Skip File]
     end
     
     style Success fill:#e8f5e8

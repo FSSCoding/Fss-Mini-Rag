@@ -274,6 +274,73 @@ class CodeSearcher:
             logger.error(f"Failed to get chunk context: {e}")
             return {"chunk": None, "prev": None, "next": None, "parent": None}
 
+    def _search_bm25_full(self, query: str, top_k: int = 10) -> List[SearchResult]:
+        """Run BM25 keyword search against the FULL index independently.
+
+        Unlike the old approach (BM25 scoring within vector shortlist), this
+        searches all chunks directly. Follows the Fss-Rag pattern where
+        keyword and semantic searches run independently before fusion.
+        """
+        if not self.bm25 or not self.chunk_texts:
+            return []
+
+        query_tokens = query.lower().split()
+        scores = self.bm25.get_scores(query_tokens)
+
+        # Get top_k indices by BM25 score
+        top_indices = np.argsort(scores)[::-1][:top_k]
+
+        df = self.table.to_pandas()
+        results = []
+
+        for idx in top_indices:
+            bm25_score = scores[idx]
+            if bm25_score <= 0:
+                break  # No more relevant results
+
+            # Map BM25 index back to dataframe row
+            if idx < len(df):
+                row = df.iloc[idx]
+                # Normalize BM25 score to 0-1 range (cap at 1.0)
+                normalized_score = min(bm25_score / max(scores), 1.0) if max(scores) > 0 else 0.0
+                results.append(self._row_to_search_result(row, normalized_score))
+
+        return results
+
+    @staticmethod
+    def _rrf_fusion(
+        result_lists: List[List[SearchResult]], k: int = 60
+    ) -> List[SearchResult]:
+        """Reciprocal Rank Fusion (RRF) to merge results from multiple search methods.
+
+        RRF score = sum(1 / (k + rank)) across all methods where the result appears.
+        k=60 is the standard constant (from the original RRF paper).
+
+        This is rank-based, not score-based, so it works even when score
+        distributions differ wildly (e.g. BM25 unbounded vs cosine 0-1).
+        """
+        # Build RRF scores keyed by (file_path, start_line) for deduplication
+        rrf_scores = {}
+        result_map = {}
+
+        for result_list in result_lists:
+            for rank, result in enumerate(result_list):
+                key = (result.file_path, result.start_line, result.end_line)
+                rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+                # Keep the result object (prefer the one with higher original score)
+                if key not in result_map or result.score > result_map[key].score:
+                    result_map[key] = result
+
+        # Sort by RRF score and assign as the result score
+        sorted_keys = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+        fused = []
+        for key in sorted_keys:
+            result = result_map[key]
+            result.score = rrf_scores[key]
+            fused.append(result)
+
+        return fused
+
     def _row_to_search_result(self, row: pd.Series, score: float) -> SearchResult:
         """Convert a DataFrame row to a SearchResult."""
         return SearchResult(
@@ -299,7 +366,12 @@ class CodeSearcher:
         include_context: bool = False,
     ) -> List[SearchResult]:
         """
-        Hybrid search for code similar to the query using both semantic and BM25.
+        Hybrid search using independent semantic + BM25 with RRF fusion.
+
+        Follows the Fss-Rag pattern: semantic and keyword searches run
+        independently against the full index, then results are merged
+        using Reciprocal Rank Fusion (RRF). This ensures keyword matches
+        are found even when embeddings are poor.
 
         Args:
             query: Natural language search query
@@ -309,102 +381,71 @@ class CodeSearcher:
             file_pattern: Filter by file path pattern (e.g., '**/test_*.py')
             semantic_weight: Weight for semantic similarity (default 0.7)
             bm25_weight: Weight for BM25 keyword score (default 0.3)
-            include_context: Whether to include adjacent and parent chunks for each result
+            include_context: Whether to include adjacent and parent chunks
 
         Returns:
-            List of SearchResult objects, sorted by combined relevance
+            List of SearchResult objects, sorted by RRF score
         """
         if not self.table:
             raise RuntimeError("Database not connected")
 
         # Expand query for better recall (if enabled)
         expanded_query = self.query_expander.expand_query(query)
-
-        # Use original query for display but expanded query for search
         search_query = expanded_query if expanded_query != query else query
 
-        # Embed the expanded query for semantic search
-        query_embedding = self.embedder.embed_query(search_query)
+        # --- Run searches INDEPENDENTLY (Fss-Rag pattern) ---
+        result_lists = []
 
-        # Ensure query is a numpy array of float32
-        if not isinstance(query_embedding, np.ndarray):
-            query_embedding = np.array(query_embedding, dtype=np.float32)
-        else:
-            query_embedding = query_embedding.astype(np.float32)
+        # 1. Semantic search (vector similarity)
+        # Skip if embedder is in hash mode (random noise hurts fusion)
+        use_semantic = self.embedder.get_mode() != "hash"
 
-        # Get more results for hybrid scoring
-        results_df = (
-            self.table.search(query_embedding)
-            .limit(top_k * 4)  # Get extra results for filtering and diversity
-            .to_pandas()
-        )
+        if use_semantic:
+            query_embedding = self.embedder.embed_query(search_query)
+            if not isinstance(query_embedding, np.ndarray):
+                query_embedding = np.array(query_embedding, dtype=np.float32)
+            else:
+                query_embedding = query_embedding.astype(np.float32)
 
-        if results_df.empty:
-            return []
+            results_df = (
+                self.table.search(query_embedding)
+                .limit(top_k * 3)
+                .to_pandas()
+            )
 
-        # Apply filters first
+            semantic_results = []
+            if not results_df.empty:
+                for _, row in results_df.iterrows():
+                    distance = row["_distance"]
+                    score = 1 / (1 + distance)
+                    semantic_results.append(self._row_to_search_result(row, score))
+
+            result_lists.append(semantic_results)
+
+        # 2. BM25 keyword search (full index, independent)
+        bm25_results = self._search_bm25_full(search_query, top_k=top_k * 3)
+        result_lists.append(bm25_results)
+
+        # --- Merge with Reciprocal Rank Fusion ---
+        fused_results = self._rrf_fusion(result_lists)
+
+        # Apply filters
         if chunk_types:
-            results_df = results_df[results_df["chunk_type"].isin(chunk_types)]
-
+            fused_results = [r for r in fused_results if r.chunk_type in chunk_types]
         if languages:
-            results_df = results_df[results_df["language"].isin(languages)]
-
+            fused_results = [r for r in fused_results if r.language in languages]
         if file_pattern:
             import fnmatch
+            fused_results = [r for r in fused_results
+                           if fnmatch.fnmatch(r.file_path, file_pattern)]
 
-            mask = results_df["file_path"].apply(lambda x: fnmatch.fnmatch(x, file_pattern))
-            results_df = results_df[mask]
-
-        # Calculate BM25 scores if available
-        if self.bm25:
-            # Tokenize expanded query for BM25
-            query_tokens = search_query.lower().split()
-
-            # Get BM25 scores for all chunks in results
-            bm25_scores = {}
-            for idx, row in results_df.iterrows():
-                if idx in self.chunk_ids:
-                    chunk_idx = self.chunk_ids.index(idx)
-                    bm25_score = self.bm25.get_scores(query_tokens)[chunk_idx]
-                    # Normalize BM25 score to 0-1 range
-                    bm25_scores[idx] = min(bm25_score / 10.0, 1.0)
-                else:
-                    bm25_scores[idx] = 0.0
-        else:
-            bm25_scores = {idx: 0.0 for idx in results_df.index}
-
-        # Calculate hybrid scores
-        hybrid_results = []
-        for idx, row in results_df.iterrows():
-            # Semantic score (convert distance to similarity)
-            distance = row["_distance"]
-            semantic_score = 1 / (1 + distance)
-
-            # BM25 score
-            bm25_score = bm25_scores.get(idx, 0.0)
-
-            # Combined score
-            combined_score = semantic_weight * semantic_score + bm25_weight * bm25_score
-
-            result = SearchResult(
-                file_path=display_path(row["file_path"]),
-                content=row["content"],
-                score=combined_score,
-                start_line=row["start_line"],
-                end_line=row["end_line"],
-                chunk_type=row["chunk_type"],
-                name=row["name"],
-                language=row["language"],
-            )
-            hybrid_results.append(result)
-
-        # Apply smart re-ranking for better quality (zero overhead)
-        hybrid_results = self._smart_rerank(hybrid_results)
+        # Apply smart re-ranking
+        fused_results = self._smart_rerank(fused_results)
 
         # Apply diversity constraints
-        diverse_results = self._apply_diversity_constraints(hybrid_results, top_k)
+        diverse_results = self._apply_diversity_constraints(fused_results, top_k)
 
-        # Consolidate results from same file (fill small gaps between chunks)
+        # Consolidate adjacent chunks from same file
         diverse_results = self._consolidate_same_file_results(diverse_results)
 
         # Add context if requested
@@ -486,8 +527,19 @@ class CodeSearcher:
         """
         now = datetime.now()
 
+        # Only apply boosts to results with meaningful scores.
+        # With RRF fusion, scores are small (0.01-0.03) so boosts
+        # must not distort relative ranking between relevant and
+        # irrelevant results.
+        if not results:
+            return results
+        max_score = max(r.score for r in results)
+        boost_threshold = max_score * 0.5  # Only boost top-half results
+
         for result in results:
-            # File importance boost (20% boost for important files)
+            if result.score < boost_threshold:
+                continue  # Don't boost low-relevance results
+
             file_path_lower = str(result.file_path).lower()
             important_patterns = [
                 "readme",
@@ -507,7 +559,7 @@ class CodeSearcher:
             ]
 
             if any(pattern in file_path_lower for pattern in important_patterns):
-                result.score *= 1.2
+                result.score *= 1.05  # Small boost (was 1.2 - too aggressive with RRF)
                 logger.debug(f"Important file boost: {result.file_path}")
 
             # Recency boost (10% boost for files modified in last week)
@@ -519,12 +571,9 @@ class CodeSearcher:
                 days_old = (now - modified_date).days
 
                 if days_old <= 7:  # Modified in last week
-                    result.score *= 1.1
-                    logger.debug(
-                        f"Recent file boost: {result.file_path} ({days_old} days old)"
-                    )
+                    result.score *= 1.02
                 elif days_old <= 30:  # Modified in last month
-                    result.score *= 1.05
+                    result.score *= 1.01
 
             except (OSError, ValueError):
                 # File doesn't exist or can't get stats - no boost
