@@ -130,9 +130,32 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
         console.print("[yellow][/yellow]  Project already initialized!")
         console.print("Use --force or --reindex to reindex all files\n")
 
-        # Show current stats
-        indexer = ProjectIndexer(project_path)
-        stats = indexer.get_statistics()
+        # Show current stats (read manifest directly, no embedder needed)
+        import json as _json
+        manifest_path = rag_dir / "manifest.json"
+        manifest = {}
+        if manifest_path.exists():
+            try:
+                with open(manifest_path) as f:
+                    manifest = _json.load(f)
+            except Exception:
+                pass
+
+        # Calculate index size
+        db_path = rag_dir / "code_vectors.lance"
+        index_mb = 0.0
+        if db_path.exists():
+            try:
+                index_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / (1024 * 1024)
+            except OSError:
+                pass
+
+        stats = {
+            "file_count": manifest.get("file_count", 0),
+            "chunk_count": manifest.get("chunk_count", 0),
+            "index_size_mb": index_mb,
+            "indexed_at": manifest.get("indexed_at", "Never"),
+        }
 
         table = Table(title="Current Index Statistics")
         table.add_column("Metric", style="cyan")
