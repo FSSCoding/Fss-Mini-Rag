@@ -84,6 +84,45 @@ def show_index_guidance(query_path: Path, found_index_path: Path) -> None:
     console.print()
 
 
+def index_project(project_path: Path, force_reindex: bool = False, model: Optional[str] = None) -> dict:
+    """Reusable indexing function for use by multiple CLI commands.
+
+    Args:
+        project_path: Path to the project to index
+        force_reindex: Force reindexing of all files
+        model: Specific embedding model to use (None = auto)
+
+    Returns:
+        Dict with indexing stats (files_indexed, chunks_created, time_taken, etc.)
+    """
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("[cyan]Loading embedding model...", total=None)
+        embedder = CodeEmbedder(model_name=model) if model else CodeEmbedder()
+        progress.update(task, completed=True)
+
+        task = progress.add_task("[cyan]Creating indexer...", total=None)
+        indexer = ProjectIndexer(project_path, embedder=embedder)
+        progress.update(task, completed=True)
+
+    console.print("\n[bold green]Starting indexing...[/bold green]\n")
+    stats = indexer.index_project(force_reindex=force_reindex)
+
+    if stats["files_indexed"] > 0:
+        console.print(
+            f"\n[bold green]Indexed {stats['files_indexed']} files, "
+            f"{stats['chunks_created']} chunks "
+            f"({stats['time_taken']:.1f}s)[/bold green]"
+        )
+    else:
+        console.print("\n[green]All files are already up to date![/green]")
+
+    return stats
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 @click.option("--quiet", "-q", is_flag=True, help="Suppress output")
@@ -171,40 +210,13 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
         console.print(table)
         return
 
-    # Initialize components
+    # Initialize and index
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            # Initialize embedder
-            task = progress.add_task("[cyan]Loading embedding model...", total=None)
-            # Use default model if None is passed
-            embedder = CodeEmbedder(model_name=model) if model else CodeEmbedder()
-            progress.update(task, completed=True)
+        stats = index_project(project_path, force_reindex=force_reindex, model=model)
 
-            # Create indexer
-            task = progress.add_task("[cyan]Creating indexer...", total=None)
-            indexer = ProjectIndexer(project_path, embedder=embedder)
-            progress.update(task, completed=True)
-
-        # Run indexing
-        console.print("\n[bold green]Starting indexing...[/bold green]\n")
-        stats = indexer.index_project(force_reindex=force_reindex)
-
-        # Show summary
         if stats["files_indexed"] > 0:
-            console.print(
-                f"\n[bold green] Success![/bold green] Indexed {stats['files_indexed']} files"
-            )
-            console.print(f"Created {stats['chunks_created']} searchable chunks")
-            console.print(f"Time: {stats['time_taken']:.2f} seconds")
             console.print(f"Speed: {stats['files_per_second']:.1f} files/second")
-        else:
-            console.print("\n[green] All files are already up to date![/green]")
 
-        # Show how to use
         console.print("\n[bold]Next steps:[/bold]")
         console.print('  • Search your code: [cyan]rag-mini search "your query"[/cyan]')
         console.print("  • Watch for changes: [cyan]rag-mini watch[/cyan]")
@@ -469,6 +481,364 @@ def debug_schema(path: str):
     except Exception as e:
         logger.error(f"Schema debug failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
+
+
+# ──────────────────────────────────────────────────────────
+# Web Scraper Commands
+# ──────────────────────────────────────────────────────────
+
+
+def _load_env_keys():
+    """Load API keys from .env file if present."""
+    import os
+    env_path = Path(".env")
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            if value.strip():
+                os.environ.setdefault(key.strip(), value.strip())
+
+
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.argument("urls", nargs=-1, required=True)
+@click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
+@click.option("--depth", "-d", type=int, default=0, help="Follow links N levels deep (default: 0)")
+@click.option("--max-pages", "-m", type=int, default=None, help="Max pages to scrape (default: from config)")
+@click.option("--timeout", type=int, default=None, help="Per-request timeout seconds")
+@click.option("--index", "-i", "do_index", is_flag=True, help="Auto-index after scraping")
+@click.option("--name", "-n", type=str, default=None, help="Session name (default: auto from URL)")
+def scrape(urls, path: str, depth: int, max_pages, timeout, do_index: bool, name):
+    """Scrape one or more URLs and save as searchable markdown.
+
+    Examples:
+
+      rag-mini scrape https://example.com
+
+      rag-mini scrape https://arxiv.org/pdf/2405.07987 --index
+
+      rag-mini scrape https://site1.com https://site2.com --depth 1
+    """
+    import time as _time
+    from .config import ConfigManager, WebScraperConfig
+    from .web_scraper import MiniWebScraper, ResearchSession
+
+    project_path = Path(path).resolve()
+    config_mgr = ConfigManager(project_path)
+    config = config_mgr.load_config()
+    ws_config = config.web_scraper
+
+    # Apply CLI overrides
+    if timeout:
+        ws_config.timeout = timeout
+
+    # Derive session name from first URL if not provided
+    if not name:
+        from urllib.parse import urlparse
+        parsed = urlparse(urls[0])
+        name = parsed.netloc.replace(".", "-")
+
+    console.print(f"\n[bold cyan]Scraping {len(urls)} URL(s)[/bold cyan]")
+    console.print(f"Session: [green]{name}[/green]  Depth: {depth}\n")
+
+    start = _time.time()
+
+    try:
+        session = ResearchSession.create(
+            project_path, query=f"scrape: {' '.join(urls[:3])}",
+            output_dir=ws_config.output_dir, engine="direct", name=name,
+        )
+        scraper = MiniWebScraper(ws_config)
+        pages = scraper.scrape_urls(
+            list(urls), session, max_pages=max_pages, depth=depth,
+        )
+        session.complete()
+
+        elapsed = _time.time() - start
+        console.print(f"\n[bold green]Scraped {len(pages)} page(s)[/bold green] ({elapsed:.1f}s)")
+
+        for p in pages:
+            console.print(f"  [{p.source_type}] {p.title[:60]} — {p.word_count} words")
+
+        console.print(f"\nSaved to: [blue]{session.session_dir}[/blue]")
+
+        if do_index:
+            console.print()
+            index_project(project_path)
+
+    except Exception as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        logger.exception("Scrape failed")
+        sys.exit(1)
+
+
+@cli.command("search-web", context_settings={"help_option_names": ["-h", "--help"]})
+@click.argument("query")
+@click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
+@click.option("--engine", "-e", type=click.Choice(["duckduckgo", "tavily", "brave"]), default=None, help="Search engine")
+@click.option("--max-results", "-r", type=int, default=None, help="Number of search results")
+@click.option("--depth", "-d", type=int, default=0, help="Follow links N levels deep")
+@click.option("--max-pages", "-m", type=int, default=None, help="Max total pages to scrape")
+@click.option("--index", "-i", "do_index", is_flag=True, help="Auto-index after scraping")
+@click.option("--name", "-n", type=str, default=None, help="Session name")
+def search_web(query: str, path: str, engine, max_results, depth: int, max_pages, do_index: bool, name):
+    """Search the web and scrape top results.
+
+    Examples:
+
+      rag-mini search-web "python web scraping tutorial"
+
+      rag-mini search-web "quantum gravity" --engine tavily --index
+
+      rag-mini search-web "Nassim Haramein" --engine brave --max-results 10
+    """
+    import os
+    import time as _time
+    from .config import ConfigManager
+    from .search_engines import create_search_engine
+    from .web_scraper import MiniWebScraper, ResearchSession
+
+    _load_env_keys()
+
+    project_path = Path(path).resolve()
+    config_mgr = ConfigManager(project_path)
+    config = config_mgr.load_config()
+    ws_config = config.web_scraper
+    se_config = config.search_engine
+
+    # CLI overrides
+    engine_name = engine or se_config.engine
+    num_results = max_results or se_config.max_results
+
+    # Resolve API keys from env
+    tavily_key = se_config.tavily_api_key or os.environ.get("TAVILY_API_KEY")
+    brave_key = se_config.brave_api_key or os.environ.get("BRAVE_API_KEY")
+
+    console.print(f"\n[bold cyan]Web Search:[/bold cyan] {query}")
+    console.print(f"Engine: [green]{engine_name}[/green]  Max results: {num_results}\n")
+
+    start = _time.time()
+
+    try:
+        # Search
+        search_engine = create_search_engine(engine_name, tavily_api_key=tavily_key, brave_api_key=brave_key)
+        results = search_engine.search(query, max_results=num_results)
+
+        if not results:
+            console.print("[yellow]No search results found.[/yellow]")
+            console.print("Try a different query or search engine.\n")
+            return
+
+        console.print(f"Found [green]{len(results)}[/green] results:")
+        for i, r in enumerate(results, 1):
+            console.print(f"  {i}. {r.title[:60]}")
+            console.print(f"     [dim]{r.url[:75]}[/dim]")
+        console.print()
+
+        # Scrape
+        session = ResearchSession.create(
+            project_path, query=query,
+            output_dir=ws_config.output_dir, engine=engine_name, name=name,
+        )
+        scraper = MiniWebScraper(ws_config)
+        urls = [r.url for r in results]
+        pages = scraper.scrape_urls(urls, session, max_pages=max_pages, depth=depth)
+        session.complete()
+
+        elapsed = _time.time() - start
+        console.print(f"[bold green]Scraped {len(pages)}/{len(results)} results[/bold green] ({elapsed:.1f}s)")
+
+        for p in pages:
+            console.print(f"  [{p.source_type}] {p.title[:60]} — {p.word_count} words")
+
+        console.print(f"\nSaved to: [blue]{session.session_dir}[/blue]")
+
+        if do_index:
+            console.print()
+            index_project(project_path)
+
+    except Exception as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        logger.exception("Web search failed")
+        sys.exit(1)
+
+
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.argument("query", required=False)
+@click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
+@click.option("--engine", "-e", type=click.Choice(["duckduckgo", "tavily", "brave"]), default=None, help="Search engine")
+@click.option("--max-pages", "-m", type=int, default=None, help="Max pages to scrape")
+@click.option("--list", "list_sessions", is_flag=True, help="List existing research sessions")
+@click.option("--open", "open_session", type=str, default=None, help="Open a session folder")
+@click.option("--delete", "delete_session", type=str, default=None, help="Delete a session")
+def research(query, path: str, engine, max_pages, list_sessions: bool, open_session, delete_session):
+    """Full research pipeline: search, scrape, index, and explore.
+
+    Examples:
+
+      rag-mini research "quantum vacuum fluctuations"
+
+      rag-mini research "Nassim Haramein holographic mass" --engine tavily
+
+      rag-mini research --list
+
+      rag-mini research --open 2026-03-23-quantum-gravity
+    """
+    import os
+    import time as _time
+    import shutil
+    import subprocess
+    from .config import ConfigManager
+    from .search_engines import create_search_engine
+    from .web_scraper import MiniWebScraper, ResearchSession
+
+    _load_env_keys()
+
+    project_path = Path(path).resolve()
+    config_mgr = ConfigManager(project_path)
+    config = config_mgr.load_config()
+    ws_config = config.web_scraper
+
+    # --- Session management subcommands ---
+
+    if list_sessions:
+        sessions = ResearchSession.list_sessions(project_path, ws_config.output_dir)
+        if not sessions:
+            console.print("[yellow]No research sessions found.[/yellow]")
+            return
+
+        table = Table(title=f"Research Sessions ({len(sessions)})")
+        table.add_column("Session", style="cyan")
+        table.add_column("Query", style="white")
+        table.add_column("Engine", style="green", width=10)
+        table.add_column("Pages", style="yellow", width=6)
+        table.add_column("Status", style="magenta", width=8)
+
+        for s in sessions:
+            m = s.metadata
+            table.add_row(
+                s.session_dir.name,
+                m.get("query", "")[:50],
+                m.get("engine", ""),
+                str(m.get("pages_scraped", 0)),
+                m.get("status", "unknown"),
+            )
+        console.print(table)
+        return
+
+    if open_session:
+        base_dir = project_path / ws_config.output_dir
+        session_dir = base_dir / open_session
+        if not session_dir.exists():
+            # Try partial match
+            matches = [d for d in base_dir.iterdir() if d.is_dir() and open_session in d.name]
+            if len(matches) == 1:
+                session_dir = matches[0]
+            elif matches:
+                console.print(f"[yellow]Multiple matches:[/yellow]")
+                for m in matches:
+                    console.print(f"  {m.name}")
+                return
+            else:
+                console.print(f"[red]Session not found: {open_session}[/red]")
+                return
+
+        # Open in file manager
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", str(session_dir)])
+            elif sys.platform == "win32":
+                subprocess.run(["explorer", str(session_dir)])
+            else:
+                subprocess.run(["xdg-open", str(session_dir)])
+            console.print(f"Opened: [blue]{session_dir}[/blue]")
+        except Exception:
+            console.print(f"Session folder: [blue]{session_dir}[/blue]")
+        return
+
+    if delete_session:
+        base_dir = project_path / ws_config.output_dir
+        session_dir = base_dir / delete_session
+        if not session_dir.exists():
+            matches = [d for d in base_dir.iterdir() if d.is_dir() and delete_session in d.name]
+            if len(matches) == 1:
+                session_dir = matches[0]
+            else:
+                console.print(f"[red]Session not found: {delete_session}[/red]")
+                return
+
+        file_count = sum(1 for _ in session_dir.iterdir())
+        if click.confirm(f"Delete session '{session_dir.name}' ({file_count} files)?"):
+            shutil.rmtree(session_dir)
+            console.print(f"[green]Deleted: {session_dir.name}[/green]")
+        return
+
+    # --- Full research pipeline ---
+
+    if not query:
+        console.print("[red]Query required for research. Use --list to see sessions.[/red]")
+        return
+
+    se_config = config.search_engine
+    engine_name = engine or se_config.engine
+    tavily_key = se_config.tavily_api_key or os.environ.get("TAVILY_API_KEY")
+    brave_key = se_config.brave_api_key or os.environ.get("BRAVE_API_KEY")
+
+    console.print(f"\n[bold cyan]Research:[/bold cyan] {query}")
+    console.print(f"Engine: [green]{engine_name}[/green]  Pipeline: search → scrape → index\n")
+
+    start = _time.time()
+
+    try:
+        # 1. Search
+        console.print("[bold]Step 1:[/bold] Searching the web...")
+        search_engine = create_search_engine(engine_name, tavily_api_key=tavily_key, brave_api_key=brave_key)
+        results = search_engine.search(query, max_results=se_config.max_results)
+
+        if not results:
+            console.print("[yellow]No search results found. Try a different engine or query.[/yellow]")
+            return
+
+        console.print(f"  Found {len(results)} results\n")
+
+        # 2. Scrape
+        console.print("[bold]Step 2:[/bold] Scraping content...")
+        session = ResearchSession.create(
+            project_path, query=query,
+            output_dir=ws_config.output_dir, engine=engine_name,
+        )
+        scraper = MiniWebScraper(ws_config)
+        urls = [r.url for r in results]
+        pages = scraper.scrape_urls(urls, session, max_pages=max_pages)
+        session.complete()
+
+        console.print(f"  Scraped {len(pages)} pages\n")
+
+        for p in pages:
+            console.print(f"  [{p.source_type}] {p.title[:55]} — {p.word_count} words")
+
+        # 3. Index
+        console.print(f"\n[bold]Step 3:[/bold] Indexing content...")
+        index_project(project_path)
+
+        elapsed = _time.time() - start
+
+        # Summary
+        total_words = sum(p.word_count for p in pages)
+        console.print(f"\n[bold green]Research complete[/bold green] ({elapsed:.1f}s)")
+        console.print(f"  Pages: {len(pages)}  Words: {total_words:,}  Tokens: ~{total_words * 4 // 3:,}")
+        console.print(f"  Session: [blue]{session.session_dir}[/blue]")
+        console.print(f"\n[bold]Next:[/bold]")
+        console.print(f'  • Search results: [cyan]rag-mini search "{query[:40]}"[/cyan]')
+        console.print(f"  • Open files:     [cyan]rag-mini research --open {session.session_dir.name}[/cyan]")
+        console.print(f"  • List sessions:  [cyan]rag-mini research --list[/cyan]\n")
+
+    except Exception as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        logger.exception("Research failed")
+        sys.exit(1)
 
 
 @cli.command(context_settings={"help_option_names": ["-h", "--help"]})

@@ -473,9 +473,207 @@ class PDFExtractor:
         return text.strip()
 
 
+class ArxivExtractor:
+    """Extract content from arXiv pages.
+
+    Handles:
+    - Abstract pages (arxiv.org/abs/...) — extracts title, authors, abstract, metadata
+    - PDF links (arxiv.org/pdf/...) — delegates to PDFExtractor
+    """
+
+    _pdf_extractor = PDFExtractor()
+
+    def can_handle(self, url: str, content_type: str) -> bool:
+        return "arxiv.org" in urlparse(url).netloc
+
+    def extract(self, url: str, raw: bytes, content_type: str) -> Optional[ScrapedPage]:
+        # PDF on arXiv — delegate
+        if self._pdf_extractor.can_handle(url, content_type):
+            page = self._pdf_extractor.extract(url, raw, content_type)
+            if page:
+                page.source_type = "arxiv"
+            return page
+
+        if not BS4_AVAILABLE:
+            return None
+
+        try:
+            soup = BeautifulSoup(raw.decode("utf-8", errors="replace"), "html.parser")
+
+            # Title
+            title_el = soup.select_one("h1.title")
+            title = title_el.get_text(strip=True).replace("Title:", "").strip() if title_el else ""
+
+            # Authors
+            authors_el = soup.select_one(".authors")
+            authors = authors_el.get_text(strip=True).replace("Authors:", "").strip() if authors_el else ""
+
+            # Abstract
+            abstract_el = soup.select_one("blockquote.abstract")
+            abstract = abstract_el.get_text(strip=True).replace("Abstract:", "").strip() if abstract_el else ""
+
+            # Subjects/categories
+            subjects_el = soup.select_one(".subjects")
+            subjects = subjects_el.get_text(strip=True) if subjects_el else ""
+
+            # Submission date
+            date_el = soup.select_one(".dateline")
+            dateline = date_el.get_text(strip=True) if date_el else ""
+
+            # Build markdown
+            parts = [f"**Authors:** {authors}"] if authors else []
+            if dateline:
+                parts.append(f"**Submitted:** {dateline}")
+            if subjects:
+                parts.append(f"**Subjects:** {subjects}")
+            parts.append("")
+            parts.append("## Abstract")
+            parts.append("")
+            parts.append(abstract)
+
+            # Get PDF link
+            pdf_link = soup.select_one('a[href*="/pdf/"]')
+            if pdf_link:
+                pdf_url = pdf_link.get("href", "")
+                if pdf_url.startswith("/"):
+                    pdf_url = f"https://arxiv.org{pdf_url}"
+                parts.append("")
+                parts.append(f"**PDF:** [{pdf_url}]({pdf_url})")
+
+            content = "\n".join(parts)
+            word_count = len(content.split())
+
+            if not title and not abstract:
+                return None
+
+            return ScrapedPage(
+                url=url,
+                title=title or "Untitled arXiv Paper",
+                content=content,
+                scraped_at=datetime.now().isoformat(),
+                word_count=word_count,
+                links=[],
+                source_type="arxiv",
+            )
+
+        except Exception as e:
+            logger.error(f"arXiv extraction failed for {url}: {e}")
+            return None
+
+
+class GitHubExtractor:
+    """Extract content from GitHub pages.
+
+    Handles:
+    - Repository pages (github.com/user/repo) — extracts README
+    - File views — extracts code content
+    - Focuses on the actual content, stripping GitHub chrome
+    """
+
+    def can_handle(self, url: str, content_type: str) -> bool:
+        return "github.com" in urlparse(url).netloc and "text/html" in content_type
+
+    def extract(self, url: str, raw: bytes, content_type: str) -> Optional[ScrapedPage]:
+        if not BS4_AVAILABLE:
+            return None
+
+        try:
+            soup = BeautifulSoup(raw.decode("utf-8", errors="replace"), "html.parser")
+
+            parsed_url = urlparse(url)
+            path_parts = [p for p in parsed_url.path.split("/") if p]
+
+            # Repository main page — extract README
+            readme_el = soup.select_one("article.markdown-body")
+            if readme_el:
+                title = self._extract_repo_title(soup, path_parts)
+                content = self._readme_to_markdown(readme_el)
+
+                # Extract repo metadata
+                description_el = soup.select_one("p.f4.my-3")
+                description = description_el.get_text(strip=True) if description_el else ""
+
+                # Topics/tags
+                topics = [t.get_text(strip=True) for t in soup.select("a.topic-tag")]
+
+                parts = []
+                if description:
+                    parts.append(f"*{description}*\n")
+                if topics:
+                    parts.append(f"**Topics:** {', '.join(topics)}\n")
+                parts.append(content)
+
+                full_content = "\n".join(parts)
+                word_count = len(full_content.split())
+
+                return ScrapedPage(
+                    url=url,
+                    title=title,
+                    content=full_content,
+                    scraped_at=datetime.now().isoformat(),
+                    word_count=word_count,
+                    links=self._extract_links(soup, url),
+                    source_type="github",
+                )
+
+            # Code file view
+            code_el = soup.select_one("table.highlight")
+            if code_el:
+                title = path_parts[-1] if path_parts else "GitHub File"
+                code_text = code_el.get_text()
+                repo_name = "/".join(path_parts[:2]) if len(path_parts) >= 2 else ""
+
+                content = f"**Repository:** {repo_name}\n\n```\n{code_text}\n```"
+                word_count = len(content.split())
+
+                return ScrapedPage(
+                    url=url,
+                    title=f"{repo_name}/{title}",
+                    content=content,
+                    scraped_at=datetime.now().isoformat(),
+                    word_count=word_count,
+                    links=[],
+                    source_type="github",
+                )
+
+            # Fallback to generic extraction for other GitHub pages
+            return None
+
+        except Exception as e:
+            logger.error(f"GitHub extraction failed for {url}: {e}")
+            return None
+
+    def _extract_repo_title(self, soup, path_parts: list) -> str:
+        """Extract repository name from GitHub page."""
+        if len(path_parts) >= 2:
+            return f"{path_parts[0]}/{path_parts[1]}"
+        title_el = soup.select_one("strong[itemprop='name'] a")
+        if title_el:
+            return title_el.get_text(strip=True)
+        return "GitHub Repository"
+
+    def _readme_to_markdown(self, article) -> str:
+        """Convert GitHub's rendered README back to clean markdown."""
+        # GitHub's markdown-body is already rendered HTML — use generic conversion
+        extractor = GenericExtractor()
+        return extractor._html_to_markdown(article)
+
+    def _extract_links(self, soup, base_url: str) -> List[str]:
+        """Extract relevant links from GitHub page."""
+        from urllib.parse import urljoin
+        links = []
+        for a in soup.select("article.markdown-body a[href]"):
+            href = a["href"]
+            if href.startswith(("#", "javascript:")):
+                continue
+            links.append(urljoin(base_url, href))
+        return links
+
+
 # Registry of all extractors, ordered by specificity (most specific first)
-# Domain-specific extractors (arXiv, GitHub) will be prepended here later
 _EXTRACTORS: List[ContentExtractor] = [
+    ArxivExtractor(),
+    GitHubExtractor(),
     PDFExtractor(),
     GenericExtractor(),
 ]
