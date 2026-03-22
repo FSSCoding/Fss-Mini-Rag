@@ -152,6 +152,42 @@ class UpdateConfig:
 
 
 @dataclass
+class WebScraperConfig:
+    """Configuration for web scraping and content acquisition."""
+
+    enabled: bool = True
+    output_dir: str = "mini-research"  # Relative to project path
+    max_pages: int = 20  # Per session hard limit
+    max_depth: int = 1  # 0 = single page, 1 = follow links once
+    timeout: int = 15  # Per-request seconds
+    min_content_length: int = 200  # Skip pages with less content
+    respect_robots: bool = True  # Honour robots.txt
+    delay_between_requests: float = 1.0  # Rate limiting seconds
+    user_agent: str = "FSS-Mini-RAG-Research/2.2"
+
+
+@dataclass
+class SearchEngineConfig:
+    """Configuration for web search engines."""
+
+    engine: str = "duckduckgo"  # "duckduckgo", "tavily", "brave"
+    max_results: int = 10
+    tavily_api_key: Optional[str] = None
+    brave_api_key: Optional[str] = None
+
+
+@dataclass
+class DeepResearchConfig:
+    """Configuration for iterative deep research sessions."""
+
+    enabled: bool = False
+    max_rounds: int = 5  # Maximum search-scrape-reason cycles
+    max_total_pages: int = 100  # Hard cap across all rounds
+    checkpoint_interval: int = 1  # Save state every N rounds
+    prune_threshold: float = 0.3  # Drop low-relevance docs below this
+
+
+@dataclass
 class RAGConfig:
     """Main RAG system configuration."""
 
@@ -163,6 +199,9 @@ class RAGConfig:
     llm: LLMConfig = None
     server: ServerConfig = None
     updates: UpdateConfig = None
+    web_scraper: WebScraperConfig = None
+    search_engine: SearchEngineConfig = None
+    deep_research: DeepResearchConfig = None
 
     def __post_init__(self):
         if self.chunking is None:
@@ -181,6 +220,12 @@ class RAGConfig:
             self.server = ServerConfig()
         if self.updates is None:
             self.updates = UpdateConfig()
+        if self.web_scraper is None:
+            self.web_scraper = WebScraperConfig()
+        if self.search_engine is None:
+            self.search_engine = SearchEngineConfig()
+        if self.deep_research is None:
+            self.deep_research = DeepResearchConfig()
 
 
 class ConfigManager:
@@ -437,6 +482,12 @@ class ConfigManager:
                 config.search = SearchConfig(**data["search"])
             if "llm" in data:
                 config.llm = LLMConfig(**data["llm"])
+            if "web_scraper" in data:
+                config.web_scraper = WebScraperConfig(**data["web_scraper"])
+            if "search_engine" in data:
+                config.search_engine = SearchEngineConfig(**data["search_engine"])
+            if "deep_research" in data:
+                config.deep_research = DeepResearchConfig(**data["deep_research"])
 
             # Validate and resolve model names if Ollama is available
             config = self.validate_and_resolve_models(config)
@@ -578,6 +629,24 @@ class ConfigManager:
                 f"  auto_install: {str(config_dict['updates']['auto_install']).lower()}          # Auto-install updates (not recommended)",
                 f"  backup_before_update: {str(config_dict['updates']['backup_before_update']).lower()}   # Create backup before updating",
                 f"  notify_beta_releases: {str(config_dict['updates']['notify_beta_releases']).lower()}   # Include beta releases in checks",
+                "",
+                "# Web scraper settings",
+                "web_scraper:",
+                f"  enabled: {str(config_dict['web_scraper']['enabled']).lower()}",
+                f"  output_dir: {config_dict['web_scraper']['output_dir']}  # Session output directory",
+                f"  max_pages: {config_dict['web_scraper']['max_pages']}  # Per session page limit",
+                f"  max_depth: {config_dict['web_scraper']['max_depth']}  # Link following depth",
+                f"  timeout: {config_dict['web_scraper']['timeout']}  # Per-request timeout seconds",
+                f"  min_content_length: {config_dict['web_scraper']['min_content_length']}  # Skip thin pages",
+                f"  respect_robots: {str(config_dict['web_scraper']['respect_robots']).lower()}  # Honour robots.txt",
+                f"  delay_between_requests: {config_dict['web_scraper']['delay_between_requests']}  # Rate limit seconds",
+                "",
+                "# Web search engine settings",
+                "search_engine:",
+                f"  engine: {config_dict['search_engine']['engine']}  # duckduckgo, tavily, brave",
+                f"  max_results: {config_dict['search_engine']['max_results']}  # Results per search",
+                "  # tavily_api_key: null  # Set for Tavily search",
+                "  # brave_api_key: null   # Set for Brave search",
             ]
         )
 

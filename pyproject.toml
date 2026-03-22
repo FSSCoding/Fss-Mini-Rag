@@ -59,7 +59,13 @@ dependencies = [
     "PyYAML>=6.0.0",
     "rank-bm25>=0.2.2",
     "psutil>=5.9.0",
+    "beautifulsoup4>=4.12.0",
+    "pymupdf>=1.23.0",
+    "duckduckgo-search>=4.0.0",
 ]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.40.0"]
 keywords = ["rag", "search", "ai", "llm", "embeddings", "semantic-search", "code-search"]
 classifiers = [
     "Development Status :: 4 - Beta",

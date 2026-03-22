@@ -4,12 +4,15 @@ Wires together all components, services, and event handlers.
 This is the only file that knows about all the pieces.
 """
 
+import logging
 import threading
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
 
 from .events import EventBus
+
+logger = logging.getLogger(__name__)
 from .config_store import load_config, save_config
 from .components.search_bar import SearchBar
 from .components.results_table import ResultsTable
@@ -37,6 +40,12 @@ class MiniRAGApp(tk.Tk):
         self.search_service = SearchService(self.bus)
         self._active_path = None
         self._last_results = []
+
+        # Apply saved settings to services
+        self.search_service.llm_url = self.config_data.get("llm_url", "http://localhost:1234/v1")
+        self.search_service.llm_model = self.config_data.get("llm_model", "auto")
+        self.search_service.embedding_url = self.config_data.get("embedding_url", "http://localhost:1234/v1")
+        logger.info(f"GUI started: LLM={self.search_service.llm_url} Embedding={self.search_service.embedding_url}")
 
         # Build UI
         self._create_menu()
@@ -274,7 +283,16 @@ class MiniRAGApp(tk.Tk):
     def _on_settings_changed(self, data):
         self.config_data.update(data)
         save_config(self.config_data)
-        self.status_bar.set_text("Settings saved")
+
+        # Push settings to services
+        self.search_service.llm_url = data.get("llm_url", self.search_service.llm_url)
+        self.search_service.llm_model = data.get("llm_model", self.search_service.llm_model)
+        self.search_service.embedding_url = data.get("embedding_url", self.search_service.embedding_url)
+
+        # Invalidate cached searchers (embedding endpoint may have changed)
+        self.search_service.invalidate()
+
+        self.status_bar.set_text(f"Settings saved (LLM: {self.search_service.llm_url})")
 
     # === Dialogs ===
 

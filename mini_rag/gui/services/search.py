@@ -3,11 +3,14 @@
 Wraps CodeSearcher and LLMSynthesizer with timing and event emission.
 """
 
+import logging
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..events import EventBus
+
+logger = logging.getLogger(__name__)
 
 
 class SearchService:
@@ -15,7 +18,10 @@ class SearchService:
 
     def __init__(self, event_bus: EventBus):
         self.bus = event_bus
-        self._searchers: Dict[str, Any] = {}  # Cache searchers by path
+        self._searchers: Dict[str, Any] = {}
+        self.llm_url: str = "http://localhost:1234/v1"
+        self.llm_model: str = "auto"
+        self.embedding_url: str = "http://localhost:1234/v1"
 
     def search(self, path: str, query: str, top_k: int = 20, expand: bool = False):
         """Run search against a collection."""
@@ -57,7 +63,12 @@ class SearchService:
         try:
             from mini_rag.llm_synthesizer import LLMSynthesizer
 
-            synth = LLMSynthesizer()
+            logger.info(f"Synthesis: LLM={self.llm_url} model={self.llm_model}")
+            synth = LLMSynthesizer(
+                base_url=self.llm_url,
+                model=self.llm_model if self.llm_model != "auto" else None,
+                provider="openai",
+            )
             t0 = time.time()
             result = synth.synthesize_search_results(query, results, Path(path))
             synth_ms = (time.time() - t0) * 1000
