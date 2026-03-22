@@ -218,8 +218,10 @@ class OllamaEmbedder:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        # If model is "auto", discover available models
-        if self.model_name == "auto":
+        is_custom = not self.base_url.rstrip("/").endswith("/v1")
+
+        # If model is "auto", discover available models (skip for custom endpoints)
+        if self.model_name == "auto" and not is_custom:
             detected = self._auto_select_embedding_model()
             if detected:
                 self.model_name = detected
@@ -231,6 +233,25 @@ class OllamaEmbedder:
                 )
 
         try:
+            # Detect custom endpoint format (URL doesn't end with /v1)
+            if not self.base_url.rstrip("/").endswith("/v1"):
+                # Custom format: POST {text} -> {embedding}
+                response = requests.post(
+                    self.base_url,
+                    headers=headers,
+                    json={"text": "test"},
+                    timeout=10,
+                )
+                response.raise_for_status()
+                data = response.json()
+                emb = data.get("embedding", [])
+                if emb:
+                    self.embedding_dim = len(emb)
+                    self.model_name = "custom-endpoint"
+                    return
+                raise ValueError("Custom endpoint returned no embedding")
+
+            # Standard OpenAI format
             response = requests.post(
                 f"{self.base_url}/embeddings",
                 headers=headers,
@@ -355,12 +376,32 @@ class OllamaEmbedder:
             )
 
     def _get_openai_embedding(self, text: str) -> np.ndarray:
-        """Get embedding from OpenAI-compatible endpoint."""
+        """Get embedding from OpenAI-compatible or custom endpoint.
+
+        Supports two formats:
+        - OpenAI: POST base_url/embeddings {model, input} -> {data:[{embedding}]}
+        - Custom: POST base_url {text} -> {embedding} (BobAI/FSS-RAG format)
+        """
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         try:
+            # Detect custom endpoint format (URL ends without /v1)
+            if not self.base_url.rstrip("/").endswith("/v1"):
+                # Custom format: POST {text} -> {embedding}
+                response = requests.post(
+                    self.base_url,
+                    headers=headers,
+                    json={"text": text},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                data = response.json()
+                embedding = data["embedding"]
+                return np.array(embedding, dtype=np.float32)
+
+            # Standard OpenAI format
             response = requests.post(
                 f"{self.base_url}/embeddings",
                 headers=headers,
@@ -374,7 +415,7 @@ class OllamaEmbedder:
             return np.array(embedding, dtype=np.float32)
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"OpenAI-compatible API failed: {e}")
+            logger.error(f"Embedding API failed: {e}")
             if self.enable_fallback and self.fallback_embedder:
                 return self._get_fallback_embedding(text)
             raise RuntimeError(f"Embedding API request failed: {e}")
