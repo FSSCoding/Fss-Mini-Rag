@@ -169,9 +169,11 @@ class SearchEngineConfig:
 class DeepResearchConfig:
     enabled: bool = False
     max_rounds: int = 5                     # Maximum search→scrape→reason cycles
+    max_time_minutes: int = 60              # Time budget (0 = unlimited, use max_rounds)
     max_total_pages: int = 100              # Hard cap across all rounds
     checkpoint_interval: int = 1            # Save state every N rounds
-    prune_threshold: float = 0.3            # Drop low-relevance docs below this
+    prune_threshold: float = 0.3            # Similarity threshold for fuzzy dedup
+    roundup_buffer_minutes: int = 5         # Start final roundup this many minutes before deadline
 ```
 
 All wired into `RAGConfig` alongside existing config sections.
@@ -227,16 +229,52 @@ rag-mini research QUERY [OPTIONS]
 ```
 
 ### `rag-mini research --deep` (v2.3.0)
-Long-running iterative research:
-1. Search web for initial query
-2. Scrape top results
-3. Index scraped content
-4. LLM analyzes corpus, identifies gaps, generates follow-up queries
-5. Search again with new queries
-6. Scrape new results, add to corpus
-7. Prune low-relevance documents
-8. Checkpoint — save session state
-9. Repeat until max_rounds or LLM decides corpus is sufficient
+
+Long-running unattended research with time budget and agent phases.
+
+**Time budget:** User sets max duration (e.g. `--time 1h`, `--time 100h`). The agent
+tracks elapsed time per round. When remaining time drops below one round's estimated
+duration, it triggers the final roundup — review, prune, organize, report. Never
+overshoots the timer. If someone sets 1 hour, it finishes in under 1 hour.
+
+**Three-bucket session directory:**
+```
+{session}/
+  sources/       ← downloaded web pages, PDFs (NEVER modified by agent except dedup)
+  notes/         ← user's own files they bring to the session
+  agent-notes/   ← AI-generated analysis, gap reports, summaries, session docs
+  session.json   ← metadata, timing, stats
+```
+These buckets must never be mixed. Source integrity is paramount.
+
+**Agent phases (explicit state machine):**
+
+| Phase | What happens |
+|-------|-------------|
+| **ANALYZE** | Index the session folder. Search the collection. Understand content deeply. Identify gaps. Write analysis to `agent-notes/`. Can start here with existing folder (no web search needed). |
+| **SEARCH** | Use identified gaps to generate web search queries via LLM. Execute searches. |
+| **SCRAPE** | Fetch and extract content from search results. Save to `sources/`. Deduplicate against existing sources (fuzzy matching, not just character comparison). |
+| **PRUNE** | Evaluate sources for consistency. Same info in 3+ sources = stronger evidence (keep all, note corroboration). True duplicates removed. Low-relevance content flagged but NOT deleted. |
+| **REPORT** | Generate session report: searches performed, pages found/pulled/pruned, token counts (chars/4), gaps remaining, confidence assessment. Save to `agent-notes/`. |
+
+**Cycle:** ANALYZE → SEARCH → SCRAPE → ANALYZE → PRUNE → REPORT → (repeat or finish)
+
+The ANALYZE phase can run standalone — user points at an existing folder, agent indexes
+it, evaluates what's there, identifies gaps. Web search is a separate trigger that kicks
+in when the user opts for it or `--deep` is active.
+
+**Pruning subsystem:**
+- Fuzzy deduplication (semantic similarity, not just character matching)
+- Cross-source consistency checking (corroboration = evidence strength)
+- Never deletes sources unless truly duplicate content
+- Inconsistencies flagged in agent-notes, not silently resolved
+
+**Session report on completion:**
+- Total searches, pages found, pages scraped, pages pruned
+- Token count estimate (chars/4)
+- Gaps remaining vs gaps filled
+- Confidence assessment per topic area
+- Time spent per phase
 
 ---
 
@@ -302,20 +340,27 @@ playwright          # JS rendering, install-on-demand ~50MB
 | Phase | Deliverable |
 |-------|-------------|
 | 10 | Playwright tier-2 fetcher + `--install-browser` |
-| 11 | Tavily + Brave search engines |
+| ~~11~~ | ~~Tavily + Brave search engines~~ — **DONE** (shipped in phases 1-4) |
 | 12 | Lightweight JS response handling (blocker detection, cookie walls) |
 | 13 | Additional domain extractors |
-| 14 | Session management: `--list`, `--open`, `--delete`, `--continue` |
+| 14 | Session management CLI: `--list`, `--open`, `--delete`, `--continue` |
 
-### v2.3.0 — Deep research
+### v2.3.0 — Deep research engine
+
+Three-bucket directory structure, agent phase state machine, time-budgeted research.
 
 | Phase | Deliverable |
 |-------|-------------|
-| 15 | `research_session.py`: session state machine, checkpoint/resume |
-| 16 | `DeepResearchConfig` wiring |
-| 17 | LLM gap analysis + follow-up query generation |
-| 18 | Corpus pruning |
-| 19 | `research --deep` command |
+| 15 | Three-bucket session directory: `sources/`, `notes/`, `agent-notes/` |
+| 16 | Agent phase state machine: ANALYZE → SEARCH → SCRAPE → PRUNE → REPORT |
+| 17 | Time budget tracking: elapsed time per round, deadline-aware roundup |
+| 18 | ANALYZE phase: index folder, search collection, understand content, find gaps |
+| 19 | LLM gap analysis + follow-up query generation (uses built-in LLM) |
+| 20 | SCRAPE phase with fuzzy dedup against existing sources |
+| 21 | PRUNE phase: cross-source consistency, corroboration detection, duplicate removal |
+| 22 | REPORT phase: session stats, token counts (chars/4), gaps remaining, confidence |
+| 23 | `research --deep` command with `--time` flag |
+| 24 | `research --analyze` — start from existing folder without web search |
 
 ---
 
@@ -326,3 +371,5 @@ playwright          # JS rendering, install-on-demand ~50MB
 3. **Domain extractor priority** — Which research sites beyond arXiv and GitHub get custom extractors in v2.2.0?
 4. **Setup wizard** — Install scripts should ask about optional deps (browser, API keys). Design TBD.
 5. **User's superior PDF parser** — What is it and when does it get integrated as an extra?
+6. **Fuzzy dedup patterns** — User has existing tools for this. Need to review and port.
+7. **LLM prompt design** — Gap analysis and self-assessment prompts need careful crafting to keep agent on-workflow.

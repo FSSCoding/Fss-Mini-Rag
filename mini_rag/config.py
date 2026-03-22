@@ -182,9 +182,11 @@ class DeepResearchConfig:
 
     enabled: bool = False
     max_rounds: int = 5  # Maximum search-scrape-reason cycles
+    max_time_minutes: int = 60  # Time budget (0 = unlimited, use max_rounds only)
     max_total_pages: int = 100  # Hard cap across all rounds
     checkpoint_interval: int = 1  # Save state every N rounds
-    prune_threshold: float = 0.3  # Drop low-relevance docs below this
+    prune_threshold: float = 0.3  # Similarity threshold for fuzzy dedup
+    roundup_buffer_minutes: int = 5  # Start final roundup this many mins before deadline
 
 
 @dataclass
