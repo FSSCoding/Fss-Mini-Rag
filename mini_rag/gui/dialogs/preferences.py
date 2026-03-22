@@ -1,11 +1,13 @@
 """Preferences dialog for endpoint and model configuration."""
 
+import threading
 import tkinter as tk
 from tkinter import ttk
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 
 from ..config_store import PRESETS
 from ..events import EventBus
+from ..services.model_discovery import discover_models
 
 
 class PreferencesDialog(tk.Toplevel):
@@ -44,7 +46,8 @@ class PreferencesDialog(tk.Toplevel):
 
         ttk.Label(frame, text="Model:").grid(row=4, column=0, sticky=tk.W, **pad)
         self.emb_model_var = tk.StringVar(value=self.config_data.get("embedding_model", "auto"))
-        ttk.Entry(frame, textvariable=self.emb_model_var, width=35).grid(row=4, column=1, **pad)
+        self.emb_model_combo = ttk.Combobox(frame, textvariable=self.emb_model_var, width=33)
+        self.emb_model_combo.grid(row=4, column=1, **pad)
 
         ttk.Label(frame, text="Profile:").grid(row=5, column=0, sticky=tk.W, **pad)
         profile_frame = ttk.Frame(frame)
@@ -63,7 +66,8 @@ class PreferencesDialog(tk.Toplevel):
 
         ttk.Label(frame, text="Model:").grid(row=9, column=0, sticky=tk.W, **pad)
         self.llm_model_var = tk.StringVar(value=self.config_data.get("llm_model", "auto"))
-        ttk.Entry(frame, textvariable=self.llm_model_var, width=35).grid(row=9, column=1, **pad)
+        self.llm_model_combo = ttk.Combobox(frame, textvariable=self.llm_model_var, width=33)
+        self.llm_model_combo.grid(row=9, column=1, **pad)
 
         # Query expansion
         ttk.Separator(frame, orient=tk.HORIZONTAL).grid(row=10, column=0, columnspan=2, sticky=tk.EW, pady=10)
@@ -72,20 +76,47 @@ class PreferencesDialog(tk.Toplevel):
             row=11, column=0, columnspan=2, sticky=tk.W, **pad
         )
 
+        # Refresh models button
+        ttk.Button(frame, text="Refresh Models", command=self._refresh_models).grid(
+            row=12, column=0, columnspan=2, sticky=tk.W, **pad
+        )
+
         # Test connection button
         self.test_label = ttk.Label(frame, text="", foreground="gray")
-        self.test_label.grid(row=12, column=0, columnspan=2, sticky=tk.W, **pad)
+        self.test_label.grid(row=13, column=0, columnspan=2, sticky=tk.W, **pad)
 
         ttk.Button(frame, text="Test Connections", command=self._test_connections).grid(
-            row=13, column=0, columnspan=2, sticky=tk.W, **pad
+            row=14, column=0, columnspan=2, sticky=tk.W, **pad
         )
 
         # Buttons
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=14, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=15, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="Save Custom", command=self._save_custom).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Reset", command=self._reset).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="OK", command=self._on_ok).pack(side=tk.RIGHT, padx=5)
+
+    def _refresh_models(self):
+        self.test_label.config(text="Discovering models...")
+
+        def _discover():
+            emb_url = self.emb_url_var.get()
+            llm_url = self.llm_url_var.get()
+            emb_models = discover_models(emb_url)
+            llm_models = discover_models(llm_url) if llm_url != emb_url else emb_models
+
+            all_emb = ["auto"] + emb_models.get("embedding", [])
+            all_llm = ["auto"] + (llm_models.get("llm", []) or llm_models.get("embedding", []))
+
+            self.after(0, lambda: self._apply_models(all_emb, all_llm))
+
+        threading.Thread(target=_discover, daemon=True).start()
+
+    def _apply_models(self, emb_models, llm_models):
+        self.emb_model_combo["values"] = emb_models
+        self.llm_model_combo["values"] = llm_models
+        count = len(emb_models) + len(llm_models) - 2  # minus the 2 "auto" entries
+        self.test_label.config(text=f"Found {count} models")
 
     def _on_preset_changed(self, event):
         preset_name = self.preset_var.get()

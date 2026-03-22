@@ -1,10 +1,14 @@
 """Results table component."""
 
+import os
+import subprocess
+import sys
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
 
 from ..events import EventBus
+from ..tooltip import TreeviewToolTip
 
 
 def _score_label(score: float, max_score: float) -> str:
@@ -49,6 +53,15 @@ class ResultsTable(ttk.Frame):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree.bind("<Double-1>", self._on_double_click)
+        self.tree.bind("<Button-3>", self._on_right_click)
+        TreeviewToolTip(self.tree)
+
+        self._context_menu = tk.Menu(self.tree, tearoff=0)
+        self._context_menu.add_command(label="Open in Editor", command=self._ctx_open_editor)
+        self._context_menu.add_command(label="Open Folder", command=self._ctx_open_folder)
+        self._context_menu.add_separator()
+        self._context_menu.add_command(label="Copy File Path", command=self._ctx_copy_path)
 
     def set_results(self, results: list):
         """Display search results."""
@@ -63,7 +76,7 @@ class ResultsTable(ttk.Frame):
         for i, result in enumerate(results):
             label = _score_label(result.score, max_score)
             file_name = Path(result.file_path).name
-            name = (result.name or "-")[:50]
+            name = result.name or "-"
 
             if result.chunk_type == "image":
                 file_name = f"[IMG] {file_name}"
@@ -81,6 +94,57 @@ class ResultsTable(ttk.Frame):
                     "index": idx,
                     "result": self._results[idx],
                 })
+
+    def _get_selected_result(self):
+        sel = self.tree.selection()
+        if sel:
+            idx = int(sel[0])
+            if idx < len(self._results):
+                return self._results[idx]
+        return None
+
+    def _on_double_click(self, event):
+        result = self._get_selected_result()
+        if result:
+            self._open_in_editor(result)
+
+    def _on_right_click(self, event):
+        row = self.tree.identify_row(event.y)
+        if row:
+            self.tree.selection_set(row)
+            self._context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _ctx_open_editor(self):
+        result = self._get_selected_result()
+        if result:
+            self._open_in_editor(result)
+
+    def _ctx_open_folder(self):
+        result = self._get_selected_result()
+        if result:
+            folder = str(Path(result.file_path).parent)
+            if sys.platform == "linux":
+                subprocess.Popen(["xdg-open", folder])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                os.startfile(folder)
+
+    def _ctx_copy_path(self):
+        result = self._get_selected_result()
+        if result:
+            self.tree.clipboard_clear()
+            self.tree.clipboard_append(result.file_path)
+
+    def _open_in_editor(self, result):
+        file_path = result.file_path
+        line = getattr(result, "start_line", 1) or 1
+        if sys.platform == "linux":
+            subprocess.Popen(["xdg-open", file_path])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", file_path])
+        else:
+            os.startfile(file_path)
 
     def clear(self):
         self.tree.delete(*self.tree.get_children())

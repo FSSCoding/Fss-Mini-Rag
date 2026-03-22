@@ -12,7 +12,11 @@ class SearchBar(ttk.Frame):
     def __init__(self, parent, event_bus: EventBus):
         super().__init__(parent)
         self.bus = event_bus
+        self._searching = False
         self._build()
+        self.bus.on("search:completed", lambda d: self.set_searching(False))
+        self.bus.on("search:error", lambda d: self.set_searching(False))
+        self.bus.on("synthesis:completed", lambda d: self.set_searching(False))
 
     def _build(self):
         # Mode toggle
@@ -26,7 +30,8 @@ class SearchBar(ttk.Frame):
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.entry.bind("<Return>", lambda e: self._on_search())
 
-        ttk.Button(mode_frame, text="Go", command=self._on_search, width=4).pack(side=tk.RIGHT)
+        self.go_btn = ttk.Button(mode_frame, text="Go", command=self._on_search, width=4)
+        self.go_btn.pack(side=tk.RIGHT)
 
         # Mode radio
         radio_frame = ttk.Frame(self)
@@ -40,13 +45,22 @@ class SearchBar(ttk.Frame):
         ttk.Checkbutton(radio_frame, text="Expand query", variable=self.expand_var).pack(side=tk.RIGHT)
 
     def _on_search(self):
+        if self._searching:
+            return
         query = self.search_var.get().strip()
         if query:
+            self.set_searching(True)
             self.bus.emit("search:requested", {
                 "query": query,
                 "mode": self.mode_var.get(),
                 "expand": self.expand_var.get(),
             })
+
+    def set_searching(self, active: bool):
+        self._searching = active
+        state = "disabled" if active else "normal"
+        self.go_btn.config(state=state, text="..." if active else "Go")
+        self.entry.config(state=state)
 
     def focus_entry(self):
         self.entry.focus_set()

@@ -6,11 +6,13 @@ This is the only file that knows about all the pieces.
 
 import logging
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
 
 from .events import EventBus
+from .state import AppState
 
 logger = logging.getLogger(__name__)
 from .config_store import load_config, save_config
@@ -44,10 +46,10 @@ class MiniRAGApp(tk.Tk):
 
         # Core infrastructure
         self.bus = EventBus()
+        self.state = AppState()
         self.indexing_service = IndexingService(self.bus)
         self.search_service = SearchService(self.bus)
-        self._active_path = None
-        self._last_results = []
+        self._indexing_start_time = None
 
         # Apply saved settings to services
         self.search_service.llm_url = self.config_data.get("llm_url", "http://localhost:1234/v1")
@@ -73,6 +75,7 @@ class MiniRAGApp(tk.Tk):
         self._start_polling()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(100, self._set_initial_sash_positions)
         self.search_bar.focus_entry()
 
     def _create_menu(self):
@@ -105,16 +108,16 @@ class MiniRAGApp(tk.Tk):
         """Build Option A layout: search+results left, collections right, content bottom."""
 
         # Main vertical split: top (search+collections) / bottom (content)
-        main_paned = ttk.PanedWindow(self, orient=tk.VERTICAL)
-        main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.main_paned = ttk.PanedWindow(self, orient=tk.VERTICAL)
+        self.main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Top section: horizontal split (search+results | collections)
-        top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
-        main_paned.add(top_paned, weight=1)
+        self.top_paned = ttk.PanedWindow(self.main_paned, orient=tk.HORIZONTAL)
+        self.main_paned.add(self.top_paned, weight=1)
 
         # Left: search bar + results
-        left_frame = ttk.Frame(top_paned)
-        top_paned.add(left_frame, weight=3)
+        left_frame = ttk.Frame(self.top_paned)
+        self.top_paned.add(left_frame, weight=3)
 
         self.search_bar = SearchBar(left_frame, self.bus)
         self.search_bar.pack(fill=tk.X, padx=2, pady=2)
@@ -124,14 +127,14 @@ class MiniRAGApp(tk.Tk):
 
         # Right: collections
         self.collections = CollectionPanel(
-            top_paned, self.bus,
+            self.top_paned, self.bus,
             self.config_data.get("collections", []),
         )
-        top_paned.add(self.collections, weight=1)
+        self.top_paned.add(self.collections, weight=1)
 
         # Bottom: content panel (full width)
-        self.content_panel = ContentPanel(main_paned, self.bus)
-        main_paned.add(self.content_panel, weight=2)
+        self.content_panel = ContentPanel(self.main_paned, self.bus)
+        self.main_paned.add(self.content_panel, weight=2)
 
         # Status bar
         self.status_bar = StatusBar(self, self.bus)
@@ -162,7 +165,7 @@ class MiniRAGApp(tk.Tk):
     # === Event Handlers ===
 
     def _on_collection_selected(self, data):
-        self._active_path = data["path"]
+        self.state.active_collection = data["path"]
 
     def _on_collection_added(self, data):
         self._save_collections()
@@ -180,12 +183,12 @@ class MiniRAGApp(tk.Tk):
         self.indexing_service.start(Path(path), force=True)
 
     def _on_search_requested(self, data):
-        if not self._active_path:
-            self.status_bar.set_text("Select a collection first")
+        if not self.state.active_collection:
+            self.status_bar.set_error("Select a collection first")
             return
 
-        if not (Path(self._active_path) / ".mini-rag").exists():
-            self.status_bar.set_text("Collection not indexed. Click Index first.")
+        if not (Path(self.state.active_collection) / ".mini-rag").exists():
+            self.status_bar.set_error("Collection not indexed. Click Index first.")
             return
 
         query = data["query"]
@@ -200,7 +203,7 @@ class MiniRAGApp(tk.Tk):
 
         # Run search in background thread
         def _run():
-            self.search_service.search(self._active_path, query, top_k=20, expand=expand)
+            self.search_service.search(self.state.active_collection, query, top_k=20, expand=expand)
 
         threading.Thread(target=_run, daemon=True).start()
         self._pending_mode = mode
@@ -210,7 +213,7 @@ class MiniRAGApp(tk.Tk):
         results = data["results"]
         timing = data["timing_ms"]
         query = data["query"]
-        self._last_results = results
+        self.state.results = results
 
         self.after(0, lambda: self._display_search_results(results, query, timing))
 
@@ -225,7 +228,7 @@ class MiniRAGApp(tk.Tk):
         self.content_panel.show_synthesis("Generating answer...")
 
         def _run():
-            self.search_service.synthesize(self._active_path, query, results)
+            self.search_service.synthesize(self.state.active_collection, query, results)
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -241,7 +244,7 @@ class MiniRAGApp(tk.Tk):
 
     def _show_search_error(self, error):
         self.status_bar.hide_progress()
-        self.status_bar.set_text(f"Error: {error}")
+        self.status_bar.set_error(f"Search error: {error}")
 
     def _on_synthesis_completed(self, data):
         text = data["text"]
@@ -254,12 +257,18 @@ class MiniRAGApp(tk.Tk):
         self.status_bar.set_text(f"Synthesis complete ({timing:.0f}ms)")
 
     def _on_indexing_started(self, data):
+        self._indexing_start_time = time.monotonic()
         self.after(0, lambda: self._update_indexing_ui(True, f"Indexing {Path(data['path']).name}..."))
 
     def _on_indexing_progress(self, data):
         done, total, chunks = data["done"], data["total"], data["chunks"]
         pct = (done / total * 100) if total > 0 else 0
-        self.after(0, lambda: self._update_indexing_progress(done, total, chunks, pct))
+        elapsed = time.monotonic() - self._indexing_start_time if self._indexing_start_time else 0
+        eta = ""
+        if done > 0 and total > 0 and done < total:
+            remaining = elapsed / done * (total - done)
+            eta = f" | ~{remaining:.0f}s remaining"
+        self.after(0, lambda: self._update_indexing_progress(done, total, chunks, pct, elapsed, eta))
 
     def _update_indexing_ui(self, active, text):
         self.collections.set_indexing(active)
@@ -267,9 +276,9 @@ class MiniRAGApp(tk.Tk):
         if active:
             self.status_bar.show_progress()
 
-    def _update_indexing_progress(self, done, total, chunks, pct):
+    def _update_indexing_progress(self, done, total, chunks, pct, elapsed=0, eta=""):
         self.status_bar.set_progress(pct)
-        self.status_bar.set_text(f"Indexing: {done}/{total} files | {chunks} chunks")
+        self.status_bar.set_text(f"Indexing: {done}/{total} files | {chunks} chunks | {elapsed:.0f}s elapsed{eta}")
 
     def _on_indexing_completed(self, data):
         stats = data["stats"]
@@ -286,7 +295,11 @@ class MiniRAGApp(tk.Tk):
         ))
 
     def _on_indexing_error(self, data):
-        self.after(0, lambda: self._finish_indexing(f"Indexing failed: {data['error']}"))
+        error = data['error']
+        def _show():
+            self._finish_indexing(f"Indexing failed: {error}")
+            self.status_bar.set_error(f"Indexing failed: {error}")
+        self.after(0, _show)
 
     def _finish_indexing(self, text):
         self.collections.set_indexing(False)
@@ -306,6 +319,15 @@ class MiniRAGApp(tk.Tk):
         self.search_service.invalidate()
 
         self.status_bar.set_text(f"Settings saved (LLM: {self.search_service.llm_url})")
+
+    def _set_initial_sash_positions(self):
+        try:
+            w = self.winfo_width()
+            h = self.winfo_height()
+            self.top_paned.sashpos(0, int(w * 0.7))
+            self.main_paned.sashpos(0, int(h * 0.45))
+        except (tk.TclError, ValueError):
+            pass
 
     # === Theme & Keyboard ===
 
