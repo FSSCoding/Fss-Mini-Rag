@@ -151,12 +151,48 @@ class MiniWebScraper:
     content extraction via the extractors module.
     """
 
+    # Common system CA bundle paths (tried in order for SSL fallback)
+    _SYSTEM_CA_PATHS = [
+        "/etc/ssl/certs/ca-certificates.crt",  # Debian/Ubuntu
+        "/etc/pki/tls/certs/ca-bundle.crt",    # RHEL/CentOS
+        "/etc/ssl/ca-bundle.pem",               # OpenSUSE
+        "/etc/ssl/cert.pem",                     # macOS/BSD
+    ]
+
     def __init__(self, config: WebScraperConfig):
         self.config = config
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": config.user_agent})
         self._robots_cache: Dict[str, RobotFileParser] = {}
         self._last_request_time: float = 0
+        self._ca_bundle: Optional[str] = self._find_ca_bundle()
+
+    def _find_ca_bundle(self) -> Optional[str]:
+        """Find a working CA bundle, trying env var then system paths."""
+        import os
+
+        # Check environment variable first
+        env_bundle = os.environ.get("REQUESTS_CA_BUNDLE")
+        if env_bundle and Path(env_bundle).exists():
+            return env_bundle
+
+        # Try a quick HTTPS request to see if default SSL works
+        try:
+            requests.head("https://example.com", timeout=5)
+            return None  # Default works fine
+        except requests.exceptions.SSLError:
+            pass
+        except Exception:
+            return None  # Non-SSL error, default is fine
+
+        # Default SSL broken — find system CA bundle
+        for ca_path in self._SYSTEM_CA_PATHS:
+            if Path(ca_path).exists():
+                logger.info(f"Using system CA bundle: {ca_path}")
+                return ca_path
+
+        logger.warning("No working CA bundle found — HTTPS requests may fail")
+        return None
 
     def _rate_limit(self):
         """Enforce delay between requests."""
@@ -203,10 +239,12 @@ class MiniWebScraper:
         self._rate_limit()
 
         try:
+            verify = self._ca_bundle if self._ca_bundle else True
             resp = self._session.get(
                 url,
                 timeout=self.config.timeout,
                 allow_redirects=True,
+                verify=verify,
             )
             resp.raise_for_status()
 
