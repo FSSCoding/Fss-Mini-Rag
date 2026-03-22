@@ -104,6 +104,8 @@ class SearchResult:
         self.context_before = context_before
         self.context_after = context_after
         self.parent_chunk = parent_chunk
+        self.retriever_count = 1  # How many retrievers found this result
+        self.semantic_only = False  # True when BM25 returned nothing
 
     def __repr__(self):
         return f"SearchResult({self.file_path}:{self.start_line}-{self.end_line}, score={self.score:.3f})"
@@ -412,6 +414,7 @@ class CodeSearcher:
 
         # Build RRF scores keyed by (file_path, start_line) for deduplication
         rrf_scores = {}
+        retriever_counts = {}
         result_map = {}
 
         for list_idx, result_list in enumerate(result_lists):
@@ -419,6 +422,7 @@ class CodeSearcher:
             for rank, result in enumerate(result_list):
                 key = (result.file_path, result.start_line, result.end_line)
                 rrf_scores[key] = rrf_scores.get(key, 0.0) + w * 1.0 / (k + rank + 1)
+                retriever_counts[key] = retriever_counts.get(key, 0) + 1
                 # Keep the result object (prefer the one with higher original score)
                 if key not in result_map or result.score > result_map[key].score:
                     result_map[key] = result
@@ -429,6 +433,7 @@ class CodeSearcher:
         for key in sorted_keys:
             result = result_map[key]
             result.score = rrf_scores[key]
+            result.retriever_count = retriever_counts[key]
             fused.append(result)
 
         return fused
@@ -519,7 +524,13 @@ class CodeSearcher:
         result_lists.append(bm25_results)
 
         # --- Merge with Reciprocal Rank Fusion ---
+        bm25_empty = len(bm25_results) == 0
         fused_results = self._rrf_fusion(result_lists, weights=[semantic_weight, bm25_weight] if use_semantic else [bm25_weight])
+
+        # Tag results as semantic-only when BM25 found nothing
+        if bm25_empty:
+            for r in fused_results:
+                r.semantic_only = True
 
         # Apply filters
         if chunk_types:
@@ -637,13 +648,21 @@ class CodeSearcher:
                 continue  # Don't boost low-relevance results
 
             original_score = result.score
+            name_matched = False
 
-            # Name-match boost: if query matches the chunk's name, boost it
+            # Name-match boost: if query contains the chunk's identifier name,
+            # boost it. Exempt from MAX_BOOST cap. Boost scales with name
+            # length — short common names like "config" get a mild boost,
+            # specific identifiers like "CodeSearcher" get a strong one.
             if query_lower and result.name:
                 result_name_lower = result.name.lower().split(":")[0].strip()
-                if result_name_lower and result_name_lower in query_lower:
-                    result.score *= 1.10
-                    logger.debug(f"Name-match boost: {result.name}")
+                if result_name_lower and len(result_name_lower) >= 3 and result_name_lower in query_lower:
+                    # Scale: 3-char name → 1.2x, 8+ char name → 1.8x
+                    name_len = min(len(result_name_lower), 8)
+                    boost = 1.2 + (name_len - 3) * 0.12  # 1.2 to 1.8
+                    result.score *= boost
+                    name_matched = True
+                    logger.debug(f"Name-match boost ({boost:.2f}x): {result.name}")
 
             file_path_lower = str(result.file_path).lower()
             important_patterns = [
@@ -697,8 +716,8 @@ class CodeSearcher:
             if len(lines) >= 3 and any(len(line.strip()) > 10 for line in lines):
                 result.score *= 1.02
 
-            # Cap total boost at MAX_BOOST
-            if result.score > original_score * MAX_BOOST:
+            # Cap total boost at MAX_BOOST (name-match boost is exempt)
+            if not name_matched and result.score > original_score * MAX_BOOST:
                 result.score = original_score * MAX_BOOST
 
         # Sort by updated scores
@@ -999,6 +1018,13 @@ class CodeSearcher:
         if not results:
             console.print("[yellow]No results found[/yellow]")
             return
+
+        # Warn when results are semantic-only (no keyword matches)
+        if any(r.semantic_only for r in results):
+            console.print(
+                "[dim yellow]⚠ No keyword matches found — showing semantic "
+                "(similarity) results only. These may be less precise.[/dim yellow]\n"
+            )
 
         # Create table
         table = Table(title=f"Search Results ({len(results)} matches)")
