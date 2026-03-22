@@ -670,21 +670,30 @@ def search_web(query: str, path: str, engine, max_results, depth: int, max_pages
 @click.option("--path", "-p", type=click.Path(exists=True), default=".", help="Project path")
 @click.option("--engine", "-e", type=click.Choice(["duckduckgo", "tavily", "brave"]), default=None, help="Search engine")
 @click.option("--max-pages", "-m", type=int, default=None, help="Max pages to scrape")
+@click.option("--deep", is_flag=True, help="Enable deep research (iterative, long-running)")
+@click.option("--time", "time_budget", type=str, default=None, help="Time budget (e.g. '1h', '30m', '100h')")
+@click.option("--rounds", type=int, default=None, help="Max research rounds for --deep")
+@click.option("--analyze", "analyze_only", is_flag=True, help="Analyze existing corpus only (no web search)")
 @click.option("--list", "list_sessions", is_flag=True, help="List existing research sessions")
 @click.option("--open", "open_session", type=str, default=None, help="Open a session folder")
 @click.option("--delete", "delete_session", type=str, default=None, help="Delete a session")
-def research(query, path: str, engine, max_pages, list_sessions: bool, open_session, delete_session):
+def research(query, path: str, engine, max_pages, deep: bool, time_budget, rounds,
+             analyze_only: bool, list_sessions: bool, open_session, delete_session):
     """Full research pipeline: search, scrape, index, and explore.
 
     Examples:
 
       rag-mini research "quantum vacuum fluctuations"
 
-      rag-mini research "Nassim Haramein holographic mass" --engine tavily
+      rag-mini research "Nassim Haramein" --engine tavily
+
+      rag-mini research "quantum gravity" --deep --time 1h
+
+      rag-mini research "proton structure" --deep --rounds 3
+
+      rag-mini research "my topic" --analyze
 
       rag-mini research --list
-
-      rag-mini research --open 2026-03-23-quantum-gravity
     """
     import os
     import time as _time
@@ -775,11 +784,81 @@ def research(query, path: str, engine, max_pages, list_sessions: bool, open_sess
             console.print(f"[green]Deleted: {session_dir.name}[/green]")
         return
 
-    # --- Full research pipeline ---
+    # --- Deep research or analyze mode ---
 
     if not query:
         console.print("[red]Query required for research. Use --list to see sessions.[/red]")
         return
+
+    if deep or analyze_only:
+        from .deep_research import DeepResearchEngine
+        from .llm_synthesizer import LLMSynthesizer
+
+        se_config = config.search_engine
+        engine_name = engine or se_config.engine
+        tavily_key = se_config.tavily_api_key or os.environ.get("TAVILY_API_KEY")
+        brave_key = se_config.brave_api_key or os.environ.get("BRAVE_API_KEY")
+
+        # Parse time budget (e.g. "1h", "30m", "100h")
+        time_minutes = 0
+        if time_budget:
+            tb = time_budget.strip().lower()
+            if tb.endswith("h"):
+                time_minutes = int(float(tb[:-1]) * 60)
+            elif tb.endswith("m"):
+                time_minutes = int(tb[:-1])
+            else:
+                time_minutes = int(tb)
+
+        try:
+            # Initialize LLM
+            llm = LLMSynthesizer(
+                ollama_url=f"http://{config.llm.ollama_host}",
+                model=config.llm.synthesis_model,
+                config=config.llm,
+            )
+            llm_call = llm._call_llm
+
+            # Create session
+            session = ResearchSession.create(
+                project_path, query=query,
+                output_dir=ws_config.output_dir, engine=engine_name,
+            )
+
+            # Create engine components
+            search_eng = create_search_engine(engine_name, tavily_api_key=tavily_key, brave_api_key=brave_key)
+            scraper = MiniWebScraper(ws_config)
+
+            engine_obj = DeepResearchEngine(
+                session=session,
+                config=config.deep_research,
+                rag_config=config,
+                llm_call=llm_call,
+                scraper=scraper,
+                search_engine=search_eng,
+            )
+
+            if analyze_only:
+                engine_obj.run_analyze_only()
+            else:
+                engine_obj.run(
+                    max_time_minutes=time_minutes,
+                    max_rounds=rounds or config.deep_research.max_rounds,
+                )
+
+            # Index after deep research
+            if not analyze_only:
+                console.print(f"\n[bold]Indexing research content...[/bold]")
+                index_project(project_path)
+
+        except Exception as e:
+            console.print(f"\n[bold red]Error:[/bold red] {e}")
+            logger.exception("Deep research failed")
+            sys.exit(1)
+
+        return
+
+    # --- Single-round research pipeline ---
 
     se_config = config.search_engine
     engine_name = engine or se_config.engine

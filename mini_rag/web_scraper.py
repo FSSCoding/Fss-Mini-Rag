@@ -38,8 +38,18 @@ class ResearchSession:
     """Manages a single research session's state and output.
 
     Each session gets a directory under {project}/mini-research/
-    containing scraped markdown files and a session.json metadata file.
+    with three-bucket structure:
+      sources/      — downloaded web pages, PDFs (never modified except dedup)
+      notes/        — user's own files
+      agent-notes/  — AI-generated analysis, gap reports, summaries
+
+    Backward-compatible: flat sessions (no subdirs) still work.
     """
+
+    # Bucket subdirectories
+    SOURCES_DIR = "sources"
+    NOTES_DIR = "notes"
+    AGENT_NOTES_DIR = "agent-notes"
 
     def __init__(self, session_dir: Path, query: str, engine: str = "duckduckgo"):
         self.session_dir = session_dir
@@ -51,8 +61,11 @@ class ResearchSession:
             "engine": engine,
             "urls_visited": [],
             "pages_scraped": 0,
+            "pages_pruned": 0,
             "rounds": 0,
             "deep_research": False,
+            "phase": "idle",
+            "time_elapsed_minutes": 0,
         }
 
         # Load existing metadata if resuming
@@ -84,6 +97,10 @@ class ResearchSession:
             counter += 1
 
         session_dir.mkdir(parents=True, exist_ok=True)
+        # Create bucket subdirectories
+        (session_dir / cls.SOURCES_DIR).mkdir(exist_ok=True)
+        (session_dir / cls.NOTES_DIR).mkdir(exist_ok=True)
+        (session_dir / cls.AGENT_NOTES_DIR).mkdir(exist_ok=True)
         session = cls(session_dir, query, engine)
         session.save_metadata()
         return session
@@ -125,13 +142,57 @@ class ResearchSession:
         with open(meta_path, "w") as f:
             json.dump(self.metadata, f, indent=2)
 
+    @property
+    def sources_dir(self) -> Path:
+        """Directory for downloaded web content."""
+        d = self.session_dir / self.SOURCES_DIR
+        d.mkdir(exist_ok=True)
+        return d
+
+    @property
+    def notes_dir(self) -> Path:
+        """Directory for user's own files."""
+        d = self.session_dir / self.NOTES_DIR
+        d.mkdir(exist_ok=True)
+        return d
+
+    @property
+    def agent_notes_dir(self) -> Path:
+        """Directory for AI-generated analysis."""
+        d = self.session_dir / self.AGENT_NOTES_DIR
+        d.mkdir(exist_ok=True)
+        return d
+
     def add_page(self, page: ScrapedPage) -> Path:
-        """Save a scraped page to this session and update metadata."""
-        filepath = save_scraped_page(page, self.session_dir)
+        """Save a scraped page to sources/ and update metadata."""
+        filepath = save_scraped_page(page, self.sources_dir)
         self.metadata["urls_visited"].append(page.url)
         self.metadata["pages_scraped"] += 1
         self.save_metadata()
         return filepath
+
+    def add_agent_note(self, filename: str, content: str) -> Path:
+        """Write an agent-generated note to agent-notes/."""
+        filepath = self.agent_notes_dir / filename
+        filepath.write_text(content, encoding="utf-8")
+        self.save_metadata()
+        return filepath
+
+    def get_all_source_files(self) -> List[Path]:
+        """Get all source files (scraped content)."""
+        sources = self.sources_dir
+        if sources.exists():
+            return sorted(f for f in sources.iterdir() if f.is_file() and f.suffix == ".md")
+        # Backward compat: flat sessions have .md files directly in session_dir
+        return sorted(
+            f for f in self.session_dir.iterdir()
+            if f.is_file() and f.suffix == ".md" and f.name != "session.json"
+        )
+
+    def set_phase(self, phase: str):
+        """Update the current research phase in metadata."""
+        self.metadata["phase"] = phase
+        self.save_metadata()
 
     def has_visited(self, url: str) -> bool:
         """Check if a URL has already been visited in this session."""
