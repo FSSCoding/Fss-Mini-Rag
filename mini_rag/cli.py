@@ -672,6 +672,18 @@ def update(path: str):
 
 
 @cli.command(context_settings={"help_option_names": ["-h", "--help"]})
+def gui():
+    """Launch the desktop GUI."""
+    try:
+        from .gui import main as gui_main
+        gui_main()
+    except ImportError as e:
+        console.print(f"[red]GUI requires tkinter:[/red] {e}")
+        console.print("Install with: sudo apt install python3-tk")
+        sys.exit(1)
+
+
+@cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--show-code", "-c", is_flag=True, help="Show example code")
 def info(show_code: bool):
     """Show information about Mini RAG."""

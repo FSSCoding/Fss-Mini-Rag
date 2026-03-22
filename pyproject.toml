@@ -82,6 +82,7 @@ Issues = "https://github.com/FSSCoding/Fss-Mini-Rag/issues"
 
 [project.scripts]
 rag-mini = "mini_rag.cli:cli"
+rag-mini-gui = "mini_rag.gui:main"
 
 [tool.setuptools]
 packages = ["mini_rag"]
