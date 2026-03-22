@@ -162,19 +162,27 @@ class MiniRAGApp(tk.Tk):
             self.status_bar.set_text("Select a collection first")
             return
 
+        if not (Path(self._active_path) / ".mini-rag").exists():
+            self.status_bar.set_text("Collection not indexed. Click Index first.")
+            return
+
         query = data["query"]
         mode = data["mode"]
         expand = data.get("expand", False)
 
-        self.status_bar.set_text(f"Searching: {query}")
+        self.status_bar.set_text(f"Searching: {query}...")
+        self.status_bar.show_progress()
+        self.status_bar.set_progress(30)
+        self.results_table.clear()
+        self.content_panel.clear()
 
         # Run search in background thread
         def _run():
             self.search_service.search(self._active_path, query, top_k=20, expand=expand)
-            if mode == "ask" and self._last_results:
-                self.search_service.synthesize(self._active_path, query, self._last_results)
 
         threading.Thread(target=_run, daemon=True).start()
+        self._pending_mode = mode
+        self._pending_query = query
 
     def _on_search_completed(self, data):
         results = data["results"]
@@ -184,12 +192,34 @@ class MiniRAGApp(tk.Tk):
 
         self.after(0, lambda: self._display_search_results(results, query, timing))
 
+        # Auto-trigger synthesis in Ask mode
+        mode = getattr(self, "_pending_mode", "search")
+        if mode == "ask" and results:
+            self.after(100, lambda: self._start_synthesis(query, results))
+
+    def _start_synthesis(self, query, results):
+        self.status_bar.set_text(f"Generating answer with LLM...")
+        self.status_bar.set_progress(60)
+        self.content_panel.show_synthesis("Generating answer...")
+
+        def _run():
+            self.search_service.synthesize(self._active_path, query, results)
+
+        threading.Thread(target=_run, daemon=True).start()
+
     def _display_search_results(self, results, query, timing):
         self.results_table.set_results(results)
+        mode = getattr(self, "_pending_mode", "search")
+        if mode != "ask":
+            self.status_bar.hide_progress()
         self.status_bar.set_text(f"{len(results)} results for: {query} ({timing:.0f}ms)")
 
     def _on_search_error(self, data):
-        self.after(0, lambda: self.status_bar.set_text(f"Error: {data['error']}"))
+        self.after(0, lambda: self._show_search_error(data["error"]))
+
+    def _show_search_error(self, error):
+        self.status_bar.hide_progress()
+        self.status_bar.set_text(f"Error: {error}")
 
     def _on_synthesis_completed(self, data):
         text = data["text"]
@@ -198,6 +228,7 @@ class MiniRAGApp(tk.Tk):
 
     def _display_synthesis(self, text, timing):
         self.content_panel.show_synthesis(f"LLM Synthesis ({timing:.0f}ms):\n\n{text}")
+        self.status_bar.hide_progress()
         self.status_bar.set_text(f"Synthesis complete ({timing:.0f}ms)")
 
     def _on_indexing_started(self, data):

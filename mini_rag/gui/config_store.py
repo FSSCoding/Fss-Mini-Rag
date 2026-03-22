@@ -22,8 +22,9 @@ PRESETS = {
     },
     "bobai": {
         "name": "BobAI",
-        "embedding_url": "http://localhost:11440/embed",
+        "embedding_url": "http://localhost:1234/v1",
         "llm_url": "http://localhost:11433/v1",
+        "note": "Uses LM Studio for embeddings, vLLM for LLM",
     },
 }
 
