@@ -72,9 +72,17 @@ class PreferencesDialog(tk.Toplevel):
             row=11, column=0, columnspan=2, sticky=tk.W, **pad
         )
 
+        # Test connection button
+        self.test_label = ttk.Label(frame, text="", foreground="gray")
+        self.test_label.grid(row=12, column=0, columnspan=2, sticky=tk.W, **pad)
+
+        ttk.Button(frame, text="Test Connections", command=self._test_connections).grid(
+            row=13, column=0, columnspan=2, sticky=tk.W, **pad
+        )
+
         # Buttons
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=12, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=14, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="Save Custom", command=self._save_custom).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Reset", command=self._reset).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="OK", command=self._on_ok).pack(side=tk.RIGHT, padx=5)
@@ -94,6 +102,50 @@ class PreferencesDialog(tk.Toplevel):
             "llm_url": self.llm_url_var.get(),
         }
         self.preset_var.set(name)
+
+    def _test_connections(self):
+        """Test both embedding and LLM endpoints."""
+        import requests
+        results = []
+
+        # Test embedding
+        emb_url = self.emb_url_var.get()
+        try:
+            if emb_url.rstrip("/").endswith("/v1"):
+                r = requests.post(
+                    f"{emb_url}/embeddings",
+                    json={"model": self.emb_model_var.get(), "input": "test"},
+                    timeout=5,
+                )
+            else:
+                r = requests.post(emb_url, json={"text": "test"}, timeout=5)
+            if r.status_code == 200:
+                results.append(f"Embedding: OK ({emb_url})")
+            else:
+                results.append(f"Embedding: FAILED {r.status_code} ({emb_url})")
+        except Exception as e:
+            results.append(f"Embedding: FAILED ({e})")
+
+        # Test LLM
+        llm_url = self.llm_url_var.get()
+        try:
+            r = requests.post(
+                f"{llm_url}/chat/completions",
+                json={
+                    "model": self.llm_model_var.get(),
+                    "messages": [{"role": "user", "content": "say ok"}],
+                    "max_tokens": 5,
+                },
+                timeout=10,
+            )
+            if r.status_code == 200:
+                results.append(f"LLM: OK ({llm_url})")
+            else:
+                results.append(f"LLM: FAILED {r.status_code} ({llm_url})")
+        except Exception as e:
+            results.append(f"LLM: FAILED ({e})")
+
+        self.test_label.config(text="\n".join(results))
 
     def _reset(self):
         self.emb_url_var.set("http://localhost:1234/v1")
