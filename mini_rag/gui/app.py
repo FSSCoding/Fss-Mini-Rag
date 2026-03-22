@@ -34,6 +34,14 @@ class MiniRAGApp(tk.Tk):
         self.geometry(self.config_data.get("geometry", "1100x700"))
         self.minsize(900, 550)
 
+        # Apply Sun Valley theme (dark/light based on OS or config)
+        try:
+            import sv_ttk
+            theme = self.config_data.get("theme", "dark")
+            sv_ttk.set_theme(theme)
+        except ImportError:
+            pass  # Fall back to system theme
+
         # Core infrastructure
         self.bus = EventBus()
         self.indexing_service = IndexingService(self.bus)
@@ -53,8 +61,11 @@ class MiniRAGApp(tk.Tk):
         self._bind_events()
 
         # Keyboard shortcuts
-        self.bind("<Control-q>", lambda e: self._on_close())
-        self.bind("<Control-w>", lambda e: self._on_close())
+        self.bind("<Control-q>", lambda _: self._on_close())
+        self.bind("<Control-w>", lambda _: self._on_close())
+        self.bind("<Control-f>", lambda _: self.search_bar.focus_entry())
+        self.bind("<Control-n>", lambda _: self.collections._on_add())
+        self.bind("<Escape>", lambda _: self._on_escape())
 
         # Poll for background events (thread-safe bridge)
         self._poll_interval = 100  # ms
@@ -69,7 +80,7 @@ class MiniRAGApp(tk.Tk):
 
         # File menu
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Add Folder", command=lambda: self.collections.listbox.event_generate("<<AddFolder>>"))
+        file_menu.add_command(label="Add Folder", command=lambda: self.collections._on_add(), accelerator="Ctrl+N")
         file_menu.add_separator()
         file_menu.add_command(label="Close", command=self._on_close, accelerator="Ctrl+Q")
         menubar.add_cascade(label="File", menu=file_menu)
@@ -77,6 +88,8 @@ class MiniRAGApp(tk.Tk):
         # Options menu
         options_menu = tk.Menu(menubar, tearoff=0)
         options_menu.add_command(label="Preferences...", command=self._open_preferences)
+        options_menu.add_separator()
+        options_menu.add_command(label="Toggle Dark/Light", command=self._toggle_theme)
         menubar.add_cascade(label="Options", menu=options_menu)
 
         # Help menu
@@ -293,6 +306,30 @@ class MiniRAGApp(tk.Tk):
         self.search_service.invalidate()
 
         self.status_bar.set_text(f"Settings saved (LLM: {self.search_service.llm_url})")
+
+    # === Theme & Keyboard ===
+
+    def _toggle_theme(self):
+        """Toggle between dark and light theme."""
+        try:
+            import sv_ttk
+            current = sv_ttk.get_theme()
+            new_theme = "light" if current == "dark" else "dark"
+            sv_ttk.set_theme(new_theme)
+            self.config_data["theme"] = new_theme
+            save_config(self.config_data)
+        except ImportError:
+            pass
+
+    def _on_escape(self):
+        """Handle Escape key - cancel indexing if running, else clear search."""
+        if self.indexing_service.is_running:
+            self.indexing_service.cancel()
+        else:
+            self.search_bar.search_var.set("")
+            self.results_table.clear()
+            self.content_panel.clear()
+            self.status_bar.set_text("Ready")
 
     # === Dialogs ===
 

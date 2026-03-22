@@ -38,6 +38,7 @@ DEFAULTS = {
     "llm_url": "http://localhost:1234/v1",
     "llm_model": "auto",
     "expand_queries": False,
+    "theme": "dark",
     "custom_presets": {},
 }
 
