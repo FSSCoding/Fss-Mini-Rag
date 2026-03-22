@@ -360,7 +360,7 @@ class CodeSearcher:
         searches all chunks directly. Follows the Fss-Rag pattern where
         keyword and semantic searches run independently before fusion.
         """
-        if not self.bm25 or not self.chunk_texts:
+        if not self.bm25 or not self.chunk_texts or not self.table:
             return []
 
         query_tokens = _tokenize_for_bm25(query)
@@ -492,6 +492,7 @@ class CodeSearcher:
 
         # --- Run searches INDEPENDENTLY (Fss-Rag pattern) ---
         result_lists = []
+        results_df = pd.DataFrame()
 
         # 1. Semantic search (vector similarity)
         # Skip semantic search if no embedding provider available
@@ -781,6 +782,8 @@ class CodeSearcher:
             List of SearchResult objects with context added
         """
         # Get full dataframe for context lookups
+        if not self.table:
+            return results
         full_df = self.table.to_pandas()
 
         # Create a mapping from result to chunk_id
@@ -964,7 +967,7 @@ class CodeSearcher:
         return filtered[:top_k]
 
     @staticmethod
-    def _score_label(score: float, max_score: float = None) -> str:
+    def _score_label(score: float, max_score: Optional[float] = None) -> str:
         """Interpret search score with a human-readable quality label.
 
         Auto-detects scoring scale:
