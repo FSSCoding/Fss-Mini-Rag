@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import re
 
@@ -66,7 +66,6 @@ except ImportError:
     lancedb = None
     LANCEDB_AVAILABLE = False
 
-from datetime import timedelta
 
 from .config import ConfigManager
 from .ollama_embeddings import OllamaEmbedder as CodeEmbedder
@@ -387,24 +386,39 @@ class CodeSearcher:
 
     @staticmethod
     def _rrf_fusion(
-        result_lists: List[List[SearchResult]], k: int = 60
+        result_lists: List[List[SearchResult]],
+        k: int = 60,
+        weights: Optional[List[float]] = None,
     ) -> List[SearchResult]:
         """Reciprocal Rank Fusion (RRF) to merge results from multiple search methods.
 
-        RRF score = sum(1 / (k + rank)) across all methods where the result appears.
+        RRF score = sum(weight * 1 / (k + rank)) across all methods.
         k=60 is the standard constant (from the original RRF paper).
 
-        This is rank-based, not score-based, so it works even when score
-        distributions differ wildly (e.g. BM25 unbounded vs cosine 0-1).
+        Args:
+            result_lists: Results from each retriever, ordered by relevance.
+            k: RRF constant (default 60).
+            weights: Per-retriever weights (e.g. [0.7, 0.3] for semantic/bm25).
+                     Normalized internally. Defaults to equal weighting.
         """
+        # Normalize weights to sum to N (number of retrievers) so that
+        # equal weights produce identical scores to unweighted RRF.
+        n = len(result_lists)
+        if weights and len(weights) == n:
+            total_w = sum(weights)
+            norm_weights = [w / total_w * n for w in weights] if total_w > 0 else [1.0] * n
+        else:
+            norm_weights = [1.0] * n
+
         # Build RRF scores keyed by (file_path, start_line) for deduplication
         rrf_scores = {}
         result_map = {}
 
-        for result_list in result_lists:
+        for list_idx, result_list in enumerate(result_lists):
+            w = norm_weights[list_idx] if list_idx < len(norm_weights) else 1.0
             for rank, result in enumerate(result_list):
                 key = (result.file_path, result.start_line, result.end_line)
-                rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+                rrf_scores[key] = rrf_scores.get(key, 0.0) + w * 1.0 / (k + rank + 1)
                 # Keep the result object (prefer the one with higher original score)
                 if key not in result_map or result.score > result_map[key].score:
                     result_map[key] = result
@@ -505,7 +519,7 @@ class CodeSearcher:
         result_lists.append(bm25_results)
 
         # --- Merge with Reciprocal Rank Fusion ---
-        fused_results = self._rrf_fusion(result_lists)
+        fused_results = self._rrf_fusion(result_lists, weights=[semantic_weight, bm25_weight] if use_semantic else [bm25_weight])
 
         # Apply filters
         if chunk_types:
@@ -518,7 +532,7 @@ class CodeSearcher:
                            if fnmatch.fnmatch(r.file_path, file_pattern)]
 
         # Apply smart re-ranking
-        fused_results = self._smart_rerank(fused_results)
+        fused_results = self._smart_rerank(fused_results, query=query)
 
         # Apply diversity constraints
         diverse_results = self._apply_diversity_constraints(fused_results, top_k)
@@ -593,16 +607,19 @@ class CodeSearcher:
         consolidated.sort(key=lambda r: r.score, reverse=True)
         return consolidated
 
-    def _smart_rerank(self, results: List[SearchResult]) -> List[SearchResult]:
+    def _smart_rerank(self, results: List[SearchResult], query: str = "") -> List[SearchResult]:
         """
         Smart result re-ranking for better quality with zero overhead.
 
         Boosts scores based on:
+        - Name match (query contains the result's identifier name)
         - File importance (README, main files, configs)
         - Content freshness (recently modified files)
         - File type relevance
         """
         now = datetime.now()
+        # Extract potential identifier names from query for name-match boosting
+        query_lower = query.lower().strip()
 
         # Only apply boosts to results with meaningful scores.
         # With RRF fusion, scores are small (0.01-0.03) so boosts
@@ -613,9 +630,20 @@ class CodeSearcher:
         max_score = max(r.score for r in results)
         boost_threshold = max_score * 0.5  # Only boost top-half results
 
+        MAX_BOOST = 1.15  # Cap total multiplicative boost
+
         for result in results:
             if result.score < boost_threshold:
                 continue  # Don't boost low-relevance results
+
+            original_score = result.score
+
+            # Name-match boost: if query matches the chunk's name, boost it
+            if query_lower and result.name:
+                result_name_lower = result.name.lower().split(":")[0].strip()
+                if result_name_lower and result_name_lower in query_lower:
+                    result.score *= 1.10
+                    logger.debug(f"Name-match boost: {result.name}")
 
             file_path_lower = str(result.file_path).lower()
             important_patterns = [
@@ -636,33 +664,28 @@ class CodeSearcher:
             ]
 
             if any(pattern in file_path_lower for pattern in important_patterns):
-                result.score *= 1.05  # Small boost (was 1.2 - too aggressive with RRF)
+                result.score *= 1.05
                 logger.debug(f"Important file boost: {result.file_path}")
 
-            # Recency boost (10% boost for files modified in last week)
-            # Note: This uses file modification time if available in the data
+            # Recency boost
             try:
-                # Get file modification time (this is lightweight)
                 file_mtime = Path(result.file_path).stat().st_mtime
                 modified_date = datetime.fromtimestamp(file_mtime)
                 days_old = (now - modified_date).days
 
-                if days_old <= 7:  # Modified in last week
+                if days_old <= 7:
                     result.score *= 1.02
-                elif days_old <= 30:  # Modified in last month
+                elif days_old <= 30:
                     result.score *= 1.01
 
             except (OSError, ValueError):
-                # File doesn't exist or can't get stats - no boost
                 pass
 
             # Content type relevance boost
             if hasattr(result, "chunk_type"):
                 if result.chunk_type in ["function", "class", "method"]:
-                    # Code definitions are usually more valuable
                     result.score *= 1.1
                 elif result.chunk_type in ["comment", "docstring"]:
-                    # Documentation is valuable for understanding
                     result.score *= 1.05
 
             # Penalize very short content (likely not useful)
@@ -673,6 +696,10 @@ class CodeSearcher:
             lines = result.content.strip().split("\n")
             if len(lines) >= 3 and any(len(line.strip()) > 10 for line in lines):
                 result.score *= 1.02
+
+            # Cap total boost at MAX_BOOST
+            if result.score > original_score * MAX_BOOST:
+                result.score = original_score * MAX_BOOST
 
         # Sort by updated scores
         return sorted(results, key=lambda x: x.score, reverse=True)
@@ -876,8 +903,6 @@ class CodeSearcher:
             chunk_types=["class"],
             top_k=top_k,
         )
-
-        return filtered[:top_k]
 
     def explain_code(self, query: str, top_k: int = 5) -> List[SearchResult]:
         """
