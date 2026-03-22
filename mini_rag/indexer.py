@@ -79,32 +79,6 @@ class ProjectIndexer:
         self._cancel_event = threading.Event()
         self._progress_callback = None  # fn(files_done, files_total, chunks_so_far)
 
-    def cancel_indexing(self):
-        """Request cancellation of the current indexing operation.
-
-        Safe to call from any thread. The indexer will stop processing
-        new files and return partial results.
-        """
-        self._cancel_event.set()
-
-    def set_progress_callback(self, callback):
-        """Set a callback for indexing progress updates.
-
-        Args:
-            callback: fn(files_done: int, files_total: int, chunks_so_far: int)
-                      Called after each file is processed.
-        """
-        self._progress_callback = callback
-
-    @property
-    def is_cancelled(self) -> bool:
-        """Check if cancellation has been requested."""
-        return self._cancel_event.is_set()
-
-        # Initialize database connection
-        self.db = None
-        self.table = None
-
         # File patterns to include/exclude
         self.include_patterns = [
             # Code files
@@ -839,6 +813,28 @@ class ProjectIndexer:
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
+
+    def cancel_indexing(self):
+        """Request cancellation of the current indexing operation.
+
+        Safe to call from any thread. The indexer will stop processing
+        new files and return partial results.
+        """
+        self._cancel_event.set()
+        logger.info("Indexing cancellation requested")
+
+    def set_progress_callback(self, callback):
+        """Set a callback for indexing progress updates.
+
+        Args:
+            callback: fn(files_done: int, files_total: int, chunks_so_far: int)
+        """
+        self._progress_callback = callback
+
+    @property
+    def is_cancelled(self) -> bool:
+        """Check if cancellation has been requested."""
+        return self._cancel_event.is_set()
 
     def index_project(self, force_reindex: bool = False) -> Dict[str, Any]:
         """
