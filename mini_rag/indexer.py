@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -73,6 +74,32 @@ class ProjectIndexer:
         self.embedder = embedder or CodeEmbedder()
         self.chunker = chunker or CodeChunker()
         self.max_workers = max_workers
+
+        # Cancellation and progress support
+        self._cancel_event = threading.Event()
+        self._progress_callback = None  # fn(files_done, files_total, chunks_so_far)
+
+    def cancel_indexing(self):
+        """Request cancellation of the current indexing operation.
+
+        Safe to call from any thread. The indexer will stop processing
+        new files and return partial results.
+        """
+        self._cancel_event.set()
+
+    def set_progress_callback(self, callback):
+        """Set a callback for indexing progress updates.
+
+        Args:
+            callback: fn(files_done: int, files_total: int, chunks_so_far: int)
+                      Called after each file is processed.
+        """
+        self._progress_callback = callback
+
+    @property
+    def is_cancelled(self) -> bool:
+        """Check if cancellation has been requested."""
+        return self._cancel_event.is_set()
 
         # Initialize database connection
         self.db = None
@@ -821,8 +848,9 @@ class ProjectIndexer:
             force_reindex: If True, reindex all files regardless of changes
 
         Returns:
-            Dictionary with indexing statistics
+            Dictionary with indexing statistics (includes 'cancelled' key if stopped)
         """
+        self._cancel_event.clear()
         start_time = datetime.now()
 
         # Initialize database
@@ -883,8 +911,17 @@ class ProjectIndexer:
                     for file_path in files_to_index
                 }
 
-                # Process completed files
+                # Process completed files with cancel support
+                files_done = 0
                 for future in as_completed(future_to_file):
+                    # Check for cancellation
+                    if self._cancel_event.is_set():
+                        # Cancel remaining futures
+                        for f in future_to_file:
+                            f.cancel()
+                        logger.info("Indexing cancelled by user")
+                        break
+
                     file_path = future_to_file[future]
 
                     try:
@@ -895,7 +932,17 @@ class ProjectIndexer:
                         logger.error(f"Failed to process {file_path}: {e}")
                         failed_files.append(file_path)
 
+                    files_done += 1
                     progress.advance(task)
+
+                    # Report progress via callback
+                    if self._progress_callback:
+                        try:
+                            self._progress_callback(
+                                files_done, len(files_to_index), len(all_records)
+                            )
+                        except Exception:
+                            pass  # Don't let callback errors break indexing
 
         # Batch insert all records
         if all_records:
@@ -936,12 +983,16 @@ class ProjectIndexer:
         end_time = datetime.now()
         time_taken = (end_time - start_time).total_seconds()
 
+        was_cancelled = self._cancel_event.is_set()
+
         stats = {
-            "files_indexed": len(files_to_index) - len(failed_files),
+            "files_indexed": files_done if 'files_done' in dir() else len(files_to_index) - len(failed_files),
+            "files_total": len(files_to_index),
             "files_failed": len(failed_files),
             "chunks_created": len(all_records),
             "time_taken": time_taken,
             "files_per_second": (len(files_to_index) / time_taken if time_taken > 0 else 0),
+            "cancelled": was_cancelled,
         }
 
         # Print summary

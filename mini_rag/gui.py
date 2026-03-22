@@ -93,6 +93,7 @@ class MiniRAGApp(tk.Tk):
         self.active_collection = None
         self.searcher = None
         self._indexing = False
+        self._indexer = None  # Reference to active indexer for cancel
         self._results = []
 
         self._create_ui()
@@ -122,9 +123,8 @@ class MiniRAGApp(tk.Tk):
         ttk.Button(btn_frame, text="+ Add Folder", command=self._add_collection).pack(
             side=tk.LEFT, padx=2
         )
-        ttk.Button(btn_frame, text="Reindex", command=self._reindex_collection).pack(
-            side=tk.LEFT, padx=2
-        )
+        self.index_btn = ttk.Button(btn_frame, text="Index", command=self._toggle_indexing)
+        self.index_btn.pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Delete", command=self._delete_collection).pack(
             side=tk.LEFT, padx=2
         )
@@ -186,9 +186,17 @@ class MiniRAGApp(tk.Tk):
         detail_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         # === STATUS BAR ===
+        status_frame = ttk.Frame(self)
+        status_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=2)
+
         self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
-        status_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=2)
+        ttk.Label(status_frame, textvariable=self.status_var, anchor=tk.W).pack(
+            fill=tk.X, side=tk.LEFT, expand=True
+        )
+
+        self.progress_bar = ttk.Progressbar(status_frame, length=200, mode="determinate")
+        self.progress_bar.pack(side=tk.RIGHT, padx=(5, 0))
+        self.progress_bar.pack_forget()  # Hidden until indexing starts
 
     def _load_collections(self):
         """Load saved collections into the list."""
@@ -262,19 +270,48 @@ class MiniRAGApp(tk.Tk):
         if not (path / ".mini-rag").exists():
             self._index_collection(path)
 
+    def _toggle_indexing(self):
+        """Start or stop indexing depending on current state."""
+        if self._indexing:
+            self._cancel_indexing()
+        else:
+            path = self._get_selected_path()
+            if not path:
+                messagebox.showinfo("Select", "Select a collection first.")
+                return
+            self._index_collection(path, force=True)
+
+    def _cancel_indexing(self):
+        """Cancel the running indexing operation."""
+        if self._indexer:
+            self._indexer.cancel_indexing()
+            self.status_var.set("Cancelling...")
+            self.index_btn.config(state=tk.DISABLED)
+
     def _index_collection(self, path: Path, force: bool = False):
-        """Index a collection in a background thread."""
+        """Index a collection in a background thread with progress."""
         if self._indexing:
             messagebox.showwarning("Busy", "Already indexing. Please wait.")
             return
 
         self._indexing = True
+        self.index_btn.config(text="Stop")
+        self.progress_bar.pack(side=tk.RIGHT, padx=(5, 0))
+        self.progress_bar["value"] = 0
         self.status_var.set(f"Indexing {path.name}...")
+
+        def _on_progress(files_done, files_total, chunks_so_far):
+            pct = (files_done / files_total * 100) if files_total > 0 else 0
+            self.after(0, lambda: self._update_progress(
+                files_done, files_total, chunks_so_far, pct
+            ))
 
         def _run():
             try:
                 from .indexer import ProjectIndexer
                 indexer = ProjectIndexer(path)
+                indexer.set_progress_callback(_on_progress)
+                self._indexer = indexer
                 stats = indexer.index_project(force_reindex=force)
                 self.after(0, lambda: self._index_complete(path, stats))
             except Exception as e:
@@ -282,15 +319,34 @@ class MiniRAGApp(tk.Tk):
 
         threading.Thread(target=_run, daemon=True).start()
 
+    def _update_progress(self, files_done, files_total, chunks, pct):
+        """Update progress bar and status from indexing thread."""
+        self.progress_bar["value"] = pct
+        self.status_var.set(
+            f"Indexing: {files_done}/{files_total} files | {chunks} chunks"
+        )
+
     def _index_complete(self, path: Path, stats: Dict):
         """Called when indexing finishes."""
         self._indexing = False
-        self.status_var.set(
-            f"Indexed {path.name}: {stats['files_indexed']} files, "
-            f"{stats['chunks_created']} chunks in {stats['time_taken']:.1f}s"
-        )
+        self._indexer = None
+        self.index_btn.config(text="Index", state=tk.NORMAL)
+        self.progress_bar.pack_forget()
+
+        if stats.get("cancelled"):
+            self.status_var.set(
+                f"Cancelled: {stats['files_indexed']}/{stats['files_total']} files, "
+                f"{stats['chunks_created']} chunks saved"
+            )
+        else:
+            self.status_var.set(
+                f"Done: {stats['files_indexed']} files, "
+                f"{stats['chunks_created']} chunks in {stats['time_taken']:.1f}s"
+            )
+
+        self.searcher = None  # Reset searcher to pick up new index
         self._load_collections()
-        # Re-select
+
         collections = self.config_data.get("collections", [])
         if str(path) in collections:
             idx = collections.index(str(path))
@@ -301,16 +357,11 @@ class MiniRAGApp(tk.Tk):
     def _index_error(self, error: str):
         """Called when indexing fails."""
         self._indexing = False
+        self._indexer = None
+        self.index_btn.config(text="Index", state=tk.NORMAL)
+        self.progress_bar.pack_forget()
         self.status_var.set(f"Indexing failed: {error}")
         messagebox.showerror("Indexing Error", error)
-
-    def _reindex_collection(self):
-        """Force reindex the selected collection."""
-        path = self._get_selected_path()
-        if not path:
-            messagebox.showinfo("Select", "Select a collection first.")
-            return
-        self._index_collection(path, force=True)
 
     def _delete_collection(self):
         """Delete index for selected collection."""
