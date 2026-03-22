@@ -64,8 +64,6 @@ dependencies = [
     "duckduckgo-search>=4.0.0",
 ]
 
-[project.optional-dependencies]
-browser = ["playwright>=1.40.0"]
 keywords = ["rag", "search", "ai", "llm", "embeddings", "semantic-search", "code-search"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -81,6 +79,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+[project.optional-dependencies]
+browser = ["playwright>=1.40.0"]
+
 [project.urls]
 Homepage = "https://github.com/FSSCoding/Fss-Mini-Rag"
 Repository = "https://github.com/FSSCoding/Fss-Mini-Rag"
@@ -90,5 +91,6 @@ Issues = "https://github.com/FSSCoding/Fss-Mini-Rag/issues"
 rag-mini = "mini_rag.cli:cli"
 rag-mini-gui = "mini_rag.gui:main"
 
-[tool.setuptools]
-packages = ["mini_rag"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mini_rag*"]
