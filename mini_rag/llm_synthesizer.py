@@ -49,21 +49,32 @@ class SynthesisResult:
 
 
 class LLMSynthesizer:
-    """Synthesizes RAG search results using Ollama LLMs."""
+    """Synthesizes RAG search results using LLMs.
+
+    Supports both OpenAI-compatible endpoints (LM Studio, vLLM, OpenAI)
+    and Ollama's native API. Provider is auto-detected or set via config.
+    """
 
     def __init__(
         self,
+        base_url: str = "http://localhost:1234/v1",
         ollama_url: str = "http://localhost:11434",
         model: str = None,
         enable_thinking: bool = False,
         config=None,
+        provider: str = "auto",
+        api_key: str = None,
     ):
+        self.base_url = base_url.rstrip("/")
         self.ollama_url = ollama_url.rstrip("/")
         self.available_models = []
         self.model = model
-        self.enable_thinking = enable_thinking  # Default False for synthesis mode
+        self.enable_thinking = enable_thinking
         self._initialized = False
-        self.config = config  # For accessing model rankings
+        self.config = config
+        self.provider = provider  # "auto", "openai", "ollama"
+        self.api_key = api_key
+        self._active_provider = None  # Set during init: "openai" or "ollama"
 
         # Initialize safeguards
         if ModelRunawayDetector:
@@ -72,15 +83,70 @@ class LLMSynthesizer:
             self.safeguard_detector = None
 
     def _get_available_models(self) -> List[str]:
-        """Get list of available Ollama models."""
-        try:
-            response = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                return [model["name"] for model in data.get("models", [])]
-        except Exception as e:
-            logger.warning(f"Could not fetch Ollama models: {e}")
+        """Get list of available LLM models from the active provider."""
+        # Try OpenAI-compatible first (unless provider is explicitly ollama)
+        if self.provider != "ollama":
+            try:
+                headers = {}
+                if self.api_key:
+                    headers["Authorization"] = f"Bearer {self.api_key}"
+                response = requests.get(
+                    f"{self.base_url}/models", headers=headers, timeout=5
+                )
+                if response.status_code == 200:
+                    models = [m["id"] for m in response.json().get("data", [])]
+                    # Filter to LLM models (exclude embedding models)
+                    llm_models = [m for m in models
+                                  if not any(kw in m.lower() for kw in ("embed", "bge", "e5", "gte"))]
+                    if llm_models:
+                        self._active_provider = "openai"
+                        return llm_models
+            except Exception as e:
+                logger.debug(f"OpenAI-compatible endpoint not available: {e}")
+
+        # Fall back to Ollama
+        if self.provider != "openai":
+            try:
+                response = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [model["name"] for model in data.get("models", [])]
+                    if models:
+                        self._active_provider = "ollama"
+                        return models
+            except Exception as e:
+                logger.debug(f"Ollama not available: {e}")
+
         return []
+
+    def _call_openai_compatible(
+        self, prompt: str, temperature: float = 0.3
+    ) -> Optional[str]:
+        """Call an OpenAI-compatible chat completions endpoint."""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": 2048,
+        }
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            logger.error(f"OpenAI-compatible LLM call failed: {e}")
+            return None
 
     def _select_best_model(self) -> str:
         """Select the best available model based on configuration rankings with robust name resolution."""
@@ -304,6 +370,18 @@ class LLMSynthesizer:
         """Check if Ollama is available and has models."""
         self._ensure_initialized()
         return len(self.available_models) > 0
+
+    def _call_llm(self, prompt: str, temperature: float = 0.3) -> Optional[str]:
+        """Call the LLM using the best available provider.
+
+        Routes to OpenAI-compatible or Ollama based on what's available.
+        """
+        self._ensure_initialized()
+
+        if self._active_provider == "openai":
+            return self._call_openai_compatible(prompt, temperature)
+        else:
+            return self._call_ollama(prompt, temperature)
 
     def _call_ollama(
         self,
@@ -790,122 +868,76 @@ This is normal with smaller AI models and helps ensure you get quality responses
     def synthesize_search_results(
         self, query: str, results: List[Any], project_path: Path
     ) -> SynthesisResult:
-        """Synthesize search results into a coherent summary."""
+        """Synthesize search results into a coherent summary.
 
+        Takes search results and sends them with the query to an LLM
+        for a natural language synthesis.
+        """
         self._ensure_initialized()
         if not self.is_available():
             return SynthesisResult(
-                summary="LLM synthesis unavailable (Ollama not running or no models)",
+                summary="LLM synthesis unavailable. Start an LLM server (LM Studio or Ollama).",
                 key_points=[],
                 code_examples=[],
-                suggested_actions=["Install and run Ollama with a model"],
+                suggested_actions=["Start LM Studio or Ollama with a chat model loaded"],
                 confidence=0.0,
             )
 
         # Prepare context from search results
         context_parts = []
-        for i, result in enumerate(results[:8], 1):  # Limit to top 8 results
-            # result.file_path if hasattr(result, "file_path") else "unknown"  # Unused variable removed
-            # result.content if hasattr(result, "content") else str(result)  # Unused variable removed
-            # result.score if hasattr(result, "score") else 0.0  # Unused variable removed
+        for i, result in enumerate(results[:8], 1):
+            file_path = getattr(result, "file_path", "unknown")
+            content = getattr(result, "content", str(result))
+            score = getattr(result, "score", 0.0)
+            truncated = content[:500] + ("..." if len(content) > 500 else "")
 
             context_parts.append(
-                """
-Result {i} (Score: {score:.3f}):
-File: {file_path}
-Content: {content[:500]}{'...' if len(content) > 500 else ''}
-"""
+                f"Result {i} (Score: {score:.3f}):\n"
+                f"File: {file_path}\n"
+                f"Content: {truncated}\n"
             )
 
-        # "\n".join(context_parts)  # Unused variable removed
+        context = "\n".join(context_parts)
+        system_context = ""
+        try:
+            system_context = get_system_context(project_path)
+        except Exception:
+            pass
 
-        # Get system context for better responses
-        # get_system_context(project_path)  # Unused variable removed
+        prompt = f"""You are a senior software engineer analyzing code search results.
+Synthesize these results into a clear, helpful answer.
 
-        # Create synthesis prompt with system context
-        prompt = """You are a senior software engineer analyzing code search results. Your task is to synthesize the search results into a helpful, actionable summary.
-
-SYSTEM CONTEXT: {system_context}
-SEARCH QUERY: "{query}"
+QUERY: "{query}"
 PROJECT: {project_path.name}
+{f"CONTEXT: {system_context}" if system_context else ""}
 
 SEARCH RESULTS:
 {context}
 
-Please provide a synthesis in the following JSON format:
-{{
-    "summary": "A 2-3 sentence overview of what the search results show",
-    "key_points": [
-        "Important finding 1",
-        "Important finding 2",
-        "Important finding 3"
-    ],
-    "code_examples": [
-        "Relevant code snippet or pattern from the results",
-        "Another important code example"
-    ],
-    "suggested_actions": [
-        "What the developer should do next",
-        "Additional recommendations"
-    ],
-    "confidence": 0.85
-}}
+Respond with a clear, concise summary answering the query based on these results.
+Include specific file names and function names where relevant.
+Keep it under 200 words."""
 
-Focus on:
-- What the code does and how it works
-- Patterns and relationships between the results
-- Practical next steps for the developer
-- Code quality observations
-
-Respond with ONLY the JSON, no other text."""
-
-        # Get LLM response
-        response = self._call_ollama(prompt, temperature=0.2)
+        # Call LLM (routes to OpenAI-compatible or Ollama automatically)
+        response = self._call_llm(prompt, temperature=0.3)
 
         if not response:
             return SynthesisResult(
-                summary="LLM synthesis failed (API error)",
+                summary="LLM synthesis failed. Check that an LLM server is running.",
                 key_points=[],
                 code_examples=[],
-                suggested_actions=["Check Ollama status and try again"],
+                suggested_actions=["Start LM Studio or Ollama with a chat model"],
                 confidence=0.0,
             )
 
-        # Parse JSON response
-        try:
-            # Extract JSON from response (in case there's extra text)
-            start_idx = response.find("{")
-            end_idx = response.rfind("}") + 1
-            if start_idx >= 0 and end_idx > start_idx:
-                json_str = response[start_idx:end_idx]
-                data = json.loads(json_str)
-
-                return SynthesisResult(
-                    summary=data.get("summary", "No summary generated"),
-                    key_points=data.get("key_points", []),
-                    code_examples=data.get("code_examples", []),
-                    suggested_actions=data.get("suggested_actions", []),
-                    confidence=float(data.get("confidence", 0.5)),
-                )
-            else:
-                # Fallback: use the raw response as summary
-                return SynthesisResult(
-                    summary=response[:300] + "..." if len(response) > 300 else response,
-                    key_points=[],
-                    code_examples=[],
-                    suggested_actions=[],
-                    confidence=0.3,
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to parse LLM response: {e}")
-            return SynthesisResult(
-                summary="LLM synthesis failed (JSON parsing error)",
-                key_points=[],
-                code_examples=[],
-                suggested_actions=["Try the search again or check LLM output"],
-                confidence=0.0,
-            )
+        # Use the response directly as a summary (no JSON parsing needed)
+        return SynthesisResult(
+            summary=response.strip(),
+            key_points=[],
+            code_examples=[],
+            suggested_actions=[],
+            confidence=0.8,
+        )
 
     def format_synthesis_output(self, synthesis: SynthesisResult, query: str) -> str:
         """Format synthesis result for display."""

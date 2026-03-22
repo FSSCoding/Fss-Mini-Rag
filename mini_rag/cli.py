@@ -227,6 +227,8 @@ def init(path: str, force: bool, reindex: bool, model: Optional[str]):
 @click.option("--show-content", "-c", is_flag=True, help="Show code content in results")
 @click.option("--show-perf", is_flag=True, help="Show performance metrics")
 @click.option("--port", type=int, default=None, help="Server port (default: from config or 7777)")
+@click.option("--synthesize", "-s", is_flag=True, help="Synthesize results with LLM")
+@click.option("--expand", "-e", is_flag=True, help="Expand query with LLM for better recall")
 def search(
     query: str,
     path: str,
@@ -236,6 +238,8 @@ def search(
     show_content: bool,
     show_perf: bool,
     port: int,
+    synthesize: bool,
+    expand: bool,
 ):
     """Search codebase using semantic similarity."""
     project_path = Path(path).resolve()
@@ -257,105 +261,68 @@ def search(
         console.print()
         sys.exit(1)
 
-    # Get performance monitor
-    monitor = get_monitor() if show_perf else None
-
-    # Check if server is running
-    client = RAGClient(port)
-    use_server = client.is_running()
+    import time as _time
 
     try:
-        if use_server:
-            # Use server for fast queries
-            console.print("[dim]Using RAG server...[/dim]")
+        # Initialize searcher
+        t0 = _time.time()
+        searcher = CodeSearcher(project_path)
+        init_ms = (_time.time() - t0) * 1000
 
-            response = client.search(query, top_k=top_k)
+        # Query expansion (if enabled)
+        display_query = query
+        if expand:
+            try:
+                expanded = searcher.query_expander.expand_query(query)
+                if expanded != query:
+                    display_query = f"{query} [expanded: {expanded}]"
+                    query = expanded
+            except Exception:
+                pass  # Expansion failed, use original query
 
-            if response.get("success"):
-                # Convert response to SearchResult objects
-                from .search import SearchResult
-
-                results = []
-                for r in response["results"]:
-                    result = SearchResult(
-                        file_path=r["file_path"],
-                        content=r["content"],
-                        score=r["score"],
-                        start_line=r["start_line"],
-                        end_line=r["end_line"],
-                        chunk_type=r["chunk_type"],
-                        name=r["name"],
-                        language=r["language"],
-                    )
-                    results.append(result)
-
-                # Show server stats
-                search_time = response.get("search_time_ms", 0)
-                total_queries = response.get("total_queries", 0)
-                console.print(
-                    f"[dim]Search time: {search_time}ms (Query #{total_queries})[/dim]\n"
-                )
-            else:
-                console.print(f"[red]Server error:[/red] {response.get('error')}")
-                sys.exit(1)
-        else:
-            # Fall back to direct search
-            # Create searcher with timing
-            if monitor:
-                with monitor.measure("Initialize (Load Model + Connect DB)"):
-                    searcher = CodeSearcher(project_path)
-            else:
-                searcher = CodeSearcher(project_path)
-
-            # Perform search with timing
-            if monitor:
-                with monitor.measure("Execute Vector Search"):
-                    results = searcher.search(
-                        query,
-                        top_k=top_k,
-                        chunk_types=list(type) if type else None,
-                        languages=list(lang) if lang else None,
-                    )
-            else:
-                with console.status(f"[cyan]Searching for: {query}[/cyan]"):
-                    results = searcher.search(
-                        query,
-                        top_k=top_k,
-                        chunk_types=list(type) if type else None,
-                        languages=list(lang) if lang else None,
-                    )
+        # Search with timing
+        t1 = _time.time()
+        results = searcher.search(
+            query,
+            top_k=top_k,
+            chunk_types=list(type) if type else None,
+            languages=list(lang) if lang else None,
+        )
+        search_ms = (_time.time() - t1) * 1000
 
         # Display results
         if results:
-            if use_server:
-                # Need a searcher instance just for display
-                display_searcher = CodeSearcher.__new__(CodeSearcher)
-                display_searcher.console = console
-                display_searcher.display_results(results, show_content=show_content)
-            else:
-                searcher.display_results(results, show_content=show_content)
+            searcher.display_results(results, show_content=show_content)
+            console.print(
+                f"\n[dim]{len(results)} results for: {display_query} "
+                f"({search_ms:.0f}ms search, {init_ms:.0f}ms init)[/dim]"
+            )
 
-            # Copy first result to clipboard if available
-            try:
-                import pyperclip
+            # LLM synthesis (if enabled)
+            if synthesize:
+                console.print("\n[bold cyan]Synthesizing with LLM...[/bold cyan]")
+                t2 = _time.time()
+                try:
+                    from .llm_synthesizer import LLMSynthesizer
+                    synth = LLMSynthesizer()
+                    result = synth.synthesize_search_results(query, results, project_path)
+                    synth_ms = (_time.time() - t2) * 1000
 
-                first_result = results[0]
-                location = f"{first_result.file_path}:{first_result.start_line}"
-                pyperclip.copy(location)
-                console.print(
-                    f"\n[dim]First result location copied to clipboard: {location}[/dim]"
-                )
-            except (ImportError, OSError):
-                pass  # Clipboard not available
+                    if result.summary:
+                        console.print(Panel(
+                            result.summary,
+                            title="LLM Synthesis",
+                            border_style="cyan",
+                        ))
+                        console.print(f"[dim]Synthesis: {synth_ms:.0f}ms[/dim]")
+                except Exception as e:
+                    console.print(f"[yellow]Synthesis failed: {e}[/yellow]")
         else:
-            console.print(f"\n[yellow]No results found for: {query}[/yellow]")
+            console.print(f"\n[yellow]No results found for: {display_query}[/yellow]")
+            console.print(f"[dim]({search_ms:.0f}ms)[/dim]")
             console.print("\n[dim]Tips:[/dim]")
             console.print("  • Try different keywords")
             console.print("  • Use natural language queries")
-
-        # Show performance summary
-        if monitor:
-            monitor.print_summary()
             console.print("  • Check if files are indexed with 'mini-rag stats'")
 
     except Exception as e:
