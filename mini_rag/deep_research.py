@@ -1145,7 +1145,20 @@ class DeepResearchEngine:
                     )
                     break
 
-                console.print(f"[bold]━━━ Round {round_num}/{rounds} ━━━[/bold]")
+                # Round header with time and corpus stats
+                elapsed = budget.elapsed_minutes()
+                remaining = budget.remaining_minutes()
+                corpus_summary = self.metrics.get_summary()
+                time_str = f"{elapsed:.0f}m elapsed"
+                if budget.max_minutes > 0:
+                    time_str += f", {remaining:.0f}m remaining"
+                corpus_str = (
+                    f"{corpus_summary['active_files']} files, "
+                    f"~{corpus_summary['total_tokens']:,} tokens"
+                )
+
+                console.print(f"[bold]━━━ Round {round_num}/{rounds} ━━━[/bold]  "
+                              f"[dim]({time_str} | {corpus_str})[/dim]")
                 self.session.metadata["rounds"] = round_num
                 self.metrics.begin_round(round_num)
 
@@ -1160,7 +1173,8 @@ class DeepResearchEngine:
                 # ── ANALYZE ──
                 phase_start = time.time()
                 self.session.set_phase(ResearchPhase.ANALYZE.value)
-                console.print(f"  [cyan]ANALYZE:[/cyan] Evaluating corpus...")
+                src_count = len(self.session.get_all_source_files())
+                console.print(f"  [cyan]ANALYZE:[/cyan] Evaluating corpus ({src_count} sources)...")
 
                 analysis = self.analyzer.analyze(self.session, topic)
 
@@ -1263,7 +1277,11 @@ class DeepResearchEngine:
                     )
 
                 for page in pages:
-                    # Find the saved file path for this page
+                    console.print(
+                        f"    [green]+[/green] [{page.source_type}] "
+                        f"{page.title[:55]} — {page.word_count:,} words"
+                    )
+                    # Register in metrics
                     for f in self.session.sources_dir.iterdir():
                         if f.is_file() and f.suffix == ".md":
                             try:
@@ -1314,11 +1332,22 @@ class DeepResearchEngine:
                     self._record_phase_time("prune", phase_start)
                     self.metrics.record_phase_time("prune", phase_duration)
 
-                # Record round duration
+                # Record round duration and show summary
                 round_duration = (time.time() - round_start) / 60.0
                 budget.record_round(round_duration)
                 self.metrics.end_round(round_duration)
-                console.print(f"  Round {round_num} complete ({round_duration:.1f} min)\n")
+
+                # Round summary
+                rsnap = self.metrics.round_snapshots[-1] if self.metrics.round_snapshots else None
+                if rsnap:
+                    console.print(
+                        f"  [dim]Round {round_num}: {round_duration:.1f}min, "
+                        f"+{rsnap.tokens_added:,} tokens, "
+                        f"{rsnap.scrape_successes}/{rsnap.scrape_attempts} scraped, "
+                        f"{rsnap.llm_calls} LLM calls[/dim]\n"
+                    )
+                else:
+                    console.print(f"  Round {round_num} complete ({round_duration:.1f} min)\n")
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Research interrupted — generating report...[/yellow]")
