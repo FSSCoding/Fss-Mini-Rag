@@ -957,14 +957,23 @@ class CorpusPruner:
         corroborations = []
         flagged = []
 
+        # Sort files by modification time (oldest first = most likely to be the original)
+        files = sorted(file_contents.keys(), key=lambda f: f.stat().st_mtime)
+
         # Pairwise comparison
-        files = list(file_contents.keys())
+        already_duplicate = set()  # Track files already marked as duplicates
         for i in range(len(files)):
+            if files[i].name in already_duplicate:
+                continue
             for j in range(i + 1, len(files)):
+                if files[j].name in already_duplicate:
+                    continue
                 sim = self._similarity(file_contents[files[i]], file_contents[files[j]])
 
                 if sim >= self.DUPLICATE_THRESHOLD:
+                    # Keep older file (files[i]), mark newer (files[j]) as duplicate
                     duplicates.append((files[i].name, files[j].name, sim))
+                    already_duplicate.add(files[j].name)
                 elif sim >= self.BORDERLINE_LOW:
                     # Borderline — check with LLM if available
                     if self._call_llm:
@@ -974,13 +983,27 @@ class CorpusPruner:
                         )
                         if verdict == "DUPLICATE":
                             duplicates.append((files[i].name, files[j].name, sim))
+                            already_duplicate.add(files[j].name)
                         elif verdict == "RELATED":
                             corroborations.append((files[i].name, files[j].name))
                     else:
                         # Conservative: flag as related
                         corroborations.append((files[i].name, files[j].name))
+                elif sim >= 0.15 and self._call_llm:
+                    # Moderate trigram similarity — check keyword overlap
+                    # then confirm with LLM if keywords suggest related content
+                    kw_overlap = self._keyword_overlap(
+                        file_contents[files[i]], file_contents[files[j]]
+                    )
+                    if kw_overlap >= 0.10:  # Shared 10%+ of significant words
+                        verdict = self._llm_similarity_check(
+                            file_contents[files[i]][:500],
+                            file_contents[files[j]][:500],
+                        )
+                        if verdict == "RELATED":
+                            corroborations.append((files[i].name, files[j].name))
 
-        # Remove true duplicates (keep the first/older file)
+        # Remove true duplicates (keep the older file, remove the newer)
         removed = []
         for name_a, name_b, sim in duplicates:
             dup_path = session.sources_dir / name_b
@@ -988,7 +1011,7 @@ class CorpusPruner:
                 dup_path.unlink()
                 removed.append(name_b)
                 session.metadata["pages_pruned"] = session.metadata.get("pages_pruned", 0) + 1
-                logger.info(f"Removed duplicate: {name_b} (sim={sim:.2f} with {name_a})")
+                logger.info(f"Removed duplicate: {name_b} (sim={sim:.2f}, kept {name_a})")
 
         session.save_metadata()
 
@@ -1023,6 +1046,34 @@ class CorpusPruner:
 
         intersection = trigrams_a & trigrams_b
         union = trigrams_a | trigrams_b
+        return len(intersection) / len(union)
+
+    def _keyword_overlap(self, text_a: str, text_b: str) -> float:
+        """Jaccard overlap on significant words (4+ chars, not stopwords).
+
+        Better than trigrams for detecting topical similarity between
+        documents written in different words about the same subject.
+        """
+        STOPWORDS = {
+            "this", "that", "with", "from", "have", "been", "were", "they",
+            "their", "which", "about", "would", "there", "these", "other",
+            "into", "more", "some", "such", "than", "them", "then", "what",
+            "when", "will", "also", "each", "make", "like", "most", "only",
+            "over", "very", "many", "well", "back", "much", "your",
+        }
+
+        def get_keywords(text):
+            words = set(text.split())
+            return {w for w in words if len(w) >= 4 and w not in STOPWORDS}
+
+        kw_a = get_keywords(text_a)
+        kw_b = get_keywords(text_b)
+
+        if not kw_a or not kw_b:
+            return 0.0
+
+        intersection = kw_a & kw_b
+        union = kw_a | kw_b
         return len(intersection) / len(union)
 
     def _llm_similarity_check(self, doc_a: str, doc_b: str) -> str:
