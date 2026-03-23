@@ -811,8 +811,10 @@ def research(query, path: str, engine, max_pages, deep: bool, time_budget, round
                 time_minutes = int(tb)
 
         try:
-            # Initialize LLM
+            # Initialize LLM — use embedding base_url for OpenAI-compat endpoints
+            llm_base = config.embedding.base_url if config.embedding else "http://localhost:1234/v1"
             llm = LLMSynthesizer(
+                base_url=llm_base,
                 ollama_url=f"http://{config.llm.ollama_host}",
                 model=config.llm.synthesis_model,
                 config=config.llm,

@@ -879,7 +879,19 @@ class ResearchAnalyzer:
                 # Queries may be on the same line or following lines
                 q = line.split(":", 1)[1].strip()
                 if q:
-                    result.follow_up_queries.append(q)
+                    # Handle comma-separated queries (possibly quoted)
+                    # e.g. "query one", "query two", "query three"
+                    import re as _re
+                    quoted = _re.findall(r'"([^"]+)"', q)
+                    if quoted:
+                        result.follow_up_queries.extend(quoted)
+                    elif "," in q and len(q) > 50:
+                        # Long comma-separated line — split on commas
+                        result.follow_up_queries.extend(
+                            part.strip().strip('"\'') for part in q.split(",") if part.strip()
+                        )
+                    else:
+                        result.follow_up_queries.append(q)
             elif result.follow_up_queries is not None and line and not line.startswith(("COVERED", "GAPS", "CONFIDENCE")):
                 # Continuation lines after QUERIES:
                 if any(line.upper().startswith(k) for k in ("COVERED", "GAPS", "CONFIDENCE")):
@@ -925,7 +937,7 @@ class CorpusPruner:
         """
         source_files = session.get_all_source_files()
         if len(source_files) < 2:
-            return {"duplicates": [], "corroborations": [], "flagged": []}
+            return {"duplicates": [], "corroborations": [], "flagged": [], "removed": []}
 
         # Load content (first 2000 chars normalized for comparison)
         file_contents = {}
@@ -1273,9 +1285,9 @@ class DeepResearchEngine:
                         f"{a} ↔ {b}" for a, b in prune_result.get("corroborations", [])
                     ]
 
-                    if prune_result["removed"]:
+                    if prune_result.get("removed"):
                         console.print(f"    Removed {len(prune_result['removed'])} duplicates")
-                    if prune_result["corroborations"]:
+                    if prune_result.get("corroborations"):
                         console.print(f"    Found {len(prune_result['corroborations'])} corroborations")
                     phase_duration = (time.time() - phase_start) / 60.0
                     self._record_phase_time("prune", phase_start)
