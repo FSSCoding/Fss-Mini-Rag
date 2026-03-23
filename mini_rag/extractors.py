@@ -8,10 +8,11 @@ with a generic fallback for everything else.
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, Tuple
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -383,7 +384,8 @@ class GenericExtractor:
 class PDFExtractor:
     """Extract text from PDF files using pymupdf (fitz).
 
-    Converts PDF pages to clean markdown with basic structure detection.
+    Uses font-size analysis to detect headings and document structure.
+    Converts to clean markdown with proper heading hierarchy.
     """
 
     def can_handle(self, url: str, content_type: str) -> bool:
@@ -401,32 +403,20 @@ class PDFExtractor:
 
         try:
             doc = fitz.open(stream=raw, filetype="pdf")
-
-            # Extract metadata
             metadata = doc.metadata or {}
             title = metadata.get("title", "").strip()
+            page_count = len(doc)
 
-            # Extract text from all pages
-            pages_text = []
-            for page in doc:
-                text = page.get_text("text")
-                if text.strip():
-                    pages_text.append(text)
-
+            markdown, stats = self._extract_structured(doc)
             doc.close()
 
-            if not pages_text:
+            if not markdown:
                 logger.debug(f"No text extracted from PDF: {url}")
                 return None
 
-            # Combine pages with separators
-            full_text = "\n\n---\n\n".join(pages_text)
-
-            # Clean up the text
-            markdown = self._clean_pdf_text(full_text)
+            markdown = self._clean_pdf_text(markdown)
 
             if not title:
-                # Try to get title from first line
                 first_line = markdown.split("\n")[0].strip()
                 if first_line and len(first_line) < 200:
                     title = first_line.lstrip("# ").strip()
@@ -449,25 +439,132 @@ class PDFExtractor:
             logger.error(f"PDF extraction failed for {url}: {e}")
             return None
 
+    def _extract_structured(self, doc) -> Tuple[str, Dict]:
+        """Extract text with structure detection from font metadata.
+
+        Two-pass approach:
+        1. Build font-size histogram to identify body vs heading sizes
+        2. Extract text, converting larger fonts to markdown headings
+        """
+        # Phase 1: font-size histogram
+        size_counter: Counter = Counter()
+        for page in doc:
+            for block in page.get_text("dict")["blocks"]:
+                if "lines" not in block:
+                    continue
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        text = span["text"].strip()
+                        if text:
+                            size_counter[round(span["size"], 1)] += len(text)
+
+        if not size_counter:
+            return "", {}
+
+        body_size = size_counter.most_common(1)[0][0]
+
+        # Heading sizes: anything > body_size * 1.15, ranked largest first
+        heading_sizes = sorted(
+            [sz for sz in size_counter if sz > body_size * 1.15],
+            reverse=True,
+        )
+        heading_map: Dict[float, int] = {}
+        for i, sz in enumerate(heading_sizes[:3]):
+            heading_map[sz] = i + 1  # 1=H2, 2=H3, 3=H4 (offset +1 in output)
+
+        # Phase 2: extract with structure
+        pages_md = []
+        for page in doc:
+            lines_out: List[str] = []
+            prev_was_heading = False
+
+            for block in page.get_text("dict")["blocks"]:
+                if "lines" not in block:
+                    continue
+                for line in block["lines"]:
+                    line_text = ""
+                    line_size = None
+                    is_bold = False
+
+                    for span in line["spans"]:
+                        line_text += span["text"]
+                        if span["text"].strip():
+                            line_size = round(span["size"], 1)
+                            is_bold = bool(span["flags"] & 16)
+
+                    line_text = line_text.rstrip()
+                    stripped = line_text.strip()
+                    if not stripped:
+                        continue
+
+                    # Heading by font size
+                    if line_size in heading_map:
+                        level = heading_map[line_size] + 1  # +1 so title=##, sections=###
+                        lines_out.append("")
+                        lines_out.append(f"{'#' * level} {stripped}")
+                        lines_out.append("")
+                        prev_was_heading = True
+                        continue
+
+                    # Bold subheading (same body size but bold, short, starts a block)
+                    if is_bold and line_size == body_size and len(stripped) < 100:
+                        # Only treat as subheading if it looks like a title (not mid-paragraph bold)
+                        if prev_was_heading or not lines_out or not lines_out[-1].strip():
+                            lines_out.append("")
+                            lines_out.append(f"### {stripped}")
+                            lines_out.append("")
+                            prev_was_heading = True
+                            continue
+
+                    lines_out.append(line_text)
+                    prev_was_heading = False
+
+            page_text = "\n".join(lines_out)
+            if page_text.strip():
+                pages_md.append(page_text)
+
+        stats = {"body_size": body_size, "heading_sizes": heading_sizes}
+        return "\n\n***\n\n".join(pages_md), stats
+
     def _clean_pdf_text(self, text: str) -> str:
-        """Clean up raw PDF text into readable markdown."""
-        # Fix common PDF extraction artifacts
-        # Remove excessive whitespace within lines (but keep paragraph breaks)
+        """Clean up extracted PDF text.
+
+        Handles: dehyphenation, ALL-CAPS section detection, page numbers,
+        excessive whitespace.
+        """
+        # Dehyphenation: fix word-break hyphens at line ends
+        text = re.sub(r"([a-z])-\n([a-z])", r"\1\2", text)
+
         lines = text.split("\n")
         cleaned = []
         for line in lines:
             line = line.rstrip()
-            # Collapse multiple spaces within a line
-            line = re.sub(r" {2,}", " ", line)
+            line = re.sub(r" {2,}", " ", line)  # Collapse multiple spaces
+            stripped = line.strip()
+
+            # ALL-CAPS section detection (academic papers)
+            # Must be standalone line, 5-80 chars, actual words, not already a heading
+            if (
+                stripped
+                and not stripped.startswith("#")
+                and 5 <= len(stripped) <= 80
+                and re.match(r"^[A-Z][A-Z\s,&:;\'\-]{3,}$", stripped)
+                and sum(1 for c in stripped if c.isalpha()) > len(stripped) * 0.5
+            ):
+                cleaned.append("")
+                cleaned.append(f"## {stripped}")
+                cleaned.append("")
+                continue
+
             cleaned.append(line)
 
         text = "\n".join(cleaned)
 
-        # Remove page numbers (common patterns)
-        text = re.sub(r"\n\s*\d+\s*\n", "\n", text)
+        # Remove standalone page numbers
+        text = re.sub(r"\n\s*\d{1,4}\s*\n", "\n", text)
 
         # Collapse excessive blank lines
-        text = re.sub(r"\n{4,}", "\n\n---\n\n", text)
+        text = re.sub(r"\n{4,}", "\n\n***\n\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
 
         return text.strip()

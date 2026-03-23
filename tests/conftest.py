@@ -87,6 +87,54 @@ database:
   pool_size: 5
 ''')
 
+    # HTML file
+    html_file = tmp_path / "page.html"
+    html_file.write_text("""<html><body>
+<h1>Architecture</h1>
+<p>Main system overview with important details about the application architecture.
+This section describes the core components and their interactions within the system.
+The architecture follows a modular design pattern with clear separation of concerns.</p>
+<table>
+<tr><th>Component</th><th>Status</th><th>Description</th><th>Version</th></tr>
+<tr><td>Router</td><td>Active</td><td>Handles all incoming requests and routes them to appropriate handlers</td><td>2.1</td></tr>
+<tr><td>Cache</td><td>Warm</td><td>In-memory cache layer for frequently accessed data and query results</td><td>1.5</td></tr>
+<tr><td>Database</td><td>Connected</td><td>PostgreSQL backend for persistent storage of application data</td><td>15.2</td></tr>
+<tr><td>Auth</td><td>Active</td><td>Authentication and authorization middleware for all API endpoints</td><td>3.0</td></tr>
+</table>
+<h2>Code Example</h2>
+<pre><code>def initialize_application():
+    config = load_config_from_environment()
+    database = connect_to_database(config.db_url)
+    cache = initialize_cache(config.cache_size)
+    router = create_router(database, cache)
+    auth = setup_authentication(config.secret_key)
+    return Application(router, auth, database, cache)</code></pre>
+<script>alert('should be stripped')</script>
+<style>.hidden { display: none; }</style>
+<nav><a href="/">Home</a></nav>
+</body></html>""")
+
+    # Shell script
+    sh_file = tmp_path / "build.sh"
+    sh_file.write_text("""#!/bin/bash
+set -e
+VERSION="1.0"
+
+build_project() {
+    echo "Building version $VERSION"
+    make clean
+    make all
+}
+
+function run_tests {
+    pytest tests/
+    echo "Tests passed"
+}
+
+build_project
+run_tests
+""")
+
     return tmp_path
 
 

@@ -203,7 +203,7 @@ class OllamaEmbedder:
         if profile == "conceptual":
             preferences = ("nomic", "bge", "e5", "gte", "granite", "minilm")
         else:
-            preferences = ("minilm", "granite", "nomic", "bge", "e5", "gte")
+            preferences = ("minilm", "nomic", "bge", "e5", "gte", "granite")
 
         for preferred in preferences:
             for model in candidates:

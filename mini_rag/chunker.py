@@ -1540,6 +1540,12 @@ class CodeChunker:
         - Headers merge downward into their section content
         - Character-based size limits from language config
         """
+        # Strip YAML frontmatter if present (common in scraped/research docs)
+        if content.startswith("---\n"):
+            end_idx = content.find("\n---\n", 4)
+            if end_idx != -1:
+                content = content[end_idx + 5:]
+
         chunks = []
         total_lines = len(content.splitlines())
         header_pattern = re.compile(r"^(#{1,6})\s+(.+)$")

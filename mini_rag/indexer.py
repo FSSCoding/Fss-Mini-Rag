@@ -102,6 +102,15 @@ class ProjectIndexer:
             "*.m",
             "*.h",
             "*.hpp",
+            # Web files
+            "*.html",
+            "*.htm",
+            "*.css",
+            # Shell scripts
+            "*.sh",
+            "*.bash",
+            "*.zsh",
+            "*.fish",
             # Documentation files
             "*.md",
             "*.markdown",
@@ -118,6 +127,12 @@ class ProjectIndexer:
             "*.xml",
             "*.con",
             "*.config",
+            "*.conf",
+            "*.cfg",
+            "*.service",
+            "*.nginx",
+            # Data/query files
+            "*.sql",
             # Image files (multimodal embedding)
             "*.png",
             "*.jpg",
@@ -132,6 +147,8 @@ class ProjectIndexer:
             "CONTRIBUTING",
             "TODO",
             "NOTES",
+            "Dockerfile",
+            "Makefile",
         ]
 
         self.exclude_patterns = [
