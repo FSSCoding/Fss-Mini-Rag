@@ -5,6 +5,7 @@ This is the only file that knows about all the pieces.
 """
 
 import logging
+import os
 import threading
 import time
 import tkinter as tk
@@ -12,7 +13,7 @@ from tkinter import ttk
 from pathlib import Path
 
 from .events import EventBus
-from .state import AppState
+from .state import ObservableState
 
 logger = logging.getLogger(__name__)
 from .config_store import load_config, save_config
@@ -23,6 +24,9 @@ from .components.collection_panel import CollectionPanel
 from .components.status_bar import StatusBar
 from .services.indexing import IndexingService
 from .services.search import SearchService
+from .services.streaming import StreamingService
+from .services.research import ResearchService
+from .components.research_tab import ResearchTab
 
 
 class MiniRAGApp(tk.Tk):
@@ -44,17 +48,25 @@ class MiniRAGApp(tk.Tk):
         except ImportError:
             pass  # Fall back to system theme
 
+        # Apply custom style overrides
+        from .theme import apply_custom_styles
+        apply_custom_styles(self)
+
         # Core infrastructure
         self.bus = EventBus()
-        self.state = AppState()
+        self.state = ObservableState(self.bus)
         self.indexing_service = IndexingService(self.bus)
         self.search_service = SearchService(self.bus)
+        self.streaming_service = StreamingService(self.bus)
+        self.research_service = ResearchService(self.bus)
         self._indexing_start_time = None
 
         # Apply saved settings to services
         self.search_service.llm_url = self.config_data.get("llm_url", "http://localhost:1234/v1")
         self.search_service.llm_model = self.config_data.get("llm_model", "auto")
         self.search_service.embedding_url = self.config_data.get("embedding_url", "http://localhost:1234/v1")
+        self.research_service.llm_url = self.config_data.get("llm_url", "http://localhost:1234/v1")
+        self.research_service.llm_model = self.config_data.get("llm_model", "auto")
         logger.info(f"GUI started: LLM={self.search_service.llm_url} Embedding={self.search_service.embedding_url}")
 
         # Build UI
@@ -68,15 +80,19 @@ class MiniRAGApp(tk.Tk):
         self.bind("<Control-f>", lambda _: self.search_bar.focus_entry())
         self.bind("<Control-n>", lambda _: self.collections._on_add())
         self.bind("<Escape>", lambda _: self._on_escape())
-
-        # Poll for background events (thread-safe bridge)
-        self._poll_interval = 100  # ms
-        self._pending_events = []
-        self._start_polling()
+        self.bind("<F1>", lambda _: self._show_help())
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._set_initial_sash_positions)
         self.search_bar.focus_entry()
+
+        # Welcome dialog on first launch
+        if not self.config_data.get("welcome_shown"):
+            self.after(500, self._show_welcome)
+
+        # Initial hint
+        if not self.config_data.get("collections"):
+            self.state.hint = "Get started: click + Add to index a folder, or try Web Research"
 
     def _create_menu(self):
         menubar = tk.Menu(self)
@@ -97,7 +113,7 @@ class MiniRAGApp(tk.Tk):
 
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="How to Use", command=self._show_help)
+        help_menu.add_command(label="How to Use", command=self._show_help, accelerator="F1")
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self._show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
@@ -105,11 +121,18 @@ class MiniRAGApp(tk.Tk):
         self.config(menu=menubar)
 
     def _create_layout(self):
-        """Build Option A layout: search+results left, collections right, content bottom."""
+        """Build tabbed layout: Search & Index tab + Web Research tab."""
 
-        # Main vertical split: top (search+collections) / bottom (content)
-        self.main_paned = ttk.PanedWindow(self, orient=tk.VERTICAL)
-        self.main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Notebook wraps everything except status bar
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 0))
+
+        # === Tab 1: Search & Index (existing layout) ===
+        search_frame = ttk.Frame(self.notebook)
+        self.notebook.add(search_frame, text="Search & Index")
+
+        self.main_paned = ttk.PanedWindow(search_frame, orient=tk.VERTICAL)
+        self.main_paned.pack(fill=tk.BOTH, expand=True)
 
         # Top section: horizontal split (search+results | collections)
         self.top_paned = ttk.PanedWindow(self.main_paned, orient=tk.HORIZONTAL)
@@ -120,10 +143,10 @@ class MiniRAGApp(tk.Tk):
         self.top_paned.add(left_frame, weight=3)
 
         self.search_bar = SearchBar(left_frame, self.bus)
-        self.search_bar.pack(fill=tk.X, padx=2, pady=2)
+        self.search_bar.pack(fill=tk.X, padx=4, pady=4)
 
         self.results_table = ResultsTable(left_frame, self.bus)
-        self.results_table.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        self.results_table.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
 
         # Right: collections
         self.collections = CollectionPanel(
@@ -136,7 +159,11 @@ class MiniRAGApp(tk.Tk):
         self.content_panel = ContentPanel(self.main_paned, self.bus)
         self.main_paned.add(self.content_panel, weight=2)
 
-        # Status bar
+        # === Tab 2: Web Research ===
+        self.research_tab = ResearchTab(self.notebook, self.bus, self.config_data)
+        self.notebook.add(self.research_tab, text="Web Research")
+
+        # Status bar (shared, outside notebook)
         self.status_bar = StatusBar(self, self.bus)
         self.status_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=2)
 
@@ -147,12 +174,24 @@ class MiniRAGApp(tk.Tk):
         self.bus.on("collection:deleted", self._on_collection_deleted)
         self.bus.on("collection:reindex", self._on_reindex)
         self.bus.on("indexing:cancel_requested", lambda d: self.indexing_service.cancel())
+        self.bus.on("search:cancel_requested", lambda d: self.after(0, lambda: self.state.set_operation("idle", "Search cancelled")))
+        self.bus.on("stream:cancel_requested", lambda d: self.streaming_service.cancel())
 
         self.bus.on("search:requested", self._on_search_requested)
         self.bus.on("search:completed", self._on_search_completed)
         self.bus.on("search:error", self._on_search_error)
 
         self.bus.on("synthesis:completed", self._on_synthesis_completed)
+
+        self.bus.on("stream:started", lambda d: self.after(0, lambda: self.content_panel.renderer.begin_stream()))
+        self.bus.on("stream:token", self._on_stream_token)
+        self.bus.on("stream:complete", self._on_stream_complete)
+        self.bus.on("stream:error", lambda d: self.after(0, lambda: self._show_search_error(f"Streaming: {d['error']}")))
+        self.bus.on("stream:cancelled", lambda d: self.after(0, lambda: (
+            self.state.set_operation("idle", "Synthesis cancelled"),
+        )))
+        self.bus.on("stream:thinking_start", lambda d: self.after(0, lambda: self.content_panel.renderer.set_stream_thinking(True)))
+        self.bus.on("stream:thinking_end", lambda d: self.after(0, lambda: self.content_panel.renderer.set_stream_thinking(False)))
 
         self.bus.on("indexing:started", self._on_indexing_started)
         self.bus.on("indexing:progress", self._on_indexing_progress)
@@ -162,10 +201,58 @@ class MiniRAGApp(tk.Tk):
 
         self.bus.on("settings:changed", self._on_settings_changed)
 
+        # Research tab events
+        self.bus.on("research:search_requested", self._on_research_search)
+        self.bus.on("research:scrape_requested", self._on_research_scrape)
+        self.bus.on("research:scrape_single", self._on_research_scrape_single)
+        self.bus.on("research:deep_requested", self._on_research_deep)
+        self.bus.on("research:index_session", self._on_research_index)
+        self.bus.on("research:delete_session", self._on_research_delete)
+        self.bus.on("research:refresh_sessions", lambda d: self._refresh_research_sessions())
+        self.bus.on("research:cancel_requested", lambda d: self.research_service.cancel())
+        self.bus.on("research:scrape_progress", self._on_research_scrape_progress)
+        self.bus.on("research:deep_progress", self._on_research_deep_progress)
+        self.bus.on("research:search_completed", self._on_research_search_completed)
+        self.bus.on("research:scrape_completed", self._on_research_scrape_completed)
+        self.bus.on("research:deep_completed", self._on_research_deep_completed)
+        self.bus.on("research:error", self._on_research_error)
+
+        # Tab switch requests (from research tab "Go to Search" button)
+        self.bus.on("ui:switch_tab", lambda d: self.after(0, lambda: self.notebook.select(d.get("tab", 0))))
+
+        # State-driven UI updates
+        self.bus.on("state:operation", lambda d: self.after(0, lambda: self._on_operation_changed(d)))
+
+    # === State-Driven UI ===
+
+    def _on_operation_changed(self, data):
+        """React to operation state changes — busy cursor + tab indicators."""
+        op = data.get("new", "idle")
+
+        # Busy cursor
+        if op != "idle":
+            self.configure(cursor="watch")
+        else:
+            self.configure(cursor="")
+
+        # Tab activity indicators
+        search_ops = {"searching", "indexing", "streaming"}
+        research_ops = {"scraping", "deep_research"}
+
+        tab0_text = "Search & Index *" if op in search_ops else "Search & Index"
+        tab1_text = "Web Research *" if op in research_ops else "Web Research"
+
+        try:
+            self.notebook.tab(0, text=tab0_text)
+            self.notebook.tab(1, text=tab1_text)
+        except tk.TclError:
+            pass
+
     # === Event Handlers ===
 
     def _on_collection_selected(self, data):
         self.state.active_collection = data["path"]
+        self.state.hint = "Type a query and press Enter to search"
 
     def _on_collection_added(self, data):
         self._save_collections()
@@ -184,24 +271,21 @@ class MiniRAGApp(tk.Tk):
 
     def _on_search_requested(self, data):
         if not self.state.active_collection:
-            self.status_bar.set_error("Select a collection first")
+            self.state.error = "Select a collection first"
             return
 
         if not (Path(self.state.active_collection) / ".mini-rag").exists():
-            self.status_bar.set_error("Collection not indexed. Click Index first.")
+            self.state.error = "Collection not indexed. Click Index first."
             return
 
         query = data["query"]
         mode = data["mode"]
         expand = data.get("expand", False)
 
-        self.status_bar.set_text(f"Searching: {query}...")
-        self.status_bar.show_progress()
-        self.status_bar.set_progress(30)
+        self.state.set_operation("searching")
         self.results_table.clear()
         self.content_panel.clear()
 
-        # Run search in background thread
         def _run():
             self.search_service.search(self.state.active_collection, query, top_k=20, expand=expand)
 
@@ -223,28 +307,31 @@ class MiniRAGApp(tk.Tk):
             self.after(100, lambda: self._start_synthesis(query, results))
 
     def _start_synthesis(self, query, results):
-        self.status_bar.set_text(f"Generating answer with LLM...")
-        self.status_bar.set_progress(60)
-        self.content_panel.show_synthesis("Generating answer...")
+        self.state.set_operation("streaming")
+        self.content_panel.renderer.show_placeholder("Generating answer...")
 
-        def _run():
-            self.search_service.synthesize(self.state.active_collection, query, results)
-
-        threading.Thread(target=_run, daemon=True).start()
+        self.streaming_service.start(
+            llm_url=self.search_service.llm_url,
+            llm_model=self.search_service.llm_model,
+            query=query,
+            results=results,
+            project_path=self.state.active_collection,
+        )
 
     def _display_search_results(self, results, query, timing):
         self.results_table.set_results(results)
         mode = getattr(self, "_pending_mode", "search")
         if mode != "ask":
-            self.status_bar.hide_progress()
-        self.status_bar.set_text(f"{len(results)} results for: {query} ({timing:.0f}ms)")
+            self.state.set_operation("idle", f"{len(results)} results for: {query} ({timing:.0f}ms)")
+        else:
+            self.status_bar.set_text(f"{len(results)} results for: {query} ({timing:.0f}ms)")
 
     def _on_search_error(self, data):
         self.after(0, lambda: self._show_search_error(data["error"]))
 
     def _show_search_error(self, error):
-        self.status_bar.hide_progress()
-        self.status_bar.set_error(f"Search error: {error}")
+        self.state.set_operation("idle")
+        self.state.error = f"Search error: {error}"
 
     def _on_synthesis_completed(self, data):
         text = data["text"]
@@ -253,12 +340,25 @@ class MiniRAGApp(tk.Tk):
 
     def _display_synthesis(self, text, timing):
         self.content_panel.show_synthesis(f"LLM Synthesis ({timing:.0f}ms):\n\n{text}")
-        self.status_bar.hide_progress()
-        self.status_bar.set_text(f"Synthesis complete ({timing:.0f}ms)")
+        self.state.set_operation("idle", f"Synthesis complete ({timing:.0f}ms)")
+
+    def _on_stream_token(self, data):
+        text = data["text"]
+        self.after(0, lambda: self.content_panel.renderer.append_stream(text))
+
+    def _on_stream_complete(self, data):
+        timing = data["timing_ms"]
+        def _finish():
+            self.content_panel.renderer.end_stream()
+            self.state.set_operation("idle", f"Synthesis complete ({timing:.0f}ms)")
+        self.after(0, _finish)
 
     def _on_indexing_started(self, data):
         self._indexing_start_time = time.monotonic()
-        self.after(0, lambda: self._update_indexing_ui(True, f"Indexing {Path(data['path']).name}..."))
+        self.after(0, lambda: (
+            self.state.set_operation("indexing"),
+            self._update_indexing_ui(True, f"Indexing {Path(data['path']).name}..."),
+        ))
 
     def _on_indexing_progress(self, data):
         done, total, chunks = data["done"], data["total"], data["chunks"]
@@ -282,23 +382,29 @@ class MiniRAGApp(tk.Tk):
 
     def _on_indexing_completed(self, data):
         stats = data["stats"]
-        self.after(0, lambda: self._finish_indexing(
+        msg = (
             f"Indexed: {stats['files_indexed']} files, {stats['chunks_created']} chunks "
             f"in {stats.get('elapsed', stats.get('time_taken', 0)):.1f}s"
-        ))
+        )
         self.search_service.invalidate(data.get("path"))
+        self.after(0, lambda: (
+            self._finish_indexing(msg),
+            self.state.set_operation("idle", "Search your collection with Ctrl+F"),
+        ))
 
     def _on_indexing_cancelled(self, data):
         stats = data.get("stats", {})
         self.after(0, lambda: self._finish_indexing(
             f"Cancelled: {stats.get('files_indexed', 0)} files processed"
         ))
+        self.state.set_operation("idle")
 
     def _on_indexing_error(self, data):
         error = data['error']
         def _show():
-            self._finish_indexing(f"Indexing failed: {error}")
-            self.status_bar.set_error(f"Indexing failed: {error}")
+            self.collections.set_indexing(False)
+            self.state.set_operation("idle")
+            self.state.error = f"Indexing failed: {error}"
         self.after(0, _show)
 
     def _finish_indexing(self, text):
@@ -310,15 +416,131 @@ class MiniRAGApp(tk.Tk):
         self.config_data.update(data)
         save_config(self.config_data)
 
-        # Push settings to services
         self.search_service.llm_url = data.get("llm_url", self.search_service.llm_url)
         self.search_service.llm_model = data.get("llm_model", self.search_service.llm_model)
         self.search_service.embedding_url = data.get("embedding_url", self.search_service.embedding_url)
+        self.research_service.llm_url = self.search_service.llm_url
+        self.research_service.llm_model = self.search_service.llm_model
 
-        # Invalidate cached searchers (embedding endpoint may have changed)
         self.search_service.invalidate()
-
         self.status_bar.set_text(f"Settings saved (LLM: {self.search_service.llm_url})")
+
+    # === Research Event Handlers ===
+
+    def _get_research_project_path(self):
+        """Get project path for research sessions."""
+        path = self.state.active_collection
+        if not path:
+            path = self.config_data.get("research_project_path")
+        if not path:
+            from tkinter import filedialog
+            path = filedialog.askdirectory(title="Select project folder for research")
+            if path:
+                self.config_data["research_project_path"] = path
+                save_config(self.config_data)
+        return path
+
+    def _on_research_search(self, data):
+        self.state.set_operation("searching", "Searching the web...")
+        self.research_service.web_search(
+            data["query"], data.get("engine", "duckduckgo"),
+            data.get("max_results", 10),
+        )
+
+    def _on_research_scrape(self, data):
+        project_path = self._get_research_project_path()
+        if not project_path:
+            self.state.error = "No project path selected"
+            return
+        self.state.set_operation("scraping", "Scraping web pages...")
+        self.research_service.scrape_urls(
+            data["urls"], project_path, data.get("query", "research"),
+        )
+
+    def _on_research_scrape_single(self, data):
+        project_path = self._get_research_project_path()
+        if not project_path:
+            return
+        self.state.set_operation("scraping")
+        self.research_service.scrape_single(data["url"], project_path)
+
+    def _on_research_deep(self, data):
+        project_path = self._get_research_project_path()
+        if not project_path:
+            self.state.error = "No project path selected"
+            return
+        self.state.set_operation("deep_research", "Starting deep research...")
+        self.research_service.deep_research(
+            data["query"], data.get("engine", "duckduckgo"),
+            project_path,
+            data.get("max_time_min", 60), data.get("max_rounds", 5),
+        )
+
+    def _on_research_index(self, data):
+        """Index a research session and auto-add to collections."""
+        session_dir = data.get("session_dir", "")
+        sources_dir = Path(session_dir) / "sources"
+        if sources_dir.exists():
+            # Auto-add to collections (Research → Search bridge)
+            sources_str = str(sources_dir)
+            if sources_str not in self.collections.get_collections():
+                self.collections.add_collection(sources_str)
+                self._save_collections()
+
+            self.indexing_service.start(sources_dir)
+            self.state.set_operation("indexing", "Indexing research session...")
+        else:
+            self.state.error = "No sources directory in session"
+
+    def _on_research_delete(self, data):
+        import shutil
+        session_dir = data.get("session_dir", "")
+        if session_dir and Path(session_dir).exists():
+            shutil.rmtree(session_dir)
+            self.status_bar.set_text("Session deleted")
+            self._refresh_research_sessions()
+
+    def _on_research_search_completed(self, data):
+        results = data.get("results", [])
+        self.after(0, lambda: self.state.set_operation(
+            "idle", f"Found {len(results)} web results — select and scrape to save"
+        ))
+
+    def _on_research_scrape_completed(self, data):
+        pages = data.get("pages_scraped", 0)
+        self.after(0, lambda: self.state.set_operation(
+            "idle", f"Scraping complete: {pages} pages saved — click Index Session to make searchable"
+        ))
+
+    def _on_research_deep_completed(self, data):
+        self.after(0, lambda: self.state.set_operation(
+            "idle", f"Deep research complete — review report or Index Session"
+        ))
+
+    def _on_research_scrape_progress(self, data):
+        done, total = data["done"], data["total"]
+        url = data.get("current_url", "")[:50]
+        pct = (done / total * 100) if total > 0 else 0
+        def _update():
+            self.status_bar.set_progress(pct)
+            self.status_bar.set_text(f"Scraping: {done}/{total} — {url}")
+        self.after(0, _update)
+
+    def _on_research_deep_progress(self, data):
+        detail = data.get("detail", "")
+        self.after(0, lambda: self.status_bar.set_text(f"Deep Research: {detail}"))
+
+    def _on_research_error(self, data):
+        def _show():
+            self.state.set_operation("idle")
+            self.state.error = f"Research error: {data['error']}"
+        self.after(0, _show)
+
+    def _refresh_research_sessions(self):
+        project_path = self.state.active_collection or self.config_data.get("research_project_path")
+        if project_path:
+            sessions = self.research_service.load_sessions(project_path)
+            self.after(0, lambda: self.research_tab.load_sessions(sessions))
 
     def _set_initial_sash_positions(self):
         try:
@@ -340,18 +562,28 @@ class MiniRAGApp(tk.Tk):
             sv_ttk.set_theme(new_theme)
             self.config_data["theme"] = new_theme
             save_config(self.config_data)
+            # Re-apply custom styles
+            from .theme import apply_custom_styles
+            apply_custom_styles(self)
         except ImportError:
             pass
 
     def _on_escape(self):
         """Handle Escape key - cancel indexing if running, else clear search."""
-        if self.indexing_service.is_running:
-            self.indexing_service.cancel()
+        if self.state.operation != "idle":
+            # Cancel whatever is running
+            if self.state.operation == "indexing":
+                self.indexing_service.cancel()
+            elif self.state.operation in ("scraping", "deep_research"):
+                self.research_service.cancel()
+            elif self.state.operation == "streaming":
+                self.streaming_service.cancel()
+            self.state.set_operation("idle", "Cancelled")
         else:
             self.search_bar.search_var.set("")
             self.results_table.clear()
             self.content_panel.clear()
-            self.status_bar.set_text("Ready")
+            self.state.hint = "Ready"
 
     # === Dialogs ===
 
@@ -363,29 +595,21 @@ class MiniRAGApp(tk.Tk):
         from .dialogs.about import AboutDialog
         AboutDialog(self)
 
+    def _show_welcome(self):
+        """Show first-launch welcome dialog."""
+        from .dialogs.welcome import WelcomeDialog
+        WelcomeDialog(self, self.config_data)
+
     def _show_help(self):
-        from tkinter import messagebox
-        messagebox.showinfo(
-            "How to Use",
-            "1. Click '+ Add' to add a folder\n"
-            "2. Wait for indexing to complete\n"
-            "3. Type your query and press Enter\n\n"
-            "Search mode: direct search results\n"
-            "Ask mode: LLM synthesises an answer\n\n"
-            "Use Options > Preferences to configure endpoints."
-        )
+        """Show help overlay."""
+        from .dialogs.help_overlay import HelpOverlay
+        HelpOverlay(self)
 
     # === Lifecycle ===
 
     def _save_collections(self):
         self.config_data["collections"] = self.collections.get_collections()
         save_config(self.config_data)
-
-    def _start_polling(self):
-        """Poll for thread-safe event delivery."""
-        # Events from background threads are already handled via self.after()
-        # This polling is a safety net
-        self.after(self._poll_interval, self._start_polling)
 
     def _on_close(self):
         self.config_data["geometry"] = self.geometry()

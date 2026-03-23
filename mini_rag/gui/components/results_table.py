@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..events import EventBus
 from ..tooltip import TreeviewToolTip
+from .empty_state import EmptyState
 
 
 def _score_label(score: float, max_score: float) -> str:
@@ -32,6 +33,7 @@ class ResultsTable(ttk.Frame):
         self.bus = event_bus
         self._results = []
         self._build()
+        self._show_empty()
 
     def _build(self):
         columns = ("score", "file", "type", "name")
@@ -63,13 +65,29 @@ class ResultsTable(ttk.Frame):
         self._context_menu.add_separator()
         self._context_menu.add_command(label="Copy File Path", command=self._ctx_copy_path)
 
+    def _show_empty(self):
+        """Show empty state overlay."""
+        if not hasattr(self, "_empty"):
+            self._empty = EmptyState(
+                self, "No search results yet",
+                "Select a collection and search", None,
+            )
+        self._empty.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+    def _hide_empty(self):
+        if hasattr(self, "_empty"):
+            self._empty.place_forget()
+
     def set_results(self, results: list):
         """Display search results."""
         self.tree.delete(*self.tree.get_children())
         self._results = results
 
         if not results:
+            self._show_empty()
             return
+
+        self._hide_empty()
 
         max_score = max(r.score for r in results)
 

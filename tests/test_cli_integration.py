@@ -30,7 +30,10 @@ class TestPathIntelligence(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.temp_path = Path(self.temp_dir)
+        # Nest 4 levels deep so the 3-level walk-up in find_nearby_index
+        # cannot escape our temp tree (avoids false matches from /tmp/.mini-rag)
+        self.temp_path = Path(self.temp_dir) / "a" / "b" / "c" / "d"
+        self.temp_path.mkdir(parents=True)
         
     def tearDown(self):
         # Clean up temp directory

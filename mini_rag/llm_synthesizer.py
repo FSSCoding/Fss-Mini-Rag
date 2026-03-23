@@ -148,6 +148,57 @@ class LLMSynthesizer:
             logger.error(f"OpenAI-compatible LLM call failed: {e}")
             return None
 
+    def _call_openai_stream(self, prompt: str, temperature: float = 0.3):
+        """Stream tokens from an OpenAI-compatible chat completions endpoint.
+
+        Yields individual token strings as they arrive via SSE.
+        """
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": 2048,
+            "stream": True,
+        }
+
+        try:
+            # Connect timeout 15s, read timeout 30s per chunk
+            # Short read timeout ensures iter_lines() yields control
+            # periodically so callers can check cancel flags
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                stream=True,
+                timeout=(15, 30),
+            )
+            response.raise_for_status()
+
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                line = line.decode("utf-8") if isinstance(line, bytes) else line
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    token = delta.get("content", "")
+                    if token:
+                        yield token
+                except (json.JSONDecodeError, IndexError, KeyError):
+                    continue
+        except Exception as e:
+            logger.error(f"OpenAI streaming call failed: {e}")
+            yield f"\n\n[Streaming error: {e}]"
+
     def _select_best_model(self) -> str:
         """Select the best available model based on configuration rankings with robust name resolution."""
         if not self.available_models:
@@ -380,8 +431,17 @@ class LLMSynthesizer:
 
         if self._active_provider == "openai":
             return self._call_openai_compatible(prompt, temperature)
-        else:
+        elif self._active_provider == "ollama":
             return self._call_ollama(prompt, temperature)
+        else:
+            # No provider initialized — try OpenAI as last resort
+            # (covers case where provider="openai" but model listing failed
+            # while the endpoint may still accept chat completions)
+            result = self._call_openai_compatible(prompt, temperature)
+            if result:
+                return result
+            logger.error("No LLM provider available")
+            return None
 
     def _call_ollama(
         self,
@@ -391,12 +451,23 @@ class LLMSynthesizer:
         use_streaming: bool = True,
         collapse_thinking: bool = True,
     ) -> Optional[str]:
-        """Make a call to Ollama API with safeguards."""
+        """Make a call to the LLM API with safeguards.
+
+        Routes to OpenAI-compatible endpoint when the active provider is
+        'openai' (e.g. models discovered via /v1/models with '/' names).
+        Falls through to native Ollama /api/generate otherwise.
+        """
         start_time = time.time()
 
         try:
             # Ensure we're initialized
             self._ensure_initialized()
+
+            # If the active provider is OpenAI-compatible, delegate there
+            # Native Ollama /api/generate doesn't understand '/' model names
+            if getattr(self, '_active_provider', None) == 'openai':
+                logger.debug(f"Routing to OpenAI-compatible endpoint (provider={self._active_provider})")
+                return self._call_openai_compatible(prompt, temperature=temperature)
 
             # Use the best available model with retry logic
             model_to_use = self.model
@@ -914,9 +985,9 @@ PROJECT: {project_path.name}
 SEARCH RESULTS:
 {context}
 
-Respond with a clear, concise summary answering the query based on these results.
+Respond in well-formatted markdown. Use headers, bold, code blocks, and bullet points where appropriate.
 Include specific file names and function names where relevant.
-Keep it under 200 words."""
+Keep under 300 words."""
 
         # Call LLM (routes to OpenAI-compatible or Ollama automatically)
         response = self._call_llm(prompt, temperature=0.3)
@@ -938,6 +1009,55 @@ Keep it under 200 words."""
             suggested_actions=[],
             confidence=0.8,
         )
+
+    def synthesize_stream(self, query: str, results: List[Any], project_path: Path):
+        """Stream synthesis tokens. Yields individual tokens as they arrive."""
+        self._ensure_initialized()
+        if not self.is_available():
+            yield "LLM synthesis unavailable. Start an LLM server."
+            return
+
+        context_parts = []
+        for i, result in enumerate(results[:8], 1):
+            file_path = getattr(result, "file_path", "unknown")
+            content = getattr(result, "content", str(result))
+            score = getattr(result, "score", 0.0)
+            truncated = content[:500] + ("..." if len(content) > 500 else "")
+            context_parts.append(
+                f"Result {i} (Score: {score:.3f}):\nFile: {file_path}\nContent: {truncated}\n"
+            )
+
+        context = "\n".join(context_parts)
+        system_context = ""
+        try:
+            system_context = get_system_context(project_path)
+        except Exception:
+            pass
+
+        prompt = f"""You are a senior software engineer analyzing code search results.
+Synthesize these results into a clear, helpful answer.
+
+QUERY: "{query}"
+PROJECT: {project_path.name}
+{f"CONTEXT: {system_context}" if system_context else ""}
+
+SEARCH RESULTS:
+{context}
+
+Respond in well-formatted markdown. Use headers, bold, code blocks, and bullet points where appropriate.
+Include specific file names and function names where relevant.
+Keep under 300 words."""
+
+        if self._active_provider == "openai" or self._active_provider is None:
+            # Stream from OpenAI-compatible endpoint (or try as fallback)
+            yield from self._call_openai_stream(prompt, temperature=0.3)
+        else:
+            # Ollama: non-streaming fallback, yield entire response
+            response = self._call_llm(prompt, temperature=0.3)
+            if response:
+                yield response
+            else:
+                yield "LLM synthesis failed. Check that an LLM server is running."
 
     def format_synthesis_output(self, synthesis: SynthesisResult, query: str) -> str:
         """Format synthesis result for display."""

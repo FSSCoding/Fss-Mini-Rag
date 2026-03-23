@@ -9,8 +9,9 @@ from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 
 from ..events import EventBus
-from ..config_store import get_collection_info
+from ..config_store import get_collection_info, is_research_session
 from ..tooltip import ToolTip
+from .empty_state import EmptyState
 
 
 class CollectionPanel(ttk.LabelFrame):
@@ -60,11 +61,32 @@ class CollectionPanel(ttk.LabelFrame):
 
     def _refresh_list(self):
         self.listbox.delete(0, tk.END)
+
+        if not self._collections:
+            self._show_empty()
+            return
+
+        self._hide_empty()
         for path in self._collections:
             p = Path(path)
             info = get_collection_info(path)
-            marker = "[ok]" if info.get("indexed") else "[--]"
+            if is_research_session(path):
+                marker = "[WEB]" if info.get("indexed") else "[web]"
+            else:
+                marker = "[ok]" if info.get("indexed") else "[--]"
             self.listbox.insert(tk.END, f"{marker} {p.name}")
+
+    def _show_empty(self):
+        if not hasattr(self, "_empty"):
+            self._empty = EmptyState(
+                self, "No collections yet",
+                "+ Add Folder", self._on_add,
+            )
+        self._empty.place(relx=0, rely=0, relwidth=1, relheight=0.7)
+
+    def _hide_empty(self):
+        if hasattr(self, "_empty"):
+            self._empty.place_forget()
 
     def _get_selected_path(self):
         sel = self.listbox.curselection()
@@ -158,6 +180,12 @@ class CollectionPanel(ttk.LabelFrame):
             self._listbox_tooltip.update_text(self._collections[idx])
         else:
             self._listbox_tooltip.update_text("")
+
+    def add_collection(self, path: str):
+        """Add a collection programmatically (used by Research→Search bridge)."""
+        if path not in self._collections:
+            self._collections.append(path)
+            self._refresh_list()
 
     def get_collections(self):
         return list(self._collections)

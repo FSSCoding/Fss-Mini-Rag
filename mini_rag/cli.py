@@ -488,18 +488,28 @@ def debug_schema(path: str):
 # ──────────────────────────────────────────────────────────
 
 
-def _load_env_keys():
-    """Load API keys from .env file if present."""
+def _load_env_keys(project_path: Path = None):
+    """Load API keys from .env file if present.
+
+    Searches: explicit project_path, then CWD, then script directory.
+    Uses setdefault so existing env vars are never overwritten.
+    """
     import os
-    env_path = Path(".env")
-    if not env_path.exists():
-        return
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            if value.strip():
-                os.environ.setdefault(key.strip(), value.strip())
+    candidates = []
+    if project_path:
+        candidates.append(Path(project_path) / ".env")
+    candidates.append(Path(".env"))
+    candidates.append(Path(__file__).parent.parent / ".env")
+
+    for env_path in candidates:
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    if value.strip():
+                        os.environ.setdefault(key.strip(), value.strip())
+            return  # Stop after first .env found
 
 
 @cli.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -1093,6 +1103,7 @@ def update(path: str):
 @cli.command(context_settings={"help_option_names": ["-h", "--help"]})
 def gui():
     """Launch the desktop GUI."""
+    _load_env_keys()
     try:
         from .gui import main as gui_main
         gui_main()

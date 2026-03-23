@@ -40,6 +40,10 @@ DEFAULTS = {
     "expand_queries": False,
     "theme": "dark",
     "custom_presets": {},
+    "research_engine": "duckduckgo",
+    "research_max_pages": 20,
+    "research_project_path": None,
+    "welcome_shown": False,
 }
 
 
@@ -101,3 +105,14 @@ def get_collection_info(path_str: str) -> Dict[str, Any]:
         }
     except Exception:
         return {"indexed": False}
+
+
+def is_research_session(path_str: str) -> bool:
+    """Check if a collection path is a web research session."""
+    p = Path(path_str)
+    # Research sessions have a session.json or live under web-research/
+    if (p / "session.json").exists():
+        return True
+    if "web-research" in p.parts:
+        return True
+    return False

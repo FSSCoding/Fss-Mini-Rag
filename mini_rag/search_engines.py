@@ -17,9 +17,12 @@ from .rate_limiter import get_limiter, get_retry_config, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
-# Optional: duckduckgo-search package
+# Optional: duckduckgo-search package (renamed to 'ddgs', suppress deprecation warning)
+import warnings
 try:
-    from duckduckgo_search import DDGS
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*renamed.*ddgs.*", category=RuntimeWarning)
+        from duckduckgo_search import DDGS
 
     DDGS_AVAILABLE = True
 except ImportError:
@@ -76,8 +79,10 @@ class DuckDuckGoSearch:
     def _search_with_package(self, query: str, max_results: int) -> List[WebSearchResult]:
         """Search using the duckduckgo-search package."""
         try:
-            with DDGS() as ddgs:
-                raw_results = list(ddgs.text(query, max_results=max_results))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*renamed.*ddgs.*", category=RuntimeWarning)
+                with DDGS() as ddgs:
+                    raw_results = list(ddgs.text(query, max_results=max_results))
 
             results = []
             for r in raw_results:
@@ -269,17 +274,25 @@ def create_search_engine(
     tavily_api_key: Optional[str] = None,
     brave_api_key: Optional[str] = None,
 ) -> SearchEngine:
-    """Factory: create a search engine from config."""
+    """Factory: create a search engine from config.
+
+    Falls back to environment variables (TAVILY_API_KEY, BRAVE_API_KEY)
+    when keys are not passed explicitly.
+    """
+    import os
+
     if engine == "tavily":
-        if not tavily_api_key:
-            logger.warning("Tavily API key not set, falling back to DuckDuckGo")
+        key = tavily_api_key or os.environ.get("TAVILY_API_KEY")
+        if not key:
+            logger.warning("Tavily API key not set (param or TAVILY_API_KEY env), falling back to DuckDuckGo")
             return DuckDuckGoSearch()
-        return TavilySearch(tavily_api_key)
+        return TavilySearch(key)
 
     if engine == "brave":
-        if not brave_api_key:
-            logger.warning("Brave API key not set, falling back to DuckDuckGo")
+        key = brave_api_key or os.environ.get("BRAVE_API_KEY")
+        if not key:
+            logger.warning("Brave API key not set (param or BRAVE_API_KEY env), falling back to DuckDuckGo")
             return DuckDuckGoSearch()
-        return BraveSearch(brave_api_key)
+        return BraveSearch(key)
 
     return DuckDuckGoSearch()
