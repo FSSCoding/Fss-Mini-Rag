@@ -910,28 +910,34 @@ class ResearchAnalyzer:
 
 
 class CorpusPruner:
-    """Deduplicates and evaluates source consistency.
+    """Deduplicates and evaluates source consistency using indexed vectors.
 
-    v1 approach:
-    - Character-level similarity for fast dedup (>90% = duplicate)
-    - LLM confirmation for borderline cases (70-90%)
-    - Corroboration detection via keyword overlap
-    - NEVER deletes non-duplicate sources, only flags
+    Uses the existing LanceDB embeddings from the RAG index to compute
+    cosine similarity between documents — no additional embedding calls needed.
+    Falls back to character-level comparison if the index isn't available.
+
+    Thresholds (cosine similarity, 0-1 scale):
+    - >= 0.95: Definite duplicate — remove newer copy
+    - 0.80-0.95: Borderline — confirm with LLM if available
+    - 0.60-0.80: Related/corroborating content — flag
+    - < 0.60: Different content — ignore
     """
 
-    DUPLICATE_THRESHOLD = 0.90  # Above this = definite duplicate
-    BORDERLINE_LOW = 0.70  # Below this = definitely not duplicate
+    DUPLICATE_THRESHOLD = 0.95
+    BORDERLINE_THRESHOLD = 0.80
+    CORROBORATION_THRESHOLD = 0.60
 
-    def __init__(self, llm_call=None):
+    def __init__(self, llm_call=None, project_path: Path = None):
         """
         Args:
             llm_call: Optional callable for borderline similarity checks.
-                      If None, borderline cases are kept (conservative).
+            project_path: Project path for accessing the LanceDB index.
         """
         self._call_llm = llm_call
+        self._project_path = project_path
 
     def prune(self, session: ResearchSession) -> Dict[str, Any]:
-        """Run pruning on session sources.
+        """Run pruning on session sources using indexed vectors.
 
         Returns dict with stats and findings.
         """
@@ -939,71 +945,47 @@ class CorpusPruner:
         if len(source_files) < 2:
             return {"duplicates": [], "corroborations": [], "flagged": [], "removed": []}
 
-        # Load content (first 2000 chars normalized for comparison)
-        file_contents = {}
-        for f in source_files:
-            try:
-                text = f.read_text(encoding="utf-8", errors="replace")
-                # Strip frontmatter
-                if text.startswith("---"):
-                    end = text.find("---", 3)
-                    if end > 0:
-                        text = text[end + 3:]
-                file_contents[f] = self._normalize(text[:2000])
-            except Exception:
-                pass
+        # Try vector-based similarity first (uses existing index)
+        sim_matrix = self._build_similarity_matrix(source_files)
+
+        if sim_matrix is None:
+            logger.info("Index not available for vector pruning, using text fallback")
+            return self._prune_text_fallback(session, source_files)
+
+        # Sort by mtime (oldest first = original)
+        files_sorted = sorted(source_files, key=lambda f: f.stat().st_mtime)
 
         duplicates = []
         corroborations = []
         flagged = []
+        already_duplicate = set()
 
-        # Sort files by modification time (oldest first = most likely to be the original)
-        files = sorted(file_contents.keys(), key=lambda f: f.stat().st_mtime)
-
-        # Pairwise comparison
-        already_duplicate = set()  # Track files already marked as duplicates
-        for i in range(len(files)):
-            if files[i].name in already_duplicate:
+        for i in range(len(files_sorted)):
+            if files_sorted[i].name in already_duplicate:
                 continue
-            for j in range(i + 1, len(files)):
-                if files[j].name in already_duplicate:
+            for j in range(i + 1, len(files_sorted)):
+                if files_sorted[j].name in already_duplicate:
                     continue
-                sim = self._similarity(file_contents[files[i]], file_contents[files[j]])
+
+                sim = sim_matrix.get((files_sorted[i].name, files_sorted[j].name), 0.0)
 
                 if sim >= self.DUPLICATE_THRESHOLD:
-                    # Keep older file (files[i]), mark newer (files[j]) as duplicate
-                    duplicates.append((files[i].name, files[j].name, sim))
-                    already_duplicate.add(files[j].name)
-                elif sim >= self.BORDERLINE_LOW:
-                    # Borderline — check with LLM if available
+                    duplicates.append((files_sorted[i].name, files_sorted[j].name, sim))
+                    already_duplicate.add(files_sorted[j].name)
+                elif sim >= self.BORDERLINE_THRESHOLD:
                     if self._call_llm:
-                        verdict = self._llm_similarity_check(
-                            file_contents[files[i]][:500],
-                            file_contents[files[j]][:500],
-                        )
+                        verdict = self._llm_similarity_check(files_sorted[i], files_sorted[j])
                         if verdict == "DUPLICATE":
-                            duplicates.append((files[i].name, files[j].name, sim))
-                            already_duplicate.add(files[j].name)
+                            duplicates.append((files_sorted[i].name, files_sorted[j].name, sim))
+                            already_duplicate.add(files_sorted[j].name)
                         elif verdict == "RELATED":
-                            corroborations.append((files[i].name, files[j].name))
+                            corroborations.append((files_sorted[i].name, files_sorted[j].name))
                     else:
-                        # Conservative: flag as related
-                        corroborations.append((files[i].name, files[j].name))
-                elif sim >= 0.15 and self._call_llm:
-                    # Moderate trigram similarity — check keyword overlap
-                    # then confirm with LLM if keywords suggest related content
-                    kw_overlap = self._keyword_overlap(
-                        file_contents[files[i]], file_contents[files[j]]
-                    )
-                    if kw_overlap >= 0.10:  # Shared 10%+ of significant words
-                        verdict = self._llm_similarity_check(
-                            file_contents[files[i]][:500],
-                            file_contents[files[j]][:500],
-                        )
-                        if verdict == "RELATED":
-                            corroborations.append((files[i].name, files[j].name))
+                        corroborations.append((files_sorted[i].name, files_sorted[j].name))
+                elif sim >= self.CORROBORATION_THRESHOLD:
+                    corroborations.append((files_sorted[i].name, files_sorted[j].name))
 
-        # Remove true duplicates (keep the older file, remove the newer)
+        # Remove true duplicates
         removed = []
         for name_a, name_b, sim in duplicates:
             dup_path = session.sources_dir / name_b
@@ -1011,74 +993,167 @@ class CorpusPruner:
                 dup_path.unlink()
                 removed.append(name_b)
                 session.metadata["pages_pruned"] = session.metadata.get("pages_pruned", 0) + 1
-                logger.info(f"Removed duplicate: {name_b} (sim={sim:.2f}, kept {name_a})")
+                logger.info(f"Removed duplicate: {name_b} (cosine={sim:.3f}, kept {name_a})")
 
         session.save_metadata()
 
         return {
-            "duplicates": [(a, b, f"{s:.2f}") for a, b, s in duplicates],
+            "duplicates": [(a, b, f"{s:.3f}") for a, b, s in duplicates],
             "corroborations": corroborations,
             "flagged": flagged,
             "removed": removed,
         }
 
-    def _normalize(self, text: str) -> str:
-        """Normalize text for comparison."""
+    def _build_similarity_matrix(
+        self, source_files: List[Path]
+    ) -> Optional[Dict[tuple, float]]:
+        """Build pairwise cosine similarity matrix from indexed vectors.
+
+        Reads embeddings directly from LanceDB — zero GPU cost.
+        Returns dict of (filename_a, filename_b) → similarity, or None
+        if the index isn't available.
+        """
+        try:
+            import lancedb
+            import numpy as np
+        except ImportError:
+            return None
+
+        if not self._project_path:
+            return None
+
+        rag_dir = self._project_path / ".mini-rag"
+        if not rag_dir.exists():
+            return None
+
+        try:
+            db = lancedb.connect(rag_dir)
+            if "code_vectors" not in db.table_names():
+                return None
+            table = db.open_table("code_vectors")
+            df = table.to_pandas()
+        except Exception as e:
+            logger.debug(f"Could not open index for pruning: {e}")
+            return None
+
+        # Map source filenames to their chunk embeddings
+        file_embeddings = {}
+        for src_file in source_files:
+            # Match by file_path in the index
+            src_name = src_file.name
+            matching = df[df["file_path"].str.contains(src_name.replace(".md", ""), regex=False, na=False)]
+
+            if matching.empty:
+                # Try matching by the source directory path
+                rel_path = str(src_file).replace(str(self._project_path) + "/", "")
+                matching = df[df["file_path"].str.contains(rel_path, regex=False, na=False)]
+
+            if not matching.empty:
+                # Average all chunk embeddings for this file
+                embeddings = np.stack(matching["embedding"].values)
+                file_embeddings[src_name] = embeddings.mean(axis=0)
+
+        if len(file_embeddings) < 2:
+            return None
+
+        # Compute pairwise cosine similarity
+        sim_matrix = {}
+        names = list(file_embeddings.keys())
+        for i in range(len(names)):
+            vec_a = file_embeddings[names[i]]
+            norm_a = np.linalg.norm(vec_a)
+            if norm_a == 0:
+                continue
+            for j in range(i + 1, len(names)):
+                vec_b = file_embeddings[names[j]]
+                norm_b = np.linalg.norm(vec_b)
+                if norm_b == 0:
+                    continue
+                cosine_sim = float(np.dot(vec_a, vec_b) / (norm_a * norm_b))
+                sim_matrix[(names[i], names[j])] = cosine_sim
+                sim_matrix[(names[j], names[i])] = cosine_sim  # Symmetric
+
+        logger.info(
+            f"Built vector similarity matrix for {len(file_embeddings)} files "
+            f"({len(sim_matrix) // 2} pairs)"
+        )
+        return sim_matrix
+
+    def _prune_text_fallback(
+        self, session: ResearchSession, source_files: List[Path]
+    ) -> Dict[str, Any]:
+        """Fallback: text-based similarity when index isn't available."""
         import re
-        text = text.lower()
-        text = re.sub(r"\s+", " ", text)
-        text = re.sub(r"[^\w\s]", "", text)
-        return text.strip()
 
-    def _similarity(self, text_a: str, text_b: str) -> float:
-        """Character-level similarity between two normalized texts.
+        file_contents = {}
+        for f in source_files:
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+                if text.startswith("---"):
+                    end = text.find("---", 3)
+                    if end > 0:
+                        text = text[end + 3:]
+                # Normalize
+                text = text.lower()
+                text = re.sub(r"\s+", " ", text)
+                text = re.sub(r"[^\w\s]", "", text)
+                file_contents[f] = text[:2000].strip()
+            except Exception:
+                pass
 
-        Uses Jaccard similarity on character trigrams for speed.
-        """
-        if not text_a or not text_b:
-            return 0.0
+        files_sorted = sorted(file_contents.keys(), key=lambda f: f.stat().st_mtime)
 
-        trigrams_a = set(text_a[i:i + 3] for i in range(len(text_a) - 2))
-        trigrams_b = set(text_b[i:i + 3] for i in range(len(text_b) - 2))
+        duplicates = []
+        corroborations = []
+        already_duplicate = set()
 
-        if not trigrams_a or not trigrams_b:
-            return 0.0
+        for i in range(len(files_sorted)):
+            if files_sorted[i].name in already_duplicate:
+                continue
+            for j in range(i + 1, len(files_sorted)):
+                if files_sorted[j].name in already_duplicate:
+                    continue
 
-        intersection = trigrams_a & trigrams_b
-        union = trigrams_a | trigrams_b
-        return len(intersection) / len(union)
+                # Trigram Jaccard
+                text_a = file_contents[files_sorted[i]]
+                text_b = file_contents[files_sorted[j]]
+                tri_a = set(text_a[k:k + 3] for k in range(len(text_a) - 2))
+                tri_b = set(text_b[k:k + 3] for k in range(len(text_b) - 2))
+                if not tri_a or not tri_b:
+                    continue
+                sim = len(tri_a & tri_b) / len(tri_a | tri_b)
 
-    def _keyword_overlap(self, text_a: str, text_b: str) -> float:
-        """Jaccard overlap on significant words (4+ chars, not stopwords).
+                if sim >= 0.90:
+                    duplicates.append((files_sorted[i].name, files_sorted[j].name, sim))
+                    already_duplicate.add(files_sorted[j].name)
+                elif sim >= 0.60:
+                    corroborations.append((files_sorted[i].name, files_sorted[j].name))
 
-        Better than trigrams for detecting topical similarity between
-        documents written in different words about the same subject.
-        """
-        STOPWORDS = {
-            "this", "that", "with", "from", "have", "been", "were", "they",
-            "their", "which", "about", "would", "there", "these", "other",
-            "into", "more", "some", "such", "than", "them", "then", "what",
-            "when", "will", "also", "each", "make", "like", "most", "only",
-            "over", "very", "many", "well", "back", "much", "your",
+        removed = []
+        for name_a, name_b, sim in duplicates:
+            dup_path = session.sources_dir / name_b
+            if dup_path.exists():
+                dup_path.unlink()
+                removed.append(name_b)
+                session.metadata["pages_pruned"] = session.metadata.get("pages_pruned", 0) + 1
+
+        session.save_metadata()
+        return {
+            "duplicates": [(a, b, f"{s:.2f}") for a, b, s in duplicates],
+            "corroborations": corroborations,
+            "flagged": [],
+            "removed": removed,
         }
 
-        def get_keywords(text):
-            words = set(text.split())
-            return {w for w in words if len(w) >= 4 and w not in STOPWORDS}
+    def _llm_similarity_check(self, file_a: Path, file_b: Path) -> str:
+        """Ask LLM to classify similarity between two documents."""
+        try:
+            text_a = file_a.read_text(encoding="utf-8", errors="replace")[:500]
+            text_b = file_b.read_text(encoding="utf-8", errors="replace")[:500]
+        except Exception:
+            return "UNRELATED"
 
-        kw_a = get_keywords(text_a)
-        kw_b = get_keywords(text_b)
-
-        if not kw_a or not kw_b:
-            return 0.0
-
-        intersection = kw_a & kw_b
-        union = kw_a | kw_b
-        return len(intersection) / len(union)
-
-    def _llm_similarity_check(self, doc_a: str, doc_b: str) -> str:
-        """Ask LLM to classify similarity between two excerpts."""
-        prompt = PROMPT_SIMILARITY_CHECK.format(doc_a=doc_a, doc_b=doc_b)
+        prompt = PROMPT_SIMILARITY_CHECK.format(doc_a=text_a, doc_b=text_b)
         response = self._call_llm(prompt, 0.1)
         if response:
             word = response.strip().split()[0].upper()
@@ -1107,10 +1182,12 @@ class DeepResearchEngine:
         llm_call,
         scraper: MiniWebScraper,
         search_engine,
+        project_path: Path = None,
     ):
         self.session = session
         self.config = config
         self.rag_config = rag_config
+        self.project_path = project_path
         self._call_llm = llm_call
         self.scraper = scraper
         self.search_engine = search_engine
@@ -1119,7 +1196,10 @@ class DeepResearchEngine:
         self.ctx = ContextManager(max_tokens=context_window)
         self.metrics = SessionMetrics(session)
         self.analyzer = ResearchAnalyzer(self._tracked_llm_call, self.ctx)
-        self.pruner = CorpusPruner(self._tracked_llm_call)
+        self.pruner = CorpusPruner(
+            llm_call=self._tracked_llm_call,
+            project_path=project_path,
+        )
         self.report = ResearchReport()
 
         # Rate limiters

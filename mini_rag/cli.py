@@ -838,6 +838,7 @@ def research(query, path: str, engine, max_pages, deep: bool, time_budget, round
                 llm_call=llm_call,
                 scraper=scraper,
                 search_engine=search_eng,
+                project_path=project_path,
             )
 
             if analyze_only:
