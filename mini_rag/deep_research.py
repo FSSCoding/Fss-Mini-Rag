@@ -5,6 +5,7 @@ Runs iterative research cycles: analyze → search → scrape → prune → repo
 Supports time-budgeted unattended operation and folder-only analysis mode.
 """
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -20,6 +21,389 @@ from .web_scraper import MiniWebScraper, ResearchSession
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+
+# ──────────────────────────────────────────────────────────
+# Session Metrics — analytics layer
+# ──────────────────────────────────────────────────────────
+
+
+@dataclass
+class FileRecord:
+    """Registry entry for a single file in the corpus."""
+
+    path: str  # Relative to session dir
+    url: str = ""
+    title: str = ""
+    char_count: int = 0
+    word_count: int = 0
+    token_estimate: int = 0  # chars // 4
+    source_type: str = "web"  # web, pdf, arxiv, github
+    scraped_at: str = ""
+    round_added: int = 0
+    relevance_score: float = 0.0  # 0-1, computed by analyzer
+    duplicate_of: str = ""  # filename if marked as duplicate
+    is_pruned: bool = False
+
+    def to_dict(self) -> Dict:
+        return {
+            "path": self.path, "url": self.url, "title": self.title,
+            "char_count": self.char_count, "word_count": self.word_count,
+            "token_estimate": self.token_estimate, "source_type": self.source_type,
+            "scraped_at": self.scraped_at, "round_added": self.round_added,
+            "relevance_score": self.relevance_score, "duplicate_of": self.duplicate_of,
+            "is_pruned": self.is_pruned,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "FileRecord":
+        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+
+
+@dataclass
+class RoundSnapshot:
+    """Metrics snapshot for a single research round."""
+
+    round_num: int = 0
+    started_at: str = ""
+    duration_minutes: float = 0
+    phase_times: Dict[str, float] = field(default_factory=dict)
+    pages_attempted: int = 0
+    pages_scraped: int = 0
+    pages_pruned: int = 0
+    chars_added: int = 0
+    tokens_added: int = 0
+    queries_used: List[str] = field(default_factory=list)
+    confidence: str = "LOW"
+    gaps_count: int = 0
+    topics_covered_count: int = 0
+    llm_calls: int = 0
+    llm_failures: int = 0
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
+    scrape_attempts: int = 0
+    scrape_successes: int = 0
+    scrape_failures_by_reason: Dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict:
+        return {
+            "round_num": self.round_num, "started_at": self.started_at,
+            "duration_minutes": self.duration_minutes, "phase_times": self.phase_times,
+            "pages_attempted": self.pages_attempted, "pages_scraped": self.pages_scraped,
+            "pages_pruned": self.pages_pruned, "chars_added": self.chars_added,
+            "tokens_added": self.tokens_added, "queries_used": self.queries_used,
+            "confidence": self.confidence, "gaps_count": self.gaps_count,
+            "topics_covered_count": self.topics_covered_count,
+            "llm_calls": self.llm_calls, "llm_failures": self.llm_failures,
+            "llm_tokens_in": self.llm_tokens_in, "llm_tokens_out": self.llm_tokens_out,
+            "scrape_attempts": self.scrape_attempts, "scrape_successes": self.scrape_successes,
+            "scrape_failures_by_reason": self.scrape_failures_by_reason,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "RoundSnapshot":
+        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+
+
+class SessionMetrics:
+    """Comprehensive analytics for a research session.
+
+    Persists to metrics.json alongside session.json.
+    Provides the data foundation for intelligent decision-making:
+    - File registry with per-file stats and relevance
+    - Per-round snapshots with deltas
+    - LLM call tracking (count, tokens, failures)
+    - Scrape stats (attempted vs succeeded, by domain)
+    - Corpus growth curve (cumulative tokens per round)
+    - Confidence history
+    """
+
+    def __init__(self, session: ResearchSession):
+        self.session = session
+        self._path = session.session_dir / "metrics.json"
+
+        # Core state
+        self.file_registry: Dict[str, FileRecord] = {}  # keyed by relative path
+        self.round_snapshots: List[RoundSnapshot] = []
+        self.current_round: Optional[RoundSnapshot] = None
+
+        # Cumulative LLM stats
+        self.total_llm_calls: int = 0
+        self.total_llm_failures: int = 0
+        self.total_llm_tokens_in: int = 0
+        self.total_llm_tokens_out: int = 0
+
+        # Scrape stats by domain
+        self.domain_stats: Dict[str, Dict[str, int]] = {}  # domain → {attempts, successes, failures}
+
+        # Confidence history
+        self.confidence_history: List[Dict[str, str]] = []  # [{round, confidence, gaps_count}]
+
+        # Load existing
+        self._load()
+
+    def _load(self):
+        """Load metrics from disk if they exist."""
+        if not self._path.exists():
+            return
+        try:
+            with open(self._path, "r") as f:
+                data = json.load(f)
+            self.file_registry = {
+                k: FileRecord.from_dict(v) for k, v in data.get("file_registry", {}).items()
+            }
+            self.round_snapshots = [
+                RoundSnapshot.from_dict(r) for r in data.get("round_snapshots", [])
+            ]
+            self.total_llm_calls = data.get("total_llm_calls", 0)
+            self.total_llm_failures = data.get("total_llm_failures", 0)
+            self.total_llm_tokens_in = data.get("total_llm_tokens_in", 0)
+            self.total_llm_tokens_out = data.get("total_llm_tokens_out", 0)
+            self.domain_stats = data.get("domain_stats", {})
+            self.confidence_history = data.get("confidence_history", [])
+        except Exception as e:
+            logger.warning(f"Could not load metrics: {e}")
+
+    def save(self):
+        """Persist metrics to disk."""
+        data = {
+            "file_registry": {k: v.to_dict() for k, v in self.file_registry.items()},
+            "round_snapshots": [r.to_dict() for r in self.round_snapshots],
+            "total_llm_calls": self.total_llm_calls,
+            "total_llm_failures": self.total_llm_failures,
+            "total_llm_tokens_in": self.total_llm_tokens_in,
+            "total_llm_tokens_out": self.total_llm_tokens_out,
+            "domain_stats": self.domain_stats,
+            "confidence_history": self.confidence_history,
+            "summary": self.get_summary(),
+        }
+        with open(self._path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    # ── Round lifecycle ──
+
+    def begin_round(self, round_num: int):
+        """Start tracking a new round."""
+        self.current_round = RoundSnapshot(
+            round_num=round_num,
+            started_at=datetime.now().isoformat(),
+        )
+
+    def end_round(self, duration_minutes: float):
+        """Finalize current round and archive it."""
+        if not self.current_round:
+            return
+        self.current_round.duration_minutes = round(duration_minutes, 2)
+        self.round_snapshots.append(self.current_round)
+        self.current_round = None
+        self.save()
+
+    def record_phase_time(self, phase: str, duration_minutes: float):
+        """Record time spent in a phase for the current round."""
+        if self.current_round:
+            self.current_round.phase_times[phase] = (
+                self.current_round.phase_times.get(phase, 0) + round(duration_minutes, 3)
+            )
+
+    # ── File registry ──
+
+    def register_file(
+        self, filepath: Path, url: str = "", title: str = "",
+        source_type: str = "web", round_added: int = 0,
+    ):
+        """Register a file in the corpus with its stats."""
+        try:
+            text = filepath.read_text(encoding="utf-8", errors="replace")
+            char_count = len(text)
+            word_count = len(text.split())
+        except Exception:
+            char_count = 0
+            word_count = 0
+
+        rel_path = str(filepath.relative_to(self.session.session_dir))
+        record = FileRecord(
+            path=rel_path,
+            url=url,
+            title=title or filepath.stem,
+            char_count=char_count,
+            word_count=word_count,
+            token_estimate=char_count // 4,
+            source_type=source_type,
+            scraped_at=datetime.now().isoformat(),
+            round_added=round_added,
+        )
+        self.file_registry[rel_path] = record
+
+        # Update current round
+        if self.current_round:
+            self.current_round.chars_added += char_count
+            self.current_round.tokens_added += char_count // 4
+            self.current_round.pages_scraped += 1
+
+        self.save()
+        return record
+
+    def mark_pruned(self, filepath: Path, duplicate_of: str = ""):
+        """Mark a file as pruned in the registry."""
+        rel_path = str(filepath.relative_to(self.session.session_dir))
+        if rel_path in self.file_registry:
+            self.file_registry[rel_path].is_pruned = True
+            self.file_registry[rel_path].duplicate_of = duplicate_of
+        if self.current_round:
+            self.current_round.pages_pruned += 1
+
+    def set_relevance(self, filepath: Path, score: float):
+        """Set relevance score for a file."""
+        rel_path = str(filepath.relative_to(self.session.session_dir))
+        if rel_path in self.file_registry:
+            self.file_registry[rel_path].relevance_score = round(score, 3)
+
+    # ── LLM tracking ──
+
+    def record_llm_call(self, tokens_in: int = 0, tokens_out: int = 0, success: bool = True):
+        """Record an LLM call with token counts."""
+        self.total_llm_calls += 1
+        self.total_llm_tokens_in += tokens_in
+        self.total_llm_tokens_out += tokens_out
+
+        if self.current_round:
+            self.current_round.llm_calls += 1
+            self.current_round.llm_tokens_in += tokens_in
+            self.current_round.llm_tokens_out += tokens_out
+
+        if not success:
+            self.total_llm_failures += 1
+            if self.current_round:
+                self.current_round.llm_failures += 1
+
+    # ── Scrape tracking ──
+
+    def record_scrape_attempt(self, url: str, success: bool, failure_reason: str = ""):
+        """Record a scrape attempt with outcome."""
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc
+
+        if domain not in self.domain_stats:
+            self.domain_stats[domain] = {"attempts": 0, "successes": 0, "failures": 0}
+
+        self.domain_stats[domain]["attempts"] += 1
+        if success:
+            self.domain_stats[domain]["successes"] += 1
+        else:
+            self.domain_stats[domain]["failures"] += 1
+
+        if self.current_round:
+            self.current_round.scrape_attempts += 1
+            if success:
+                self.current_round.scrape_successes += 1
+            elif failure_reason:
+                self.current_round.scrape_failures_by_reason[failure_reason] = (
+                    self.current_round.scrape_failures_by_reason.get(failure_reason, 0) + 1
+                )
+
+    # ── Confidence tracking ──
+
+    def record_confidence(self, round_num: int, confidence: str, gaps_count: int, topics_count: int):
+        """Record confidence level for trend analysis."""
+        self.confidence_history.append({
+            "round": round_num,
+            "confidence": confidence,
+            "gaps_count": gaps_count,
+            "topics_covered": topics_count,
+            "timestamp": datetime.now().isoformat(),
+        })
+        if self.current_round:
+            self.current_round.confidence = confidence
+            self.current_round.gaps_count = gaps_count
+            self.current_round.topics_covered_count = topics_count
+
+    # ── Analytics queries ──
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get a summary of all metrics for reporting."""
+        active_files = [f for f in self.file_registry.values() if not f.is_pruned]
+        pruned_files = [f for f in self.file_registry.values() if f.is_pruned]
+
+        return {
+            "total_files": len(self.file_registry),
+            "active_files": len(active_files),
+            "pruned_files": len(pruned_files),
+            "total_chars": sum(f.char_count for f in active_files),
+            "total_words": sum(f.word_count for f in active_files),
+            "total_tokens": sum(f.token_estimate for f in active_files),
+            "rounds_completed": len(self.round_snapshots),
+            "total_llm_calls": self.total_llm_calls,
+            "total_llm_failures": self.total_llm_failures,
+            "total_llm_tokens": self.total_llm_tokens_in + self.total_llm_tokens_out,
+            "scrape_success_rate": self._scrape_success_rate(),
+            "corpus_growth": self._corpus_growth_curve(),
+            "confidence_trend": self._confidence_trend(),
+            "failing_domains": self._failing_domains(),
+            "avg_round_minutes": self._avg_round_duration(),
+        }
+
+    def get_active_files(self) -> List[FileRecord]:
+        """Get all non-pruned files, sorted by relevance."""
+        return sorted(
+            [f for f in self.file_registry.values() if not f.is_pruned],
+            key=lambda f: f.relevance_score,
+            reverse=True,
+        )
+
+    def corpus_is_stalling(self, min_tokens_per_round: int = 500) -> bool:
+        """Check if research is producing diminishing returns.
+
+        Returns True if the last 2 rounds each added fewer than min_tokens_per_round.
+        """
+        if len(self.round_snapshots) < 2:
+            return False
+        last_two = self.round_snapshots[-2:]
+        return all(r.tokens_added < min_tokens_per_round for r in last_two)
+
+    def should_skip_domain(self, domain: str, failure_threshold: int = 3) -> bool:
+        """Check if a domain has failed too many times and should be skipped."""
+        stats = self.domain_stats.get(domain, {})
+        return stats.get("failures", 0) >= failure_threshold and stats.get("successes", 0) == 0
+
+    def _scrape_success_rate(self) -> float:
+        """Overall scrape success rate across all domains."""
+        total_attempts = sum(d.get("attempts", 0) for d in self.domain_stats.values())
+        total_successes = sum(d.get("successes", 0) for d in self.domain_stats.values())
+        if total_attempts == 0:
+            return 0.0
+        return round(total_successes / total_attempts, 3)
+
+    def _corpus_growth_curve(self) -> List[Dict[str, Any]]:
+        """Cumulative token count per round — shows growth trajectory."""
+        curve = []
+        cumulative = 0
+        for snap in self.round_snapshots:
+            cumulative += snap.tokens_added
+            curve.append({
+                "round": snap.round_num,
+                "tokens_added": snap.tokens_added,
+                "cumulative_tokens": cumulative,
+            })
+        return curve
+
+    def _confidence_trend(self) -> List[str]:
+        """Confidence values across rounds."""
+        return [c["confidence"] for c in self.confidence_history]
+
+    def _failing_domains(self) -> List[str]:
+        """Domains with 0 successes and multiple failures."""
+        return [
+            domain for domain, stats in self.domain_stats.items()
+            if stats.get("failures", 0) >= 2 and stats.get("successes", 0) == 0
+        ]
+
+    def _avg_round_duration(self) -> float:
+        """Average round duration in minutes."""
+        if not self.round_snapshots:
+            return 0.0
+        return round(
+            sum(r.duration_minutes for r in self.round_snapshots) / len(self.round_snapshots), 2
+        )
 
 
 # ──────────────────────────────────────────────────────────
@@ -189,6 +573,14 @@ class ResearchReport:
     corroborations: List[str] = field(default_factory=list)
     inconsistencies: List[str] = field(default_factory=list)
     confidence: str = "LOW"
+    # Metrics-sourced fields
+    llm_calls: int = 0
+    llm_failures: int = 0
+    llm_total_tokens: int = 0
+    scrape_success_rate: float = 0.0
+    failing_domains: List[str] = field(default_factory=list)
+    corpus_growth: List[Dict[str, Any]] = field(default_factory=list)
+    confidence_trend: List[str] = field(default_factory=list)
 
     def to_markdown(self, query: str) -> str:
         """Generate a markdown research report."""
@@ -210,8 +602,24 @@ class ResearchReport:
             f"| Pages pruned | {self.pages_pruned} |",
             f"| Total characters | {self.total_chars:,} |",
             f"| Estimated tokens | {self.estimated_tokens:,} |",
+            f"| LLM calls | {self.llm_calls} ({self.llm_failures} failed) |",
+            f"| LLM tokens used | {self.llm_total_tokens:,} |",
+            f"| Scrape success rate | {self.scrape_success_rate:.0%} |",
             f"",
         ]
+
+        if self.confidence_trend and len(self.confidence_trend) > 1:
+            lines.append(f"**Confidence trend:** {' → '.join(self.confidence_trend)}\n")
+
+        if self.corpus_growth:
+            lines.append("## Corpus Growth\n")
+            lines.append("| Round | Tokens added | Cumulative |")
+            lines.append("|-------|-------------|------------|")
+            for g in self.corpus_growth:
+                lines.append(
+                    f"| {g['round']} | {g['tokens_added']:,} | {g['cumulative_tokens']:,} |"
+                )
+            lines.append("")
 
         if self.time_per_phase:
             lines.append("## Time per Phase\n")
@@ -646,9 +1054,20 @@ class DeepResearchEngine:
 
         context_window = rag_config.llm.context_window if rag_config.llm else 16384
         self.ctx = ContextManager(max_tokens=context_window)
-        self.analyzer = ResearchAnalyzer(llm_call, self.ctx)
-        self.pruner = CorpusPruner(llm_call)
+        self.metrics = SessionMetrics(session)
+        self.analyzer = ResearchAnalyzer(self._tracked_llm_call, self.ctx)
+        self.pruner = CorpusPruner(self._tracked_llm_call)
         self.report = ResearchReport()
+
+    def _tracked_llm_call(self, prompt: str, temperature: float = 0.3) -> Optional[str]:
+        """Wrapper around LLM call that records metrics."""
+        tokens_in = len(prompt) // 4
+        response = self._call_llm(prompt, temperature)
+        tokens_out = len(response) // 4 if response else 0
+        self.metrics.record_llm_call(
+            tokens_in=tokens_in, tokens_out=tokens_out, success=response is not None,
+        )
+        return response
 
     def run(
         self,
@@ -695,6 +1114,15 @@ class DeepResearchEngine:
 
                 console.print(f"[bold]━━━ Round {round_num}/{rounds} ━━━[/bold]")
                 self.session.metadata["rounds"] = round_num
+                self.metrics.begin_round(round_num)
+
+                # Check if research is stalling
+                if self.metrics.corpus_is_stalling():
+                    console.print(
+                        "  [yellow]Research is stalling (minimal new content) "
+                        "— triggering final roundup[/yellow]"
+                    )
+                    break
 
                 # ── ANALYZE ──
                 phase_start = time.time()
@@ -710,7 +1138,13 @@ class DeepResearchEngine:
                 self.report.topics_covered = analysis.covered_topics
                 self.report.gaps_remaining = analysis.gap_topics
                 self.report.confidence = analysis.confidence
+                self.metrics.record_confidence(
+                    round_num, analysis.confidence,
+                    len(analysis.gap_topics), len(analysis.covered_topics),
+                )
+                phase_duration = (time.time() - phase_start) / 60.0
                 self._record_phase_time("analyze", phase_start)
+                self.metrics.record_phase_time("analyze", phase_duration)
 
                 # Write analysis to agent-notes
                 self.session.add_agent_note(
@@ -748,31 +1182,73 @@ class DeepResearchEngine:
                     self.report.searches_performed += 1
                     self.report.search_queries_used.append(query)
                     self.report.pages_found += len(results)
+                    if self.metrics.current_round:
+                        self.metrics.current_round.queries_used.append(query)
+                        self.metrics.current_round.pages_attempted += len(urls)
 
-                # Deduplicate URLs
+                # Deduplicate URLs and skip failing domains
+                from urllib.parse import urlparse as _urlparse
                 seen = set()
                 unique_urls = []
+                skipped_domains = 0
                 for u in all_urls:
-                    if u not in seen:
-                        seen.add(u)
-                        unique_urls.append(u)
+                    if u in seen:
+                        continue
+                    seen.add(u)
+                    domain = _urlparse(u).netloc
+                    if self.metrics.should_skip_domain(domain):
+                        skipped_domains += 1
+                        continue
+                    unique_urls.append(u)
 
+                if skipped_domains:
+                    console.print(f"    Skipped {skipped_domains} URLs from failing domains")
                 console.print(f"    Found {len(unique_urls)} new URLs")
+                phase_duration = (time.time() - phase_start) / 60.0
                 self._record_phase_time("search", phase_start)
+                self.metrics.record_phase_time("search", phase_duration)
 
                 # ── SCRAPE ──
                 phase_start = time.time()
                 self.session.set_phase(ResearchPhase.SCRAPE.value)
                 console.print(f"  [cyan]SCRAPE:[/cyan] Fetching content...")
 
+                scrape_limit = min(
+                    len(unique_urls),
+                    self.config.max_total_pages - self.session.metadata.get("pages_scraped", 0),
+                )
                 pages = self.scraper.scrape_urls(
-                    unique_urls, self.session,
-                    max_pages=min(len(unique_urls), self.config.max_total_pages - self.session.metadata["pages_scraped"]),
+                    unique_urls, self.session, max_pages=scrape_limit,
                 )
 
+                # Register scraped files and track attempts
+                for url in unique_urls[:scrape_limit]:
+                    scraped = any(p.url == url for p in pages)
+                    self.metrics.record_scrape_attempt(
+                        url, success=scraped,
+                        failure_reason="" if scraped else "extraction_failed",
+                    )
+
+                for page in pages:
+                    # Find the saved file path for this page
+                    for f in self.session.sources_dir.iterdir():
+                        if f.is_file() and f.suffix == ".md":
+                            try:
+                                text = f.read_text(encoding="utf-8", errors="replace")
+                                if page.url in text:
+                                    self.metrics.register_file(
+                                        f, url=page.url, title=page.title,
+                                        source_type=page.source_type, round_added=round_num,
+                                    )
+                                    break
+                            except Exception:
+                                pass
+
                 self.report.pages_scraped += len(pages)
-                console.print(f"    Scraped {len(pages)} pages")
+                console.print(f"    Scraped {len(pages)}/{len(unique_urls[:scrape_limit])} pages")
+                phase_duration = (time.time() - phase_start) / 60.0
                 self._record_phase_time("scrape", phase_start)
+                self.metrics.record_phase_time("scrape", phase_duration)
 
                 # ── PRUNE (every other round or last round) ──
                 if round_num % 2 == 0 or round_num == rounds:
@@ -781,6 +1257,16 @@ class DeepResearchEngine:
                     console.print(f"  [cyan]PRUNE:[/cyan] Checking for duplicates...")
 
                     prune_result = self.pruner.prune(self.session)
+
+                    # Track pruned files in metrics
+                    for removed_name in prune_result.get("removed", []):
+                        removed_path = self.session.sources_dir / removed_name
+                        dup_source = ""
+                        for a, b, _ in prune_result.get("duplicates", []):
+                            if b == removed_name:
+                                dup_source = a
+                                break
+                        self.metrics.mark_pruned(removed_path, duplicate_of=dup_source)
 
                     self.report.pages_pruned += len(prune_result.get("removed", []))
                     self.report.corroborations = [
@@ -791,11 +1277,14 @@ class DeepResearchEngine:
                         console.print(f"    Removed {len(prune_result['removed'])} duplicates")
                     if prune_result["corroborations"]:
                         console.print(f"    Found {len(prune_result['corroborations'])} corroborations")
+                    phase_duration = (time.time() - phase_start) / 60.0
                     self._record_phase_time("prune", phase_start)
+                    self.metrics.record_phase_time("prune", phase_duration)
 
                 # Record round duration
                 round_duration = (time.time() - round_start) / 60.0
                 budget.record_round(round_duration)
+                self.metrics.end_round(round_duration)
                 console.print(f"  Round {round_num} complete ({round_duration:.1f} min)\n")
 
         except KeyboardInterrupt:
@@ -808,22 +1297,27 @@ class DeepResearchEngine:
         self.session.set_phase(ResearchPhase.REPORT.value)
         console.print(f"[bold]━━━ Final Report ━━━[/bold]")
 
-        # Calculate final stats
-        source_files = self.session.get_all_source_files()
-        total_chars = 0
-        for f in source_files:
-            try:
-                total_chars += len(f.read_text(encoding="utf-8", errors="replace"))
-            except Exception:
-                pass
+        # Ensure any incomplete round is ended
+        if self.metrics.current_round:
+            self.metrics.end_round(0)
+
+        # Pull stats from metrics
+        summary = self.metrics.get_summary()
 
         self.report.total_time_minutes = budget.elapsed_minutes()
         self.report.rounds_completed = self.session.metadata.get("rounds", 0)
-        self.report.total_chars = total_chars
-        self.report.estimated_tokens = total_chars // 4
+        self.report.total_chars = summary["total_chars"]
+        self.report.estimated_tokens = summary["total_tokens"]
+        self.report.llm_calls = summary["total_llm_calls"]
+        self.report.llm_failures = summary["total_llm_failures"]
+        self.report.llm_total_tokens = summary["total_llm_tokens"]
+        self.report.scrape_success_rate = summary["scrape_success_rate"]
+        self.report.failing_domains = summary["failing_domains"]
+        self.report.corpus_growth = summary["corpus_growth"]
+        self.report.confidence_trend = summary["confidence_trend"]
 
         # Generate assessment if we have sources
-        if source_files and self._call_llm:
+        if summary["active_files"] > 0 and self._call_llm:
             console.print("  Generating corpus assessment...")
             assessment = self.analyzer.assess_corpus(self.session, topic)
             self.session.add_agent_note("corpus-assessment.md", assessment)
@@ -832,6 +1326,9 @@ class DeepResearchEngine:
         report_md = self.report.to_markdown(topic)
         self.session.add_agent_note("research-report.md", report_md)
 
+        # Save final metrics
+        self.metrics.save()
+
         # Complete
         self.session.metadata["time_elapsed_minutes"] = round(self.report.total_time_minutes, 1)
         self.session.complete()
@@ -839,10 +1336,21 @@ class DeepResearchEngine:
         # Display summary
         console.print(f"\n  Rounds: {self.report.rounds_completed}")
         console.print(f"  Time: {self.report.total_time_minutes:.1f} min")
-        console.print(f"  Sources: {len(source_files)}")
+        console.print(f"  Sources: {summary['active_files']} ({summary['pruned_files']} pruned)")
         console.print(f"  Tokens: ~{self.report.estimated_tokens:,}")
+        console.print(f"  LLM calls: {summary['total_llm_calls']} ({summary['total_llm_failures']} failed)")
+        console.print(f"  Scrape rate: {summary['scrape_success_rate']:.0%}")
+        if summary["failing_domains"]:
+            console.print(f"  Failing domains: {', '.join(summary['failing_domains'][:5])}")
+        growth = summary.get("corpus_growth", [])
+        if growth:
+            console.print(f"  Growth: {' → '.join(str(g['tokens_added']) for g in growth[-5:])} tokens/round")
         console.print(f"  Confidence: {self.report.confidence}")
+        trend = summary.get("confidence_trend", [])
+        if len(trend) > 1:
+            console.print(f"  Trend: {' → '.join(trend)}")
         console.print(f"\n  Report: [blue]{self.session.agent_notes_dir / 'research-report.md'}[/blue]")
+        console.print(f"  Metrics: [blue]{self.metrics._path}[/blue]")
 
         return self.report
 
