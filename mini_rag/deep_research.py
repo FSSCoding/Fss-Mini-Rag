@@ -1039,19 +1039,19 @@ class CorpusPruner:
         # Map source filenames to their chunk embeddings
         file_embeddings = {}
         for src_file in source_files:
-            # Match by file_path in the index
-            src_name = src_file.name
-            matching = df[df["file_path"].str.contains(src_name.replace(".md", ""), regex=False, na=False)]
+            # Match by relative path first (most precise, avoids cross-session collisions)
+            rel_path = str(src_file).replace(str(self._project_path) + "/", "")
+            matching = df[df["file_path"].str.contains(rel_path, regex=False, na=False)]
 
             if matching.empty:
-                # Try matching by the source directory path
-                rel_path = str(src_file).replace(str(self._project_path) + "/", "")
-                matching = df[df["file_path"].str.contains(rel_path, regex=False, na=False)]
+                # Fallback: match by filename stem (less precise)
+                src_name = src_file.name
+                matching = df[df["file_path"].str.contains(src_name.replace(".md", ""), regex=False, na=False)]
 
             if not matching.empty:
                 # Average all chunk embeddings for this file
                 embeddings = np.stack(matching["embedding"].values)
-                file_embeddings[src_name] = embeddings.mean(axis=0)
+                file_embeddings[src_file.name] = embeddings.mean(axis=0)
 
         if len(file_embeddings) < 2:
             return None
