@@ -13,6 +13,8 @@ from typing import List, Optional, Protocol
 
 import requests
 
+from .rate_limiter import get_limiter, get_retry_config, retry_with_backoff
+
 logger = logging.getLogger(__name__)
 
 # Optional: duckduckgo-search package
@@ -56,9 +58,13 @@ class DuckDuckGoSearch:
                 "Chrome/120.0.0.0 Safari/537.36"
             )
         })
+        self._limiter = get_limiter("duckduckgo")
+        self._retry_config = get_retry_config("duckduckgo")
 
     def search(self, query: str, max_results: int = 10) -> List[WebSearchResult]:
-        """Search DuckDuckGo. Tries package first, falls back to HTML scraping."""
+        """Search DuckDuckGo with rate limiting. Tries package first, falls back to HTML."""
+        self._limiter.acquire()
+
         if DDGS_AVAILABLE:
             results = self._search_with_package(query, max_results)
             if results:
@@ -177,13 +183,15 @@ class DuckDuckGoSearch:
 
 
 class TavilySearch:
-    """Tavily search engine (requires API key)."""
+    """Tavily search engine (requires API key). Rate-limited with retry."""
 
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self._limiter = get_limiter("tavily")
+        self._retry_config = get_retry_config("tavily")
 
     def search(self, query: str, max_results: int = 10) -> List[WebSearchResult]:
-        try:
+        def _do_search():
             resp = requests.post(
                 "https://api.tavily.com/search",
                 json={
@@ -195,8 +203,12 @@ class TavilySearch:
                 timeout=20,
             )
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()
 
+        try:
+            data = retry_with_backoff(
+                _do_search, config=self._retry_config, rate_limiter=self._limiter,
+            )
             results = []
             for r in data.get("results", []):
                 results.append(WebSearchResult(
@@ -207,18 +219,20 @@ class TavilySearch:
             return results
 
         except Exception as e:
-            logger.error(f"Tavily search failed: {e}")
+            logger.error(f"Tavily search failed after retries: {e}")
             return []
 
 
 class BraveSearch:
-    """Brave search engine (requires API key)."""
+    """Brave search engine (requires API key). Rate-limited with retry."""
 
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self._limiter = get_limiter("brave")
+        self._retry_config = get_retry_config("brave")
 
     def search(self, query: str, max_results: int = 10) -> List[WebSearchResult]:
-        try:
+        def _do_search():
             resp = requests.get(
                 "https://api.search.brave.com/res/v1/web/search",
                 headers={
@@ -230,8 +244,12 @@ class BraveSearch:
                 timeout=20,
             )
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()
 
+        try:
+            data = retry_with_backoff(
+                _do_search, config=self._retry_config, rate_limiter=self._limiter,
+            )
             results = []
             for r in data.get("web", {}).get("results", []):
                 results.append(WebSearchResult(
@@ -242,7 +260,7 @@ class BraveSearch:
             return results
 
         except Exception as e:
-            logger.error(f"Brave search failed: {e}")
+            logger.error(f"Brave search failed after retries: {e}")
             return []
 
 

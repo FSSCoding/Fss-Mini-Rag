@@ -1071,10 +1071,31 @@ class DeepResearchEngine:
         self.pruner = CorpusPruner(self._tracked_llm_call)
         self.report = ResearchReport()
 
+        # Rate limiters
+        from .rate_limiter import get_limiter, get_retry_config, retry_with_backoff
+        self._llm_limiter = get_limiter("llm")
+        self._llm_retry = get_retry_config("llm")
+
     def _tracked_llm_call(self, prompt: str, temperature: float = 0.3) -> Optional[str]:
-        """Wrapper around LLM call that records metrics."""
+        """Wrapper around LLM call with rate limiting, retry, and metrics."""
+        from .rate_limiter import retry_with_backoff
+
         tokens_in = len(prompt) // 4
-        response = self._call_llm(prompt, temperature)
+
+        def _do_call():
+            return self._call_llm(prompt, temperature)
+
+        try:
+            response = retry_with_backoff(
+                _do_call,
+                config=self._llm_retry,
+                rate_limiter=self._llm_limiter,
+            )
+        except Exception as e:
+            logger.warning(f"LLM call failed after retries: {e}")
+            self.metrics.record_llm_call(tokens_in=tokens_in, tokens_out=0, success=False)
+            return None
+
         tokens_out = len(response) // 4 if response else 0
         self.metrics.record_llm_call(
             tokens_in=tokens_in, tokens_out=tokens_out, success=response is not None,

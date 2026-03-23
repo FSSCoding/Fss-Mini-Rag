@@ -228,6 +228,13 @@ class MiniWebScraper:
         self._last_request_time: float = 0
         self._ca_bundle: Optional[str] = self._find_ca_bundle()
 
+        # Rate limiting and retry
+        from .rate_limiter import get_limiter, get_retry_config
+        self._limiter = get_limiter(
+            "scraper", calls_per_minute=60.0 / max(config.delay_between_requests, 0.1),
+        )
+        self._retry_config = get_retry_config("scraper")
+
     def _find_ca_bundle(self) -> Optional[str]:
         """Find a working CA bundle, trying env var then system paths."""
         import os
@@ -288,18 +295,18 @@ class MiniWebScraper:
     def fetch(self, url: str) -> Optional[ScrapedPage]:
         """Fetch a single URL, extract content, return ScrapedPage.
 
+        Uses rate limiting and retry with backoff for transient errors.
         Returns None if the page can't be fetched, is blocked by robots.txt,
         or has insufficient content.
         """
+        from .rate_limiter import retry_with_backoff
+
         # Robots check
         if not self._check_robots(url):
             logger.info(f"Blocked by robots.txt: {url}")
             return None
 
-        # Rate limit
-        self._rate_limit()
-
-        try:
+        def _do_fetch():
             verify = self._ca_bundle if self._ca_bundle else True
             resp = self._session.get(
                 url,
@@ -308,10 +315,16 @@ class MiniWebScraper:
                 verify=verify,
             )
             resp.raise_for_status()
+            return resp
+
+        try:
+            resp = retry_with_backoff(
+                _do_fetch,
+                config=self._retry_config,
+                rate_limiter=self._limiter,
+            )
 
             content_type = resp.headers.get("Content-Type", "text/html")
-
-            # Extract content using the appropriate extractor
             page = extract_content(url, resp.content, content_type)
 
             if page and page.word_count < (self.config.min_content_length // 5):
@@ -324,7 +337,8 @@ class MiniWebScraper:
             logger.warning(f"Timeout fetching {url}")
             return None
         except requests.exceptions.HTTPError as e:
-            logger.warning(f"HTTP error {e.response.status_code} for {url}")
+            status = e.response.status_code if hasattr(e, "response") and e.response else "?"
+            logger.warning(f"HTTP error {status} for {url}")
             return None
         except Exception as e:
             logger.error(f"Failed to fetch {url}: {e}")
