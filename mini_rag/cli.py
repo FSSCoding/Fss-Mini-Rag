@@ -684,11 +684,12 @@ def search_web(query: str, path: str, engine, max_results, depth: int, max_pages
 @click.option("--time", "time_budget", type=str, default=None, help="Time budget (e.g. '1h', '30m', '100h')")
 @click.option("--rounds", type=int, default=None, help="Max research rounds for --deep")
 @click.option("--analyze", "analyze_only", is_flag=True, help="Analyze existing corpus only (no web search)")
+@click.option("--continue", "continue_session", type=str, default=None, help="Continue an existing session with deep research")
 @click.option("--list", "list_sessions", is_flag=True, help="List existing research sessions")
 @click.option("--open", "open_session", type=str, default=None, help="Open a session folder")
 @click.option("--delete", "delete_session", type=str, default=None, help="Delete a session")
 def research(query, path: str, engine, max_pages, deep: bool, time_budget, rounds,
-             analyze_only: bool, list_sessions: bool, open_session, delete_session):
+             analyze_only: bool, continue_session, list_sessions: bool, open_session, delete_session):
     """Full research pipeline: search, scrape, index, and explore.
 
     Examples:
@@ -796,11 +797,11 @@ def research(query, path: str, engine, max_pages, deep: bool, time_budget, round
 
     # --- Deep research or analyze mode ---
 
-    if not query:
+    if not query and not continue_session:
         console.print("[red]Query required for research. Use --list to see sessions.[/red]")
         return
 
-    if deep or analyze_only:
+    if deep or analyze_only or continue_session:
         from .deep_research import DeepResearchEngine
         from .llm_synthesizer import LLMSynthesizer
 
@@ -831,11 +832,45 @@ def research(query, path: str, engine, max_pages, deep: bool, time_budget, round
             )
             llm_call = llm._call_llm
 
-            # Create session
-            session = ResearchSession.create(
-                project_path, query=query,
-                output_dir=ws_config.output_dir, engine=engine_name,
-            )
+            # Load existing session or create new one
+            if continue_session:
+                base_dir = project_path / ws_config.output_dir
+                session_dir = base_dir / continue_session
+                if not session_dir.exists():
+                    # Partial match
+                    matches = [d for d in base_dir.iterdir() if d.is_dir() and continue_session in d.name]
+                    if len(matches) == 1:
+                        session_dir = matches[0]
+                    elif matches:
+                        console.print("[yellow]Multiple matches:[/yellow]")
+                        for m in matches:
+                            console.print(f"  {m.name}")
+                        return
+                    else:
+                        console.print(f"[red]Session not found: {continue_session}[/red]")
+                        return
+
+                session = ResearchSession.load(session_dir)
+                if not session:
+                    console.print(f"[red]Failed to load session: {session_dir}[/red]")
+                    return
+
+                # Use existing query if none provided
+                if not query:
+                    query = session.query
+
+                existing_files = session.get_all_source_files()
+                console.print(f"\n[bold cyan]Continuing session:[/bold cyan] {session_dir.name}")
+                console.print(f"Existing corpus: {len(existing_files)} files")
+                console.print(f"Query: {query}\n")
+
+                # Force deep mode when continuing
+                deep = True
+            else:
+                session = ResearchSession.create(
+                    project_path, query=query,
+                    output_dir=ws_config.output_dir, engine=engine_name,
+                )
 
             # Create engine components
             search_eng = create_search_engine(engine_name, tavily_api_key=tavily_key, brave_api_key=brave_key)
