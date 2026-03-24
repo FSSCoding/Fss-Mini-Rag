@@ -1,11 +1,11 @@
 """
-FSS-Mini-RAG - Lightweight, portable semantic code search.
+FSS-Mini-RAG - Self-contained research and code search system.
 
-A hybrid RAG system with Ollama-first embeddings, ML fallback, and streaming indexing.
-Designed for portability, efficiency, and simplicity across projects and computers.
+Hybrid semantic + BM25 search with RRF fusion, web scraping, deep research,
+LLM synthesis, and desktop GUI. Works with any OpenAI-compatible endpoint.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.3.0"
 
 from .chunker import CodeChunker
 from .indexer import ProjectIndexer

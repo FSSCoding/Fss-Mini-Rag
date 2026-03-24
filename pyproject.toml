@@ -39,8 +39,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fss-mini-rag"
-version = "2.1.0"
-description = "Educational RAG system that actually works! Two modes: fast synthesis for quick answers, deep exploration for learning."
+version = "2.3.0"
+description = "Self-contained research and code search system with hybrid semantic + keyword search, web scraping, deep research, and desktop GUI."
 authors = [
     {name = "Brett Fox", email = "brett@foxsoftwaresolutions.com.au"}
 ]
@@ -79,9 +79,6 @@ classifiers = [
     "Topic :: Software Development :: Tools",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-
-[project.optional-dependencies]
-browser = ["playwright>=1.40.0"]
 
 [project.urls]
 Homepage = "https://github.com/FSSCoding/Fss-Mini-Rag"

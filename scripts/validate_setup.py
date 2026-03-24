@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """
-Validate that the distribution setup files are correctly created.
-This doesn't require dependencies, just validates file structure.
+Validate that the distribution setup files are correctly configured.
+Checks file structure, metadata, and build readiness.
 """
 
-import json
-import re
 import sys
 from pathlib import Path
 
+
 def main():
     """Validate distribution setup files."""
-    print("🔍 FSS-Mini-RAG Setup Validation")
+    print("FSS-Mini-RAG Setup Validation")
     print("=" * 40)
-    
+
     project_root = Path(__file__).parent.parent
     issues = []
-    
+
     # 1. Check pyproject.toml
     print("1. Validating pyproject.toml...")
     pyproject_file = project_root / "pyproject.toml"
@@ -24,134 +23,164 @@ def main():
         issues.append("pyproject.toml missing")
     else:
         content = pyproject_file.read_text()
-        
-        # Check key elements
+
         checks = [
             ('name = "fss-mini-rag"', "Package name"),
             ('rag-mini = "mini_rag.cli:cli"', "Console script entry point"),
-            ('requires-python = ">=3.8"', "Python version requirement"),
-            ('MIT', "License"),
-            ('Brett Fox', "Author"),
+            ('rag-mini-gui = "mini_rag.gui:main"', "GUI entry point"),
+            ("MIT", "License"),
+            ("Brett Fox", "Author"),
         ]
-        
+
         for check, desc in checks:
             if check in content:
-                print(f"   ✅ {desc}")
+                print(f"   OK: {desc}")
             else:
-                print(f"   ❌ {desc} missing")
+                print(f"   MISSING: {desc}")
                 issues.append(f"pyproject.toml missing: {desc}")
-    
-    # 2. Check install scripts
-    print("\n2. Validating install scripts...")
-    
-    # Linux/macOS script
-    install_sh = project_root / "install.sh"
-    if install_sh.exists():
-        content = install_sh.read_text()
-        if "curl -LsSf https://astral.sh/uv/install.sh" in content:
-            print("   ✅ install.sh has uv installation")
-        if "pipx install" in content:
-            print("   ✅ install.sh has pipx fallback")
-        if "pip install --user" in content:
-            print("   ✅ install.sh has pip fallback")
+
+    # 2. Check requirements.txt
+    print("\n2. Validating requirements.txt...")
+    req_file = project_root / "requirements.txt"
+    if not req_file.exists():
+        issues.append("requirements.txt missing")
+        print("   MISSING: requirements.txt")
     else:
-        issues.append("install.sh missing")
-        print("   ❌ install.sh missing")
-    
-    # Windows script
-    install_ps1 = project_root / "install.ps1"
-    if install_ps1.exists():
-        content = install_ps1.read_text()
-        if "Install-UV" in content:
-            print("   ✅ install.ps1 has uv installation")
-        if "Install-WithPipx" in content:
-            print("   ✅ install.ps1 has pipx fallback")
-        if "Install-WithPip" in content:
-            print("   ✅ install.ps1 has pip fallback")
-    else:
-        issues.append("install.ps1 missing")
-        print("   ❌ install.ps1 missing")
-    
-    # 3. Check build scripts
-    print("\n3. Validating build scripts...")
-    
+        content = req_file.read_text()
+        required_deps = ["lancedb", "click", "rich", "rank-bm25", "beautifulsoup4", "pymupdf", "sv-ttk"]
+        for dep in required_deps:
+            if dep in content:
+                print(f"   OK: {dep}")
+            else:
+                print(f"   MISSING: {dep}")
+                issues.append(f"requirements.txt missing: {dep}")
+
+    # 3. Check core modules exist
+    print("\n3. Validating core modules...")
+    core_modules = [
+        "mini_rag/__init__.py",
+        "mini_rag/cli.py",
+        "mini_rag/search.py",
+        "mini_rag/indexer.py",
+        "mini_rag/chunker.py",
+        "mini_rag/ollama_embeddings.py",
+        "mini_rag/config.py",
+        "mini_rag/llm_synthesizer.py",
+        "mini_rag/deep_research.py",
+        "mini_rag/web_scraper.py",
+        "mini_rag/search_engines.py",
+        "mini_rag/extractors.py",
+        "mini_rag/rate_limiter.py",
+        "mini_rag/gui/__init__.py",
+        "mini_rag/gui/app.py",
+    ]
+    for module in core_modules:
+        path = project_root / module
+        if path.exists():
+            print(f"   OK: {module}")
+        else:
+            print(f"   MISSING: {module}")
+            issues.append(f"Missing module: {module}")
+
+    # 4. Check build scripts
+    print("\n4. Validating build scripts...")
+
     build_pyz = project_root / "scripts" / "build_pyz.py"
     if build_pyz.exists():
         content = build_pyz.read_text()
         if "zipapp.create_archive" in content:
-            print("   ✅ build_pyz.py uses zipapp")
-        if "__main__.py" in content:
-            print("   ✅ build_pyz.py creates entry point")
+            print("   OK: build_pyz.py uses zipapp")
     else:
         issues.append("scripts/build_pyz.py missing")
-        print("   ❌ scripts/build_pyz.py missing")
-    
-    # 4. Check GitHub workflow
-    print("\n4. Validating GitHub workflow...")
-    
+        print("   MISSING: scripts/build_pyz.py")
+
+    # 5. Check GitHub workflow
+    print("\n5. Validating GitHub workflows...")
+
     workflow_file = project_root / ".github" / "workflows" / "build-and-release.yml"
     if workflow_file.exists():
         content = workflow_file.read_text()
         if "cibuildwheel" in content:
-            print("   ✅ Workflow uses cibuildwheel")
-        if "upload-artifact" in content:
-            print("   ✅ Workflow uploads artifacts")
+            print("   OK: build-and-release.yml uses cibuildwheel")
         if "pypa/gh-action-pypi-publish" in content:
-            print("   ✅ Workflow publishes to PyPI")
+            print("   OK: build-and-release.yml publishes to PyPI")
     else:
-        issues.append(".github/workflows/build-and-release.yml missing")
-        print("   ❌ GitHub workflow missing")
-    
-    # 5. Check README updates
-    print("\n5. Validating README updates...")
-    
-    readme_file = project_root / "README.md"
-    if readme_file.exists():
-        content = readme_file.read_text()
-        if "One-Line Installers" in content:
-            print("   ✅ README has new installation section")
-        if "curl -fsSL" in content:
-            print("   ✅ README has Linux/macOS installer")
-        if "iwr" in content:
-            print("   ✅ README has Windows installer")
-        if "uv tool install" in content:
-            print("   ✅ README has uv instructions")
-        if "pipx install" in content:
-            print("   ✅ README has pipx instructions")
+        print("   WARNING: build-and-release.yml missing (needed for PyPI)")
+
+    ci_file = project_root / ".github" / "workflows" / "ci.yml"
+    if ci_file.exists():
+        print("   OK: ci.yml exists")
     else:
-        issues.append("README.md missing")
-        print("   ❌ README.md missing")
-    
-    # 6. Check Makefile
-    print("\n6. Validating Makefile...")
-    
+        print("   WARNING: ci.yml missing")
+
+    # 6. Check Windows installer
+    print("\n6. Validating install scripts...")
+
+    win_installer = project_root / "install_windows.bat"
+    if win_installer.exists():
+        content = win_installer.read_text()
+        if "rag-mini" in content:
+            print("   OK: install_windows.bat references rag-mini CLI")
+        if "pip install -e" in content or "pip install -r" in content:
+            print("   OK: install_windows.bat installs dependencies")
+    else:
+        print("   WARNING: install_windows.bat missing")
+
+    # 7. Check Makefile
+    print("\n7. Validating Makefile...")
     makefile = project_root / "Makefile"
     if makefile.exists():
         content = makefile.read_text()
         if "build-pyz:" in content:
-            print("   ✅ Makefile has pyz build target")
-        if "test-dist:" in content:
-            print("   ✅ Makefile has distribution test target")
+            print("   OK: Makefile has pyz build target")
+        if "dev-install:" in content:
+            print("   OK: Makefile has dev-install target")
     else:
-        print("   ⚠️  Makefile missing (optional)")
-    
+        print("   WARNING: Makefile missing (optional)")
+
+    # 8. Version consistency
+    print("\n8. Checking version consistency...")
+    versions_found = []
+
+    if pyproject_file.exists():
+        content = pyproject_file.read_text()
+        for line in content.splitlines():
+            if line.strip().startswith('version = "'):
+                ver = line.split('"')[1]
+                versions_found.append(("pyproject.toml", ver))
+                print(f"   pyproject.toml: {ver}")
+
+    init_file = project_root / "mini_rag" / "__init__.py"
+    if init_file.exists():
+        content = init_file.read_text()
+        for line in content.splitlines():
+            if "__version__" in line and "=" in line:
+                ver = line.split('"')[1]
+                versions_found.append(("__init__.py", ver))
+                print(f"   __init__.py: {ver}")
+
+    if len(set(v for _, v in versions_found)) > 1:
+        issues.append("Version mismatch between pyproject.toml and __init__.py")
+        print("   MISMATCH: versions differ!")
+    elif versions_found:
+        print("   OK: versions match")
+
     # Summary
-    print(f"\n{'='*40}")
+    print(f"\n{'=' * 40}")
     if issues:
-        print(f"❌ Found {len(issues)} issues:")
+        print(f"Found {len(issues)} issues:")
         for issue in issues:
-            print(f"   • {issue}")
-        print("\n🔧 Please fix the issues above before proceeding.")
+            print(f"   - {issue}")
         return 1
     else:
-        print("🎉 All setup files are valid!")
-        print("\n📋 Next steps:")
-        print("   1. Test installation in a clean environment")
-        print("   2. Commit and push changes to GitHub")
-        print("   3. Create a release to trigger wheel building")
-        print("   4. Test the install scripts:")
-        print("      curl -fsSL https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.sh | bash")
+        print("All checks passed!")
+        print("\nNext steps:")
+        print("  1. Test in a clean venv: python -m venv test && source test/bin/activate && pip install -e .")
+        print("  2. Verify CLI: rag-mini --help")
+        print("  3. Build wheel: python -m build")
+        print("  4. Tag release: git tag v2.3.0 && git push --tags")
         return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

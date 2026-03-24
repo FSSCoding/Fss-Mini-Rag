@@ -13,16 +13,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12"]
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        
+
     - name: Cache dependencies
       uses: actions/cache@v4
       with:
@@ -32,15 +32,13 @@ jobs:
         key: ${{ runner.os }}-python-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
         restore-keys: |
           ${{ runner.os }}-python-${{ matrix.python-version }}-
-          
+
     - name: Create virtual environment
-      run: |
-        python -m venv .venv
+      run: python -m venv .venv
       shell: bash
-        
+
     - name: Install dependencies
       run: |
-        # Activate virtual environment and install dependencies
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           source .venv/Scripts/activate
         else
@@ -48,79 +46,47 @@ jobs:
         fi
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install -e .
       shell: bash
-        
-    - name: Run comprehensive tests
+
+    - name: Test core imports
       run: |
-        # Set OS-appropriate emojis and activate venv
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           source .venv/Scripts/activate
-          OK="[OK]"
-          SKIP="[SKIP]"
         else
           source .venv/bin/activate
-          OK="✅"
-          SKIP="⚠️"
         fi
-        
-        echo "$OK Virtual environment activated"
-        
-        # Run basic import tests
-        python -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('$OK Core imports successful')"
-        
-        # Run the actual test suite
-        if [ -f "tests/test_fixes.py" ]; then
-          echo "$OK Running comprehensive test suite..."
-          python tests/test_fixes.py
-        else
-          echo "$SKIP test_fixes.py not found, running basic tests only"
-        fi
-        
-        # Test config system with proper venv
-        python -c "
-        import os
-        ok_emoji = '$OK' if os.name != 'nt' else '[OK]'
-        
-        try:
-            from mini_rag.config import ConfigManager
-            import tempfile
-            with tempfile.TemporaryDirectory() as tmpdir:
-                config_manager = ConfigManager(tmpdir)
-                config = config_manager.load_config()
-                print(f'{ok_emoji} Config system works with proper dependencies')
-        except Exception as e:
-            print(f'Error in config test: {e}')
-            raise
-        "
-        
-        echo "$OK All tests completed successfully"
+        python -c "from mini_rag import CodeEmbedder, ProjectIndexer, CodeSearcher; print('Core imports OK')"
+        python -c "from mini_rag.deep_research import DeepResearchEngine; print('Deep research OK')"
+        python -c "from mini_rag.web_scraper import MiniWebScraper; print('Web scraper OK')"
+        python -c "from mini_rag.rate_limiter import RateLimiter; print('Rate limiter OK')"
+        python -c "from mini_rag.config import ConfigManager; print('Config OK')"
       shell: bash
-      
-    - name: Test auto-update system
+
+    - name: Run test suite
       run: |
-        # Set OS-appropriate emojis
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          OK="[OK]"
-          SKIP="[SKIP]"
+          source .venv/Scripts/activate
         else
-          OK="✅"
-          SKIP="⚠️"
+          source .venv/bin/activate
         fi
-        
+
+        # Run the fixes test (comprehensive validation)
+        if [ -f "tests/test_fixes.py" ]; then
+          python tests/test_fixes.py
+        fi
+
+        # Test config system
         python -c "
-        import os
-        ok_emoji = '$OK' if os.name != 'nt' else '[OK]'
-        skip_emoji = '$SKIP' if os.name != 'nt' else '[SKIP]'
-        
-        try:
-            from mini_rag.updater import UpdateChecker
-            updater = UpdateChecker()
-            print(f'{ok_emoji} Auto-update system available')
-        except ImportError:
-            print(f'{skip_emoji} Auto-update system not available (legacy version)')
-        "
+from mini_rag.config import ConfigManager
+import tempfile
+with tempfile.TemporaryDirectory() as tmpdir:
+    config_manager = ConfigManager(tmpdir)
+    config = config_manager.load_config()
+    print('Config system OK')
+"
       shell: bash
-        
+
     - name: Test CLI entry point
       run: |
         if [[ "$RUNNER_OS" == "Windows" ]]; then
@@ -128,8 +94,8 @@ jobs:
         else
           source .venv/bin/activate
         fi
-        pip install -e .
         rag-mini --help
+        rag-mini info --no-code
       shell: bash
 
   security-scan:
@@ -137,54 +103,14 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        
+
     - name: Install security tools
       run: pip install bandit
 
     - name: Run security scan
       run: bandit -r mini_rag/ -ll
-          
-  auto-update-check:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        
-    - name: Check for auto-update system
-      run: |
-        if [ -f "mini_rag/updater.py" ]; then
-          echo "✅ Auto-update system present"
-          echo "UPDATE_AVAILABLE=true" >> $GITHUB_ENV
-        else
-          echo "⚠️ No auto-update system found"
-          echo "UPDATE_AVAILABLE=false" >> $GITHUB_ENV
-        fi
-        
-    - name: Validate update system
-      if: env.UPDATE_AVAILABLE == 'true'
-      run: |
-        python -c "
-        try:
-            from mini_rag.updater import UpdateChecker
-            updater = UpdateChecker()
-            print(f'✅ Update system configured for: {updater.github_api_url}')
-            print(f'✅ Check frequency: {updater.check_frequency_hours} hours')
-        except Exception as e:
-            print(f'⚠️ Update system validation skipped: {e}')
-        "
