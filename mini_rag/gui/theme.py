@@ -42,17 +42,23 @@ def apply_custom_styles(root):
     style.configure("Error.TLabel", foreground="#ff4444", padding=(8, 4))
     style.configure("Hint.TLabel", foreground="#888888", padding=(8, 4), font=("", 9, "italic"))
 
-    # Depth: soften harsh white-on-black in dark mode
+    # Depth: soften colors and add subtle border accents
     if is_dark:
-        # Slightly softer foreground — pure white is harsh
+        # Softer foreground — pure white is harsh
         style.configure("TLabel", foreground="#d4d4d4")
-        style.configure("TLabelframe.Label", foreground="#e0e0e0")
+        style.configure("TLabelframe.Label", foreground="#a0c4ff")  # subtle blue accent for section headers
         # Treeview heading contrast
-        style.configure("Treeview.Heading", font=("", 9, "bold"))
+        style.configure("Treeview.Heading", font=("", 9, "bold"), foreground="#b0b0b0")
+        # Subtle separator color
+        style.configure("TSeparator", background="#404040")
+        # LabelFrame border — slightly lighter than background for depth
+        style.configure("TLabelframe", bordercolor="#3a3a3a", relief="groove")
     else:
-        # Light mode: slightly darker text for better readability
+        # Light mode: subtle accents
         style.configure("TLabel", foreground="#1a1a1a")
-        style.configure("TLabelframe.Label", foreground="#111111")
+        style.configure("TLabelframe.Label", foreground="#2060a0")  # blue accent
+        style.configure("Treeview.Heading", font=("", 9, "bold"), foreground="#333333")
+        style.configure("TLabelframe", bordercolor="#c0c0c0", relief="groove")
 
 
 def _is_dark_theme() -> bool:

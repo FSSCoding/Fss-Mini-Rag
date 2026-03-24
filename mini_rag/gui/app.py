@@ -130,9 +130,25 @@ class MiniRAGApp(tk.Tk):
     def _create_layout(self):
         """Build tabbed layout: Search & Index tab + Web Research tab."""
 
+        # Top bar: working directory display
+        top_bar = ttk.Frame(self)
+        top_bar.pack(fill=tk.X, padx=8, pady=(4, 0))
+
+        self._workdir_var = tk.StringVar()
+        self._update_workdir_display()
+        workdir_label = ttk.Label(
+            top_bar, textvariable=self._workdir_var,
+            foreground="#888888", font=("", 8), anchor=tk.E,
+            cursor="hand2",
+        )
+        workdir_label.pack(side=tk.RIGHT)
+        workdir_label.bind("<Button-1>", lambda e: self._change_working_dir())
+
+        ttk.Label(top_bar, text="Working Dir:", foreground="#666666", font=("", 8)).pack(side=tk.RIGHT, padx=(0, 4))
+
         # Notebook wraps everything except status bar
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 2))
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=(2, 2))
 
         # === Tab 1: Search & Index (existing layout) ===
         search_frame = ttk.Frame(self.notebook)
@@ -434,18 +450,46 @@ class MiniRAGApp(tk.Tk):
 
     # === Research Event Handlers ===
 
-    def _get_research_project_path(self):
-        """Get project path for research sessions."""
-        path = self.state.active_collection
+    def _get_working_dir(self) -> str:
+        """Get the working directory for research data.
+
+        Uses saved path from config, or the cross-platform default.
+        Creates the directory if it doesn't exist.
+        Never uses active_collection — working dir is independent.
+        """
+        from .config_store import get_default_working_dir
+        path = self.config_data.get("working_dir")
         if not path:
-            path = self.config_data.get("research_project_path")
-        if not path:
-            from tkinter import filedialog
-            path = filedialog.askdirectory(title="Select project folder for research")
-            if path:
-                self.config_data["research_project_path"] = path
-                save_config(self.config_data)
+            path = str(get_default_working_dir())
+            self.config_data["working_dir"] = path
+            save_config(self.config_data)
+        Path(path).mkdir(parents=True, exist_ok=True)
         return path
+
+    def _update_workdir_display(self):
+        """Update the working directory label."""
+        path = self.config_data.get("working_dir", "")
+        if not path:
+            from .config_store import get_default_working_dir
+            path = str(get_default_working_dir())
+        # Shorten for display: show last 2 components
+        parts = Path(path).parts
+        display = str(Path(*parts[-2:])) if len(parts) > 2 else path
+        self._workdir_var.set(display)
+
+    def _change_working_dir(self):
+        """Let user change the working directory."""
+        from tkinter import filedialog
+        current = self.config_data.get("working_dir", "")
+        new_dir = filedialog.askdirectory(
+            title="Select working directory",
+            initialdir=current or str(Path.home()),
+        )
+        if new_dir:
+            self.config_data["working_dir"] = new_dir
+            save_config(self.config_data)
+            self._update_workdir_display()
+            self.status_bar.set_text(f"Working directory: {new_dir}")
 
     def _on_research_search(self, data):
         self.state.set_operation("searching", "Searching the web...")
@@ -455,7 +499,7 @@ class MiniRAGApp(tk.Tk):
         )
 
     def _on_research_scrape(self, data):
-        project_path = self._get_research_project_path()
+        project_path = self._get_working_dir()
         if not project_path:
             self.state.error = "No project path selected"
             return
@@ -465,14 +509,14 @@ class MiniRAGApp(tk.Tk):
         )
 
     def _on_research_scrape_single(self, data):
-        project_path = self._get_research_project_path()
+        project_path = self._get_working_dir()
         if not project_path:
             return
         self.state.set_operation("scraping")
         self.research_service.scrape_single(data["url"], project_path)
 
     def _on_research_deep(self, data):
-        project_path = self._get_research_project_path()
+        project_path = self._get_working_dir()
         if not project_path:
             self.state.error = "No project path selected"
             return
@@ -547,7 +591,7 @@ class MiniRAGApp(tk.Tk):
         self.after(0, _show)
 
     def _refresh_research_sessions(self):
-        project_path = self.state.active_collection or self.config_data.get("research_project_path")
+        project_path = self._get_working_dir()
         if project_path:
             sessions = self.research_service.load_sessions(project_path)
             self.after(0, lambda: self.research_tab.load_sessions(sessions))
