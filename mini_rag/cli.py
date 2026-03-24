@@ -489,12 +489,24 @@ def debug_schema(path: str):
 
 
 def _load_env_keys(project_path: Path = None):
-    """Load API keys from .env file if present.
+    """Load API keys from secure env manager and .env files.
 
-    Searches: explicit project_path, then CWD, then script directory.
-    Uses setdefault so existing env vars are never overwritten.
+    Priority (uses setdefault, first found wins):
+    1. ~/.config/fss-mini-rag/.env (secure, managed by GUI)
+    2. Project .env file
+    3. CWD .env file
     """
     import os
+
+    # Load from secure env manager first
+    try:
+        from .gui.env_manager import load_env
+        for key, value in load_env().items():
+            os.environ.setdefault(key, value)
+    except Exception:
+        pass  # GUI module may not be available
+
+    # Then check project/CWD .env files
     candidates = []
     if project_path:
         candidates.append(Path(project_path) / ".env")
@@ -822,13 +834,29 @@ def research(query, path: str, engine, max_pages, deep: bool, time_budget, round
                 time_minutes = int(tb)
 
         try:
-            # Initialize LLM — use embedding base_url for OpenAI-compat endpoints
-            llm_base = config.embedding.base_url if config.embedding else "http://localhost:1234/v1"
+            # Initialize LLM
+            # Priority: llm.api_base > GUI config > ollama_host > default
+            llm_base = (
+                config.llm.api_base
+                or f"http://{config.llm.ollama_host}/v1"
+            )
+            # Load API keys: config → env_manager → os.environ
+            api_key = config.llm.api_key
+            if not api_key:
+                try:
+                    from .gui.env_manager import get_key
+                    api_key = get_key("LLM_API_KEY") or get_key("OPENAI_API_KEY")
+                except Exception:
+                    pass
+            if not api_key:
+                api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+
             llm = LLMSynthesizer(
                 base_url=llm_base,
                 ollama_url=f"http://{config.llm.ollama_host}",
                 model=config.llm.synthesis_model,
                 config=config.llm,
+                api_key=api_key,
             )
             llm_call = llm._call_llm
 
