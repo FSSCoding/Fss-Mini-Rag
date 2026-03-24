@@ -350,14 +350,22 @@ class SessionMetrics:
             reverse=True,
         )
 
-    def corpus_is_stalling(self, min_tokens_per_round: int = 500) -> bool:
+    def corpus_is_stalling(
+        self, min_tokens_per_round: int = 500, current_run_start: int = 0
+    ) -> bool:
         """Check if research is producing diminishing returns.
 
-        Returns True if the last 2 rounds each added fewer than min_tokens_per_round.
+        Only checks rounds from the current run (ignores previous continuation runs).
+        Returns True if the last 2 rounds of the CURRENT run each added < min_tokens_per_round.
+
+        Args:
+            min_tokens_per_round: Minimum tokens to consider a round productive
+            current_run_start: Index into round_snapshots where the current run began
         """
-        if len(self.round_snapshots) < 2:
+        current_rounds = self.round_snapshots[current_run_start:]
+        if len(current_rounds) < 2:
             return False
-        last_two = self.round_snapshots[-2:]
+        last_two = current_rounds[-2:]
         return all(r.tokens_added < min_tokens_per_round for r in last_two)
 
     def should_skip_domain(self, domain: str, failure_threshold: int = 3) -> bool:
@@ -1257,6 +1265,9 @@ class DeepResearchEngine:
         self.session.metadata["deep_research"] = True
         self.session.save_metadata()
 
+        # Track where this run starts in metrics (for stalling detection)
+        run_start_idx = len(self.metrics.round_snapshots)
+
         console.print(f"\n[bold cyan]Deep Research:[/bold cyan] {topic}")
         if budget.max_minutes > 0:
             console.print(f"Time budget: {budget.max_minutes} minutes  Max rounds: {rounds}")
@@ -1293,8 +1304,8 @@ class DeepResearchEngine:
                 self.session.metadata["rounds"] = round_num
                 self.metrics.begin_round(round_num)
 
-                # Check if research is stalling
-                if self.metrics.corpus_is_stalling():
+                # Check if research is stalling (only this run's rounds)
+                if self.metrics.corpus_is_stalling(current_run_start=run_start_idx):
                     console.print(
                         "  [yellow]Research is stalling (minimal new content) "
                         "— triggering final roundup[/yellow]"
