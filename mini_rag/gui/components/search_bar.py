@@ -42,7 +42,7 @@ class SearchBar(ttk.Frame):
         # Don't pack yet — shown during operations
 
         self.go_btn = ttk.Button(
-            mode_frame, text="Go", command=self._on_search, width=6,
+            mode_frame, text="Go", command=self._on_search, width=8,
             style="Accent.TButton",
         )
         self.go_btn.pack(side=tk.RIGHT)
@@ -77,7 +77,7 @@ class SearchBar(ttk.Frame):
 
     def _set_searching(self):
         self._searching = True
-        self.go_btn.config(state="disabled", text="Searching...")
+        self.go_btn.config(state="disabled", text="Search...")
         self.entry.config(state="disabled")
         self.cancel_btn.pack(side=tk.RIGHT, padx=(0, 2))
 
@@ -92,9 +92,8 @@ class SearchBar(ttk.Frame):
         op = data.get("new", "idle")
         if op == "searching":
             self._set_searching()
-            self.go_btn.config(text="Searching...")
         elif op == "streaming":
-            self.go_btn.config(text="Generating...")
+            self.go_btn.config(text="Wait...")
             self.cancel_btn.pack(side=tk.RIGHT, padx=(0, 2))
         elif op == "idle":
             self._set_idle()

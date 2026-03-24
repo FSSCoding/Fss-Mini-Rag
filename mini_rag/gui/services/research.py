@@ -4,15 +4,50 @@ Wraps web search, scraping, and deep research backends
 with event emission for UI updates.
 """
 
+import json
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from ..events import EventBus
 
 logger = logging.getLogger(__name__)
+
+
+def _log_scrape(
+    project_path: str,
+    url: str,
+    success: bool,
+    title: str = "",
+    word_count: int = 0,
+    error: str = "",
+):
+    """Append a scrape result to the JSONL log file.
+
+    Log lives at <working_dir>/scrape-log.jsonl. Each line is a JSON object
+    with: timestamp, url, domain, success, title, word_count, error.
+    This enables future analysis of scrape patterns and adapter development.
+    """
+    try:
+        log_path = Path(project_path) / "scrape-log.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "url": url,
+            "domain": urlparse(url).netloc,
+            "success": success,
+            "title": title[:200] if title else "",
+            "word_count": word_count,
+            "error": error[:500] if error else "",
+        }
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        logger.debug(f"Failed to write scrape log: {e}")
 
 
 class ResearchService:
@@ -82,15 +117,25 @@ class ResearchService:
                         "done": i, "total": total, "current_url": url,
                     })
 
-                    page = scraper.fetch(url)
+                    try:
+                        page = scraper.fetch(url)
+                    except Exception as fetch_err:
+                        page = None
+                        _log_scrape(project_path, url, False, error=str(fetch_err))
+
                     if page:
                         session.add_page(page)
+                        _log_scrape(project_path, url, True,
+                                    title=page.title, word_count=page.word_count)
                         self.bus.emit("research:page_scraped", {
                             "title": page.title,
                             "url": page.url,
                             "word_count": page.word_count,
                             "content": page.content,
                         })
+                    elif page is None:
+                        # fetch returned None (no exception)
+                        _log_scrape(project_path, url, False, error="fetch returned None")
 
                 self.bus.emit("research:scrape_completed", {
                     "session_dir": str(session.session_dir),

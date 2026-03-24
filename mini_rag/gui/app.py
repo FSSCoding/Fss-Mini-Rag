@@ -294,10 +294,12 @@ class MiniRAGApp(tk.Tk):
 
     def _on_search_requested(self, data):
         if not self.state.active_collection:
+            self.state.set_operation("idle")
             self.state.error = "Select a collection first"
             return
 
         if not (Path(self.state.active_collection) / ".mini-rag").exists():
+            self.state.set_operation("idle")
             self.state.error = "Collection not indexed. Click Index first."
             return
 
