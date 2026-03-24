@@ -170,7 +170,7 @@ class WebScraperConfig:
 class SearchEngineConfig:
     """Configuration for web search engines."""
 
-    engine: str = "duckduckgo"  # "duckduckgo", "tavily", "brave"
+    engine: str = "auto"  # "auto", "duckduckgo", "tavily", "brave"
     max_results: int = 10
     tavily_api_key: Optional[str] = None
     brave_api_key: Optional[str] = None

@@ -270,29 +270,43 @@ class BraveSearch:
 
 
 def create_search_engine(
-    engine: str = "duckduckgo",
+    engine: str = "auto",
     tavily_api_key: Optional[str] = None,
     brave_api_key: Optional[str] = None,
 ) -> SearchEngine:
     """Factory: create a search engine from config.
+
+    When engine="auto", uses the best available engine:
+    Tavily (if key available) > Brave (if key available) > DuckDuckGo (fallback).
 
     Falls back to environment variables (TAVILY_API_KEY, BRAVE_API_KEY)
     when keys are not passed explicitly.
     """
     import os
 
+    tavily_key = tavily_api_key or os.environ.get("TAVILY_API_KEY")
+    brave_key = brave_api_key or os.environ.get("BRAVE_API_KEY")
+
     if engine == "tavily":
-        key = tavily_api_key or os.environ.get("TAVILY_API_KEY")
-        if not key:
-            logger.warning("Tavily API key not set (param or TAVILY_API_KEY env), falling back to DuckDuckGo")
-            return DuckDuckGoSearch()
-        return TavilySearch(key)
+        if tavily_key:
+            return TavilySearch(tavily_key)
+        logger.warning("Tavily API key not set, falling back to best available")
+        engine = "auto"
 
     if engine == "brave":
-        key = brave_api_key or os.environ.get("BRAVE_API_KEY")
-        if not key:
-            logger.warning("Brave API key not set (param or BRAVE_API_KEY env), falling back to DuckDuckGo")
-            return DuckDuckGoSearch()
-        return BraveSearch(key)
+        if brave_key:
+            return BraveSearch(brave_key)
+        logger.warning("Brave API key not set, falling back to best available")
+        engine = "auto"
+
+    if engine == "auto":
+        # Use best available: Tavily > Brave > DuckDuckGo
+        if tavily_key:
+            logger.info("Auto-selected Tavily search (API key available)")
+            return TavilySearch(tavily_key)
+        if brave_key:
+            logger.info("Auto-selected Brave search (API key available)")
+            return BraveSearch(brave_key)
+        logger.info("Using DuckDuckGo search (no API keys available)")
 
     return DuckDuckGoSearch()

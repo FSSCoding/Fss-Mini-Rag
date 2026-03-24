@@ -784,9 +784,12 @@ class ResearchAnalyzer:
         source_files = session.get_all_source_files()
 
         if not source_files:
+            # No corpus yet — use LLM to generate initial search queries
+            # rather than just parroting the raw topic back
+            initial_queries = self.generate_queries(topic, [topic], num_queries=5)
             return AnalysisResult(
                 gap_topics=[topic],
-                follow_up_queries=[topic],
+                follow_up_queries=initial_queries,
                 confidence="LOW",
             )
 
@@ -1366,6 +1369,13 @@ class DeepResearchEngine:
                 all_urls = []
                 for query in queries:
                     results = self.search_engine.search(query, max_results=5)
+
+                    # If search returns nothing, try a shorter version of the query
+                    if not results and len(query.split()) > 5:
+                        short_query = " ".join(query.replace('"', '').split()[:6])
+                        console.print(f"    [dim]No results, retrying: {short_query[:50]}[/dim]")
+                        results = self.search_engine.search(short_query, max_results=5)
+
                     urls = [r.url for r in results if not self.session.has_visited(r.url)]
                     all_urls.extend(urls)
                     self.report.searches_performed += 1
