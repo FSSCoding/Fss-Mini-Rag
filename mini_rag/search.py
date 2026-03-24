@@ -232,7 +232,7 @@ class CodeSearcher:
 
             self.db = lancedb.connect(self.rag_dir)
 
-            if "code_vectors" not in self.db.table_names():
+            if "code_vectors" not in self.db.list_tables():
                 print("🔧 Index Database Corrupted")
                 print("   The search index exists but is missing data tables")
                 print(

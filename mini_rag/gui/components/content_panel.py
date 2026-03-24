@@ -93,3 +93,5 @@ class ContentPanel(ttk.LabelFrame):
 
     def clear(self):
         self.renderer.clear()
+        # Re-show empty state
+        self._empty.place(relx=0, rely=0, relwidth=1, relheight=1)

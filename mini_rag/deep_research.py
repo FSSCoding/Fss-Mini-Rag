@@ -1039,7 +1039,7 @@ class CorpusPruner:
 
         try:
             db = lancedb.connect(rag_dir)
-            if "code_vectors" not in db.table_names():
+            if "code_vectors" not in db.list_tables():
                 return None
             table = db.open_table("code_vectors")
             df = table.to_pandas()

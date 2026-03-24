@@ -801,7 +801,7 @@ class ProjectIndexer:
             )
 
             # Create or open table
-            if "code_vectors" in self.db.table_names():
+            if "code_vectors" in self.db.list_tables():
                 try:
                     # Try to open existing table
                     self.table = self.db.open_table("code_vectors")
@@ -825,7 +825,7 @@ class ProjectIndexer:
                         logger.info("Opened existing code_vectors table")
                 except Exception as e:
                     logger.warning(f"Failed to open existing table: {e}. Recreating...")
-                    if "code_vectors" in self.db.table_names():
+                    if "code_vectors" in self.db.list_tables():
                         self.db.drop_table("code_vectors")
                     self.table = self.db.create_table("code_vectors", schema=schema)
                     logger.info("Recreated code_vectors table")
@@ -892,7 +892,7 @@ class ProjectIndexer:
                 "files": {},
             }
             # Clear existing table
-            if "code_vectors" in self.db.table_names():
+            if "code_vectors" in self.db.list_tables():
                 self.db.drop_table("code_vectors")
                 self.table = None
                 # Reinitialize the database to recreate the table
