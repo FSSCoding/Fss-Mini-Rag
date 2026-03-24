@@ -29,24 +29,42 @@ MANAGED_KEYS = {
 
 
 def load_env() -> Dict[str, str]:
-    """Parse .env file into a dict. Only returns MANAGED_KEYS."""
+    """Load managed keys from all sources: os.environ, config .env, project .env.
+
+    Priority: os.environ > ~/.config/fss-mini-rag/.env > project .env
+    This ensures keys loaded by _load_env_keys at CLI startup are visible.
+    """
     result = {}
-    if not ENV_FILE.exists():
-        return result
-    try:
-        for line in ENV_FILE.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key in MANAGED_KEYS and value:
-                result[key] = value
-        return result
-    except Exception as e:
-        logger.warning(f"Failed to read {ENV_FILE}: {e}")
-        return result
+
+    # 1. Check config .env file
+    if ENV_FILE.exists():
+        try:
+            result.update(_parse_env_file(ENV_FILE))
+        except Exception as e:
+            logger.warning(f"Failed to read {ENV_FILE}: {e}")
+
+    # 2. os.environ overrides file (highest priority — set by _load_env_keys at startup)
+    for key in MANAGED_KEYS:
+        val = os.environ.get(key)
+        if val:
+            result[key] = val
+
+    return result
+
+
+def _parse_env_file(path: Path) -> Dict[str, str]:
+    """Parse a .env file, returning only MANAGED_KEYS."""
+    result = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key in MANAGED_KEYS and value:
+            result[key] = value
+    return result
 
 
 def save_env(keys: Dict[str, str]):

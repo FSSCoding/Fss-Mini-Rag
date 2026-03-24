@@ -132,7 +132,7 @@ class MiniRAGApp(tk.Tk):
 
         # Notebook wraps everything except status bar
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 0))
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 2))
 
         # === Tab 1: Search & Index (existing layout) ===
         search_frame = ttk.Frame(self.notebook)
@@ -493,6 +493,9 @@ class MiniRAGApp(tk.Tk):
             if sources_str not in self.collections.get_collections():
                 self.collections.add_collection(sources_str)
                 self._save_collections()
+
+            # Auto-select this collection so it's ready to search after indexing
+            self.state.active_collection = sources_str
 
             self.indexing_service.start(sources_dir)
             self.state.set_operation("indexing", "Indexing research session...")

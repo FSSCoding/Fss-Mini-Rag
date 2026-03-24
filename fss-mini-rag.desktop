@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=FSS-Mini-RAG
+Comment=Semantic search and web research tool
+Exec=bash -c "source /MASTERFOLDER/Coding/Fss-Mini-Rag/.venv/bin/activate && rag-mini gui"
+Icon=/MASTERFOLDER/Coding/Fss-Mini-Rag/assets/Fss_Mini_Rag.png
+Terminal=false
+Type=Application
+Categories=Utility;Development;
+StartupNotify=true
