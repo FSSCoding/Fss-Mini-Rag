@@ -154,12 +154,32 @@ class RenderedMarkdown(tk.Text):
         self.config(state=tk.NORMAL)
         self.delete("1.0", tk.END)
 
+        # Sanitize content before rendering
+        text = self._sanitize_content(text)
+
         if strip_markers:
             self._render_markdown(text)
         else:
             self.insert("1.0", text)
 
         self.config(state=tk.DISABLED)
+
+    @staticmethod
+    def _sanitize_content(text: str) -> str:
+        """Strip base64 images, fix links, and remove noise from scraped content."""
+        import re
+        # Strip markdown images with base64 data URIs (tracking pixels, icons)
+        text = re.sub(r'!\[[^\]]*\]\(data:image/[^)]+\)', '', text)
+        # Strip raw base64 data URI strings on their own line
+        text = re.sub(r'^data:image/[^\s]+$', '', text, flags=re.MULTILINE)
+        # Convert relative-path links to plain text (can't resolve without base URL)
+        # [text](/path) or [text](path) → just text
+        text = re.sub(r'\[([^\]]+)\]\((?!//)(?!https?://)([^)]+)\)', r'\1', text)
+        # Strip empty image references
+        text = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', text)
+        # Collapse multiple blank lines left by stripping
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
 
     def render_code(self, code: str, language: str = "python", file_info: str = ""):
         """Render a code chunk with syntax highlighting and metadata header."""

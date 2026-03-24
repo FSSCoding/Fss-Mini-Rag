@@ -162,11 +162,19 @@ def get_collection_info(path_str: str) -> Dict[str, Any]:
 
 
 def is_research_session(path_str: str) -> bool:
-    """Check if a collection path is a web research session."""
+    """Check if a collection path is a web research session.
+
+    Detects:
+    - Direct session dir (has session.json)
+    - Sources subdir of a session (parent has session.json)
+    - Path under mini-research/ or web-research/ folders
+    """
     p = Path(path_str)
-    # Research sessions have a session.json or live under web-research/
     if (p / "session.json").exists():
         return True
-    if "web-research" in p.parts:
+    if (p.parent / "session.json").exists():
+        return True
+    research_markers = {"web-research", "mini-research"}
+    if research_markers & set(p.parts):
         return True
     return False
