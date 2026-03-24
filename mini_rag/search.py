@@ -4,6 +4,7 @@ Optimized for code search with relevance scoring.
 """
 
 import logging
+import os
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -187,7 +188,10 @@ class CodeSearcher:
 
                 index_emb = manifest.get("embedding", {})
                 if index_emb.get("model") and index_emb.get("mode") != "unavailable":
-                    emb = CodeEmbedder(model_name=index_emb["model"])
+                    emb = CodeEmbedder(
+                        model_name=index_emb["model"],
+                        api_key=os.environ.get("EMBEDDING_API_KEY") or os.environ.get("LLM_API_KEY"),
+                    )
                     if emb.mode != "unavailable":
                         logger.info(
                             f"Using indexed model: {index_emb['model']} "
@@ -201,7 +205,9 @@ class CodeSearcher:
             except Exception:
                 pass
 
-        return CodeEmbedder()
+        return CodeEmbedder(
+            api_key=os.environ.get("EMBEDDING_API_KEY") or os.environ.get("LLM_API_KEY"),
+        )
 
     def _connect(self):
         """Connect to the LanceDB database."""

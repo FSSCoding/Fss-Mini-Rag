@@ -70,8 +70,10 @@ class ProjectIndexer:
         # Create RAG directory if it doesn't exist
         self.rag_dir.mkdir(exist_ok=True)
 
-        # Initialize components
-        self.embedder = embedder or CodeEmbedder()
+        # Initialize components (pass API key from env for authenticated endpoints)
+        self.embedder = embedder or CodeEmbedder(
+            api_key=os.environ.get("EMBEDDING_API_KEY") or os.environ.get("LLM_API_KEY"),
+        )
         self.chunker = chunker or CodeChunker()
         self.max_workers = max_workers
 
