@@ -87,6 +87,10 @@ class ResearchTab(ttk.Frame):
         ttk.Spinbox(self.deep_frame, from_=1, to=20,
                     textvariable=self.rounds_var, width=4).pack(side=tk.LEFT)
 
+        self.no_stall_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.deep_frame, text="No stall-out",
+                        variable=self.no_stall_var).pack(side=tk.LEFT, padx=(10, 0))
+
         # === Inline progress bar (hidden by default) ===
         self.progress_frame = ttk.Frame(self)
         self.progress_label = ttk.Label(self.progress_frame, text="", foreground="#888888")
@@ -236,6 +240,7 @@ class ResearchTab(ttk.Frame):
             "engine": self.engine_var.get(),
             "max_time_min": time_min,
             "max_rounds": self.rounds_var.get(),
+            "disable_stall_detection": self.no_stall_var.get(),
         })
         self.search_btn.config(state=tk.DISABLED)
         self.cancel_btn.config(state=tk.NORMAL)

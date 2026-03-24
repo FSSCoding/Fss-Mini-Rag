@@ -527,6 +527,7 @@ class MiniRAGApp(tk.Tk):
             data["query"], data.get("engine", "duckduckgo"),
             project_path,
             data.get("max_time_min", 60), data.get("max_rounds", 5),
+            disable_stall_detection=data.get("disable_stall_detection", False),
         )
 
     def _on_research_index(self, data):

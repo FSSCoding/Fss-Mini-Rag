@@ -46,6 +46,7 @@ class ScrapedPage:
     word_count: int
     links: List[str] = field(default_factory=list)  # Outbound links for crawling
     source_type: str = "web"  # "web", "pdf", "arxiv", "github"
+    raw_bytes: Optional[bytes] = None  # Original file (PDF, etc.) for archival
 
 
 class ContentExtractor(Protocol):
@@ -107,6 +108,17 @@ def save_scraped_page(page: ScrapedPage, output_dir: Path) -> Path:
     content = frontmatter + f"# {page.title}\n\n" + page.content + footer
     filepath.write_text(content, encoding="utf-8")
     logger.info(f"Saved: {filepath}")
+
+    # Save original binary (PDF, etc.) alongside the markdown
+    if page.raw_bytes and page.source_type in ("pdf", "arxiv"):
+        originals_dir = output_dir / "originals"
+        originals_dir.mkdir(exist_ok=True)
+        ext = ".pdf"  # Default for pdf/arxiv
+        original_path = originals_dir / f"{slug}{ext}"
+        if not original_path.exists():
+            original_path.write_bytes(page.raw_bytes)
+            logger.info(f"Saved original: {original_path}")
+
     return filepath
 
 
@@ -433,6 +445,7 @@ class PDFExtractor:
                 word_count=word_count,
                 links=[],
                 source_type="pdf",
+                raw_bytes=raw,
             )
 
         except Exception as e:

@@ -1248,12 +1248,15 @@ class DeepResearchEngine:
         self,
         max_time_minutes: int = 0,
         max_rounds: int = 5,
+        disable_stall_detection: bool = False,
     ) -> ResearchReport:
         """Run the deep research loop.
 
         Args:
             max_time_minutes: Time budget (0 = use max_rounds only)
             max_rounds: Maximum research cycles
+            disable_stall_detection: If True, ignore stall detection and keep
+                running until time/round limit. Timer still applies.
 
         Returns:
             ResearchReport with comprehensive stats
@@ -1308,12 +1311,16 @@ class DeepResearchEngine:
                 self.metrics.begin_round(round_num)
 
                 # Check if research is stalling (only this run's rounds)
-                if self.metrics.corpus_is_stalling(current_run_start=run_start_idx):
+                if not disable_stall_detection and self.metrics.corpus_is_stalling(current_run_start=run_start_idx):
                     console.print(
                         "  [yellow]Research is stalling (minimal new content) "
                         "— triggering final roundup[/yellow]"
                     )
                     break
+                elif disable_stall_detection and self.metrics.corpus_is_stalling(current_run_start=run_start_idx):
+                    console.print(
+                        "  [yellow]Stall detected but override active — continuing[/yellow]"
+                    )
 
                 # ── ANALYZE ──
                 phase_start = time.time()

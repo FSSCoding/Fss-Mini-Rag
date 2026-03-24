@@ -154,7 +154,8 @@ class ResearchService:
         self.scrape_urls([url], project_path, query or url[:50])
 
     def deep_research(self, query: str, engine_name: str, project_path: str,
-                      max_time_min: int = 60, max_rounds: int = 5):
+                      max_time_min: int = 60, max_rounds: int = 5,
+                      disable_stall_detection: bool = False):
         """Run deep research engine in background."""
         self._cancel.clear()
 
@@ -243,6 +244,7 @@ class ResearchService:
                     report = engine.run(
                         max_time_minutes=max_time_min,
                         max_rounds=max_rounds,
+                        disable_stall_detection=disable_stall_detection,
                     )
                 finally:
                     stop_monitor.set()
