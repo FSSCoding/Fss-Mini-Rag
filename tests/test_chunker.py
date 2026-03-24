@@ -289,7 +289,7 @@ class TestLanguageConfigs:
         assert small_config["min_size"] == 50
 
         large_config = chunker._get_effective_config("python", file_size=25000)
-        assert large_config["max_size"] > 3000  # Should increase for large files
+        assert large_config["max_size"] == 3000  # Large files use language default, never inflated
 
 
 class TestBraceCounting:

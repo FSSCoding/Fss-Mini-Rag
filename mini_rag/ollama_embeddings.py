@@ -360,8 +360,16 @@ class OllamaEmbedder:
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Failed to pull model {self.model_name}: {e}")
 
+    # Conservative char limit for embedding models.
+    # MiniLM: 512 tokens ≈ 1800 chars. Leave headroom for tokenization variance.
+    MAX_EMBED_CHARS = 1800
+
     def _get_embedding(self, text: str) -> np.ndarray:
         """Get embedding using the best available provider."""
+        # Truncate to stay within embedding model context limits
+        if len(text) > self.MAX_EMBED_CHARS:
+            text = text[:self.MAX_EMBED_CHARS]
+
         if self.mode == "openai":
             return self._get_openai_embedding(text)
         elif self.mode == "ollama" and self.ollama_available:
@@ -554,10 +562,14 @@ class OllamaEmbedder:
         # Preprocess code for better embeddings
         processed_code = [self._preprocess_code(c, language) for c in code]
 
-        # Generate embeddings
+        # Generate embeddings (with per-chunk error recovery)
         embeddings = []
         for text in processed_code:
-            embedding = self._get_embedding(text)
+            try:
+                embedding = self._get_embedding(text)
+            except (RuntimeError, Exception) as e:
+                logger.warning(f"Embedding failed for chunk ({len(text)} chars), using zero vector: {e}")
+                embedding = np.zeros(self.embedding_dim, dtype=np.float32)
             embeddings.append(embedding)
 
         embeddings = np.array(embeddings, dtype=np.float32)

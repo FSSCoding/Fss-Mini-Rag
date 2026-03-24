@@ -223,13 +223,10 @@ class CodeChunker:
         max_size = lang_config.get("max_size", self.max_chunk_size)
         min_size = lang_config.get("min_size", self.min_chunk_size)
 
-        # Adjust based on file size
-        if file_size > 0:
-            if file_size < 500:
-                max_size = max(max_size // 2, 200)
-                min_size = 50
-            elif file_size > 20000:
-                max_size = min(max_size + 1000, 4000)
+        # Adjust for very small files only — never increase max_size
+        if file_size > 0 and file_size < 500:
+            max_size = max(max_size // 2, 200)
+            min_size = 50
 
         return {"max_size": max_size, "min_size": min_size}
 
