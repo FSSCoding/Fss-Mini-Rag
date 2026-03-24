@@ -16,14 +16,44 @@ CONFIG_FILE = CONFIG_DIR / "gui.json"
 
 PRESETS = {
     "lmstudio": {
-        "name": "LM Studio",
+        "name": "LM Studio (local)",
         "embedding_url": "http://localhost:1234/v1",
         "llm_url": "http://localhost:1234/v1",
+        "needs_api_key": False,
+        "cost_per_1m_input": 0.0,
+        "cost_per_1m_output": 0.0,
     },
-    "bobai": {
-        "name": "BobAI",
+    "bobai-local": {
+        "name": "BobAI (local)",
         "embedding_url": "http://localhost:11440/embed",
         "llm_url": "http://localhost:11433/v1",
+        "needs_api_key": False,
+        "cost_per_1m_input": 0.0,
+        "cost_per_1m_output": 0.0,
+    },
+    "bobai-rtx3090": {
+        "name": "BobAI RTX 3090",
+        "embedding_url": "https://rtx3090.bobai.com.au/v1",
+        "llm_url": "https://rtx3090.bobai.com.au/v1",
+        "needs_api_key": True,
+        "cost_per_1m_input": 0.0,
+        "cost_per_1m_output": 0.0,
+    },
+    "openai": {
+        "name": "OpenAI",
+        "embedding_url": "https://api.openai.com/v1",
+        "llm_url": "https://api.openai.com/v1",
+        "needs_api_key": True,
+        "cost_per_1m_input": 2.50,
+        "cost_per_1m_output": 10.00,
+    },
+    "openai-mini": {
+        "name": "OpenAI (mini)",
+        "embedding_url": "https://api.openai.com/v1",
+        "llm_url": "https://api.openai.com/v1",
+        "needs_api_key": True,
+        "cost_per_1m_input": 0.15,
+        "cost_per_1m_output": 0.60,
     },
 }
 
@@ -44,6 +74,9 @@ DEFAULTS = {
     "research_max_pages": 20,
     "research_project_path": None,
     "welcome_shown": False,
+    "cost_per_1m_input": 0.0,
+    "cost_per_1m_output": 0.0,
+    "needs_api_key": False,
 }
 
 
@@ -72,17 +105,23 @@ def save_config(config: Dict[str, Any]):
 
 
 def apply_preset(config: Dict[str, Any], preset_name: str) -> Dict[str, Any]:
-    """Apply a preset to the config."""
+    """Apply a preset to the config, including cost rates and key requirements."""
     if preset_name in PRESETS:
         preset = PRESETS[preset_name]
         config["preset"] = preset_name
         config["embedding_url"] = preset["embedding_url"]
         config["llm_url"] = preset["llm_url"]
+        config["needs_api_key"] = preset.get("needs_api_key", False)
+        config["cost_per_1m_input"] = preset.get("cost_per_1m_input", 0.0)
+        config["cost_per_1m_output"] = preset.get("cost_per_1m_output", 0.0)
     elif preset_name in config.get("custom_presets", {}):
         preset = config["custom_presets"][preset_name]
         config["preset"] = preset_name
         config["embedding_url"] = preset.get("embedding_url", config["embedding_url"])
         config["llm_url"] = preset.get("llm_url", config["llm_url"])
+        config["needs_api_key"] = preset.get("needs_api_key", False)
+        config["cost_per_1m_input"] = preset.get("cost_per_1m_input", 0.0)
+        config["cost_per_1m_output"] = preset.get("cost_per_1m_output", 0.0)
     return config
 
 

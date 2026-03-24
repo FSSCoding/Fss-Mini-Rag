@@ -61,6 +61,13 @@ class MiniRAGApp(tk.Tk):
         self.research_service = ResearchService(self.bus)
         self._indexing_start_time = None
 
+        # Cost tracking
+        from .cost_tracker import CostTracker
+        self.cost_tracker = CostTracker(self.bus)
+        self.cost_tracker.cost_per_1m_input = self.config_data.get("cost_per_1m_input", 0.0)
+        self.cost_tracker.cost_per_1m_output = self.config_data.get("cost_per_1m_output", 0.0)
+        self.bus.on("cost:reset", lambda d: self.cost_tracker.reset())
+
         # Apply saved settings to services
         self.search_service.llm_url = self.config_data.get("llm_url", "http://localhost:1234/v1")
         self.search_service.llm_model = self.config_data.get("llm_model", "auto")

@@ -25,14 +25,20 @@ class StatusBar(ttk.Frame):
         self.status_label = ttk.Label(self, textvariable=self.status_var, anchor=tk.W)
         self.status_label.pack(fill=tk.X, side=tk.LEFT, expand=True, padx=(8, 0))
 
+        # Cost display (right side, before progress bar)
+        self.cost_var = tk.StringVar(value="")
+        self.cost_label = ttk.Label(self, textvariable=self.cost_var, anchor=tk.E, foreground="#888888")
+        self.cost_label.pack(side=tk.RIGHT, padx=(5, 8))
+
         self.progress = ttk.Progressbar(self, length=200, mode="determinate")
-        self.progress.pack(side=tk.RIGHT, padx=(5, 8))
+        self.progress.pack(side=tk.RIGHT, padx=(5, 0))
         self.progress.pack_forget()
 
         # Subscribe to state changes
         self.bus.on("state:error", lambda d: self.after(0, lambda: self._on_error(d)))
         self.bus.on("state:hint", lambda d: self.after(0, lambda: self._on_hint(d)))
         self.bus.on("state:operation", lambda d: self.after(0, lambda: self._on_operation(d)))
+        self.bus.on("cost:updated", lambda d: self.after(0, lambda: self._on_cost(d)))
 
     def set_text(self, text: str):
         """Set normal status text. Clears any error state."""
@@ -91,6 +97,27 @@ class StatusBar(ttk.Frame):
         hint = data.get("new", "")
         if hint:
             self.set_hint(hint)
+
+    def _on_cost(self, data):
+        """Update cost display from cost:updated event."""
+        cost = data.get("session_cost", 0.0)
+        tok_in = data.get("session_tokens_in", 0)
+        tok_out = data.get("session_tokens_out", 0)
+        total_tok = tok_in + tok_out
+
+        if cost > 0 or total_tok > 0:
+            # Format tokens compactly
+            if total_tok >= 1_000_000:
+                tok_str = f"{total_tok / 1_000_000:.1f}M"
+            elif total_tok >= 1_000:
+                tok_str = f"{total_tok / 1_000:.1f}K"
+            else:
+                tok_str = str(total_tok)
+
+            cost_str = f"${cost:.4f}" if cost < 1 else f"${cost:.2f}"
+            self.cost_var.set(f"{cost_str} | {tok_str} tok")
+        else:
+            self.cost_var.set("")
 
     def _on_operation(self, data):
         op = data.get("new", "idle")

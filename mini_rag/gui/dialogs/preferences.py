@@ -1,4 +1,4 @@
-"""Preferences dialog for endpoint and model configuration."""
+"""Preferences dialog with tabbed layout: Endpoints, API Keys, Connection & Cost."""
 
 import threading
 import tkinter as tk
@@ -8,115 +8,198 @@ from typing import Any, Dict
 from ..config_store import PRESETS
 from ..events import EventBus
 from ..services.model_discovery import discover_models
+from ..env_manager import load_env, save_env, mask_key, get_key
 
 
 class PreferencesDialog(tk.Toplevel):
-    """Settings dialog for embedding/LLM endpoints and profiles."""
+    """Settings dialog for endpoints, API keys, and cost configuration."""
 
     def __init__(self, parent, config: Dict[str, Any], event_bus: EventBus):
         super().__init__(parent)
         self.title("Preferences")
         self.config_data = dict(config)
         self.bus = event_bus
+        self.geometry("560x520")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
         self._build()
 
     def _build(self):
-        pad = {"padx": 10, "pady": 5}
-        frame = ttk.Frame(self, padding=15)
-        frame.pack(fill=tk.BOTH, expand=True)
+        main = ttk.Frame(self, padding=10)
+        main.pack(fill=tk.BOTH, expand=True)
+
+        self.notebook = ttk.Notebook(main)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        self._build_endpoints_tab()
+        self._build_keys_tab()
+        self._build_connection_tab()
+
+        # Bottom buttons
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+        ttk.Button(btn_frame, text="Save Custom Preset", command=self._save_custom).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text="Reset", command=self._reset).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text="OK", command=self._on_ok, style="Accent.TButton").pack(side=tk.RIGHT, padx=3)
+
+    # ─── Tab 1: Endpoints ───
+
+    def _build_endpoints_tab(self):
+        tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(tab, text="Endpoints")
+        pad = {"padx": 8, "pady": 4}
 
         # Preset selector
-        ttk.Label(frame, text="Preset:").grid(row=0, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="Preset:").grid(row=0, column=0, sticky=tk.W, **pad)
         self.preset_var = tk.StringVar(value=self.config_data.get("preset", "lmstudio"))
         preset_names = list(PRESETS.keys()) + list(self.config_data.get("custom_presets", {}).keys())
-        preset_combo = ttk.Combobox(frame, textvariable=self.preset_var, values=preset_names, width=20)
+        preset_combo = ttk.Combobox(tab, textvariable=self.preset_var, values=preset_names, width=22)
         preset_combo.grid(row=0, column=1, sticky=tk.W, **pad)
         preset_combo.bind("<<ComboboxSelected>>", self._on_preset_changed)
 
         # Embedding section
-        ttk.Separator(frame, orient=tk.HORIZONTAL).grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=10)
-        ttk.Label(frame, text="Embedding", font=("", 10, "bold")).grid(row=2, column=0, sticky=tk.W, **pad)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=8)
+        ttk.Label(tab, text="Embedding", font=("", 10, "bold")).grid(row=2, column=0, sticky=tk.W, **pad)
 
-        ttk.Label(frame, text="URL:").grid(row=3, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="URL:").grid(row=3, column=0, sticky=tk.W, **pad)
         self.emb_url_var = tk.StringVar(value=self.config_data.get("embedding_url", ""))
-        ttk.Entry(frame, textvariable=self.emb_url_var, width=35).grid(row=3, column=1, **pad)
+        ttk.Entry(tab, textvariable=self.emb_url_var, width=38).grid(row=3, column=1, **pad)
 
-        ttk.Label(frame, text="Model:").grid(row=4, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="Model:").grid(row=4, column=0, sticky=tk.W, **pad)
         self.emb_model_var = tk.StringVar(value=self.config_data.get("embedding_model", "auto"))
-        self.emb_model_combo = ttk.Combobox(frame, textvariable=self.emb_model_var, width=33)
+        self.emb_model_combo = ttk.Combobox(tab, textvariable=self.emb_model_var, width=36)
         self.emb_model_combo.grid(row=4, column=1, **pad)
 
-        ttk.Label(frame, text="Profile:").grid(row=5, column=0, sticky=tk.W, **pad)
-        profile_frame = ttk.Frame(frame)
+        ttk.Label(tab, text="Profile:").grid(row=5, column=0, sticky=tk.W, **pad)
+        profile_frame = ttk.Frame(tab)
         profile_frame.grid(row=5, column=1, sticky=tk.W, **pad)
         self.profile_var = tk.StringVar(value=self.config_data.get("embedding_profile", "precision"))
         ttk.Radiobutton(profile_frame, text="Precision", variable=self.profile_var, value="precision").pack(side=tk.LEFT)
         ttk.Radiobutton(profile_frame, text="Conceptual", variable=self.profile_var, value="conceptual").pack(side=tk.LEFT, padx=10)
 
         # LLM section
-        ttk.Separator(frame, orient=tk.HORIZONTAL).grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=10)
-        ttk.Label(frame, text="LLM (Synthesis)", font=("", 10, "bold")).grid(row=7, column=0, sticky=tk.W, **pad)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=8)
+        ttk.Label(tab, text="LLM (Synthesis)", font=("", 10, "bold")).grid(row=7, column=0, sticky=tk.W, **pad)
 
-        ttk.Label(frame, text="URL:").grid(row=8, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="URL:").grid(row=8, column=0, sticky=tk.W, **pad)
         self.llm_url_var = tk.StringVar(value=self.config_data.get("llm_url", ""))
-        ttk.Entry(frame, textvariable=self.llm_url_var, width=35).grid(row=8, column=1, **pad)
+        ttk.Entry(tab, textvariable=self.llm_url_var, width=38).grid(row=8, column=1, **pad)
 
-        ttk.Label(frame, text="Model:").grid(row=9, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="Model:").grid(row=9, column=0, sticky=tk.W, **pad)
         self.llm_model_var = tk.StringVar(value=self.config_data.get("llm_model", "auto"))
-        self.llm_model_combo = ttk.Combobox(frame, textvariable=self.llm_model_var, width=33)
+        self.llm_model_combo = ttk.Combobox(tab, textvariable=self.llm_model_var, width=36)
         self.llm_model_combo.grid(row=9, column=1, **pad)
 
         # Query expansion
-        ttk.Separator(frame, orient=tk.HORIZONTAL).grid(row=10, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=10, column=0, columnspan=2, sticky=tk.EW, pady=8)
         self.expand_var = tk.BooleanVar(value=self.config_data.get("expand_queries", False))
-        ttk.Checkbutton(frame, text="Enable query expansion (LLM)", variable=self.expand_var).grid(
+        ttk.Checkbutton(tab, text="Enable query expansion (LLM)", variable=self.expand_var).grid(
             row=11, column=0, columnspan=2, sticky=tk.W, **pad
         )
 
-        # Refresh models button
-        ttk.Button(frame, text="Refresh Models", command=self._refresh_models).grid(
+        # Refresh models
+        ttk.Button(tab, text="Refresh Models", command=self._refresh_models).grid(
             row=12, column=0, columnspan=2, sticky=tk.W, **pad
         )
 
-        # Test connection button
-        self.test_label = ttk.Label(frame, text="", foreground="gray")
-        self.test_label.grid(row=13, column=0, columnspan=2, sticky=tk.W, **pad)
+    # ─── Tab 2: API Keys ───
 
-        ttk.Button(frame, text="Test Connections", command=self._test_connections).grid(
-            row=14, column=0, columnspan=2, sticky=tk.W, **pad
-        )
+    def _build_keys_tab(self):
+        tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(tab, text="API Keys")
 
-        # Buttons
-        btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=15, column=0, columnspan=2, pady=15)
-        ttk.Button(btn_frame, text="Save Custom", command=self._save_custom).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Reset", command=self._reset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="OK", command=self._on_ok).pack(side=tk.RIGHT, padx=5)
+        ttk.Label(
+            tab, text="Keys are stored securely in ~/.config/fss-mini-rag/.env",
+            foreground="#888888", font=("", 9, "italic"),
+        ).pack(anchor=tk.W, pady=(0, 10))
 
-    def _refresh_models(self):
-        self.test_label.config(text="Discovering models...")
+        env = load_env()
+        self._key_vars = {}
+        self._key_entries = {}
 
-        def _discover():
-            emb_url = self.emb_url_var.get()
-            llm_url = self.llm_url_var.get()
-            emb_models = discover_models(emb_url)
-            llm_models = discover_models(llm_url) if llm_url != emb_url else emb_models
+        keys = [
+            ("LLM_API_KEY", "LLM / OpenAI API Key"),
+            ("EMBEDDING_API_KEY", "Embedding API Key"),
+            ("OPENAI_API_KEY", "OpenAI API Key (fallback)"),
+            ("TAVILY_API_KEY", "Tavily Search API Key"),
+            ("BRAVE_API_KEY", "Brave Search API Key"),
+        ]
 
-            all_emb = ["auto"] + emb_models.get("embedding", [])
-            all_llm = ["auto"] + (llm_models.get("llm", []) or llm_models.get("embedding", []))
+        for key_name, label in keys:
+            frame = ttk.LabelFrame(tab, text=label, padding=5)
+            frame.pack(fill=tk.X, pady=3)
 
-            self.after(0, lambda: self._apply_models(all_emb, all_llm))
+            current = env.get(key_name, "")
+            var = tk.StringVar(value=current)
+            self._key_vars[key_name] = var
 
-        threading.Thread(target=_discover, daemon=True).start()
+            entry = ttk.Entry(frame, textvariable=var, show="*", width=45)
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+            self._key_entries[key_name] = entry
 
-    def _apply_models(self, emb_models, llm_models):
-        self.emb_model_combo["values"] = emb_models
-        self.llm_model_combo["values"] = llm_models
-        count = len(emb_models) + len(llm_models) - 2  # minus the 2 "auto" entries
-        self.test_label.config(text=f"Found {count} models")
+            # Show/Hide toggle
+            show_var = tk.BooleanVar(value=False)
+            def _toggle(e=entry, sv=show_var):
+                e.config(show="" if sv.get() else "*")
+            ttk.Checkbutton(frame, text="Show", variable=show_var, command=_toggle).pack(side=tk.RIGHT)
+
+            # Status indicator
+            status = mask_key(current) if current else "(not set)"
+            ttk.Label(frame, text=status, foreground="#888888", font=("", 8)).pack(side=tk.RIGHT, padx=5)
+
+    # ─── Tab 3: Connection & Cost ───
+
+    def _build_connection_tab(self):
+        tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(tab, text="Connection & Cost")
+
+        # Connection test section
+        test_frame = ttk.LabelFrame(tab, text="Connection Test", padding=8)
+        test_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Button(
+            test_frame, text="Test Connection", command=self._test_connections,
+            style="Accent.TButton",
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        self.test_step1 = ttk.Label(test_frame, text="1. Models: not tested", foreground="#888888")
+        self.test_step1.pack(anchor=tk.W, padx=10)
+        self.test_step2 = ttk.Label(test_frame, text="2. Embedding: not tested", foreground="#888888")
+        self.test_step2.pack(anchor=tk.W, padx=10)
+        self.test_step3 = ttk.Label(test_frame, text="3. LLM: not tested", foreground="#888888")
+        self.test_step3.pack(anchor=tk.W, padx=10)
+
+        # Cost rates section
+        cost_frame = ttk.LabelFrame(tab, text="Cost Rates (per 1M tokens)", padding=8)
+        cost_frame.pack(fill=tk.X, pady=(0, 10))
+
+        row = ttk.Frame(cost_frame)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Input:  $").pack(side=tk.LEFT)
+        self.cost_input_var = tk.StringVar(value=str(self.config_data.get("cost_per_1m_input", 0.0)))
+        ttk.Entry(row, textvariable=self.cost_input_var, width=10).pack(side=tk.LEFT, padx=(0, 20))
+        ttk.Label(row, text="Output: $").pack(side=tk.LEFT)
+        self.cost_output_var = tk.StringVar(value=str(self.config_data.get("cost_per_1m_output", 0.0)))
+        ttk.Entry(row, textvariable=self.cost_output_var, width=10).pack(side=tk.LEFT)
+
+        ttk.Label(
+            cost_frame, text="Set to 0 for local/free endpoints. Updated automatically when switching presets.",
+            foreground="#888888", font=("", 8, "italic"),
+        ).pack(anchor=tk.W, pady=(4, 0))
+
+        # Session stats
+        stats_frame = ttk.LabelFrame(tab, text="Session Statistics", padding=8)
+        stats_frame.pack(fill=tk.X)
+
+        self.stats_label = ttk.Label(stats_frame, text="No API calls this session", foreground="#888888")
+        self.stats_label.pack(anchor=tk.W)
+
+        self.bus.on("cost:updated", lambda d: self.after(0, lambda: self._update_stats(d)))
+
+        ttk.Button(stats_frame, text="Reset Session", command=self._reset_session).pack(anchor=tk.W, pady=(5, 0))
+
+    # ─── Handlers ───
 
     def _on_preset_changed(self, event):
         preset_name = self.preset_var.get()
@@ -124,6 +207,140 @@ class PreferencesDialog(tk.Toplevel):
             preset = PRESETS[preset_name]
             self.emb_url_var.set(preset["embedding_url"])
             self.llm_url_var.set(preset["llm_url"])
+            self.cost_input_var.set(str(preset.get("cost_per_1m_input", 0.0)))
+            self.cost_output_var.set(str(preset.get("cost_per_1m_output", 0.0)))
+
+    def _refresh_models(self):
+        def _discover():
+            emb_url = self.emb_url_var.get()
+            llm_url = self.llm_url_var.get()
+            api_key = self._key_vars.get("LLM_API_KEY", tk.StringVar()).get() or get_key("LLM_API_KEY")
+            emb_models = discover_models(emb_url, api_key=api_key)
+            llm_models = discover_models(llm_url, api_key=api_key) if llm_url != emb_url else emb_models
+            all_emb = ["auto"] + emb_models.get("embedding", [])
+            all_llm = ["auto"] + (llm_models.get("llm", []) or llm_models.get("embedding", []))
+            self.after(0, lambda: self._apply_models(all_emb, all_llm))
+
+        threading.Thread(target=_discover, daemon=True).start()
+
+    def _apply_models(self, emb_models, llm_models):
+        self.emb_model_combo["values"] = emb_models
+        self.llm_model_combo["values"] = llm_models
+        count = len(emb_models) + len(llm_models) - 2
+        self.test_step1.config(text=f"1. Models: found {count}", foreground="green")
+
+    def _test_connections(self):
+        """Full round-trip connection test in background thread."""
+        self.test_step1.config(text="1. Models: testing...", foreground="#888888")
+        self.test_step2.config(text="2. Embedding: waiting...", foreground="#888888")
+        self.test_step3.config(text="3. LLM: waiting...", foreground="#888888")
+
+        def _run():
+            import requests
+
+            emb_url = self.emb_url_var.get().rstrip("/")
+            llm_url = self.llm_url_var.get().rstrip("/")
+            api_key = self._key_vars.get("LLM_API_KEY", tk.StringVar()).get() or get_key("LLM_API_KEY") or get_key("OPENAI_API_KEY")
+
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            # Step 1: List models
+            try:
+                r = requests.get(f"{llm_url}/models", headers=headers, timeout=10)
+                if r.status_code == 200:
+                    models = r.json().get("data", [])
+                    count = len(models)
+                    self.after(0, lambda: self.test_step1.config(
+                        text=f"1. Models: {count} available", foreground="green"
+                    ))
+                else:
+                    self.after(0, lambda: self.test_step1.config(
+                        text=f"1. Models: HTTP {r.status_code}", foreground="red"
+                    ))
+            except Exception as e:
+                self.after(0, lambda: self.test_step1.config(
+                    text=f"1. Models: {e}", foreground="red"
+                ))
+
+            # Step 2: Test embedding
+            self.after(0, lambda: self.test_step2.config(text="2. Embedding: testing...", foreground="#888888"))
+            try:
+                emb_model = self.emb_model_var.get()
+                if emb_url.endswith("/v1"):
+                    r = requests.post(
+                        f"{emb_url}/embeddings", headers=headers,
+                        json={"model": emb_model if emb_model != "auto" else "default", "input": "test embedding"},
+                        timeout=15,
+                    )
+                else:
+                    r = requests.post(emb_url, json={"text": "test embedding"}, timeout=15)
+
+                if r.status_code == 200:
+                    data = r.json()
+                    dim = "?"
+                    if "data" in data and data["data"]:
+                        dim = len(data["data"][0].get("embedding", []))
+                    self.after(0, lambda: self.test_step2.config(
+                        text=f"2. Embedding: OK (dim={dim})", foreground="green"
+                    ))
+                else:
+                    self.after(0, lambda: self.test_step2.config(
+                        text=f"2. Embedding: HTTP {r.status_code}", foreground="red"
+                    ))
+            except Exception as e:
+                self.after(0, lambda: self.test_step2.config(
+                    text=f"2. Embedding: {e}", foreground="red"
+                ))
+
+            # Step 3: Test LLM completion
+            self.after(0, lambda: self.test_step3.config(text="3. LLM: testing...", foreground="#888888"))
+            try:
+                llm_model = self.llm_model_var.get()
+                r = requests.post(
+                    f"{llm_url}/chat/completions", headers=headers,
+                    json={
+                        "model": llm_model if llm_model != "auto" else "default",
+                        "messages": [{"role": "user", "content": "What is 2+2? Reply with just the number."}],
+                        "max_tokens": 10,
+                        "temperature": 0,
+                    },
+                    timeout=30,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    reply = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()[:50]
+                    usage = data.get("usage", {})
+                    tok = usage.get("total_tokens", "?")
+                    self.after(0, lambda: self.test_step3.config(
+                        text=f"3. LLM: \"{reply}\" ({tok} tokens)", foreground="green"
+                    ))
+                else:
+                    self.after(0, lambda: self.test_step3.config(
+                        text=f"3. LLM: HTTP {r.status_code}", foreground="red"
+                    ))
+            except Exception as e:
+                self.after(0, lambda: self.test_step3.config(
+                    text=f"3. LLM: {e}", foreground="red"
+                ))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _update_stats(self, data):
+        tok_in = data.get("session_tokens_in", 0)
+        tok_out = data.get("session_tokens_out", 0)
+        cost = data.get("session_cost", 0.0)
+        queries = data.get("query_count", 0)
+        cost_str = f"${cost:.4f}" if cost < 1 else f"${cost:.2f}"
+        self.stats_label.config(
+            text=f"{queries} queries | {tok_in:,} in + {tok_out:,} out tokens | {cost_str}",
+            foreground="" if cost > 0 else "#888888",
+        )
+
+    def _reset_session(self):
+        self.bus.emit("cost:reset", {})
+        self.stats_label.config(text="Session reset", foreground="#888888")
 
     def _save_custom(self):
         name = f"custom_{len(self.config_data.get('custom_presets', {})) + 1}"
@@ -131,52 +348,11 @@ class PreferencesDialog(tk.Toplevel):
         custom[name] = {
             "embedding_url": self.emb_url_var.get(),
             "llm_url": self.llm_url_var.get(),
+            "needs_api_key": bool(self._key_vars.get("LLM_API_KEY", tk.StringVar()).get()),
+            "cost_per_1m_input": float(self.cost_input_var.get() or 0),
+            "cost_per_1m_output": float(self.cost_output_var.get() or 0),
         }
         self.preset_var.set(name)
-
-    def _test_connections(self):
-        """Test both embedding and LLM endpoints."""
-        import requests
-        results = []
-
-        # Test embedding
-        emb_url = self.emb_url_var.get()
-        try:
-            if emb_url.rstrip("/").endswith("/v1"):
-                r = requests.post(
-                    f"{emb_url}/embeddings",
-                    json={"model": self.emb_model_var.get(), "input": "test"},
-                    timeout=5,
-                )
-            else:
-                r = requests.post(emb_url, json={"text": "test"}, timeout=5)
-            if r.status_code == 200:
-                results.append(f"Embedding: OK ({emb_url})")
-            else:
-                results.append(f"Embedding: FAILED {r.status_code} ({emb_url})")
-        except Exception as e:
-            results.append(f"Embedding: FAILED ({e})")
-
-        # Test LLM
-        llm_url = self.llm_url_var.get()
-        try:
-            r = requests.post(
-                f"{llm_url}/chat/completions",
-                json={
-                    "model": self.llm_model_var.get(),
-                    "messages": [{"role": "user", "content": "say ok"}],
-                    "max_tokens": 5,
-                },
-                timeout=10,
-            )
-            if r.status_code == 200:
-                results.append(f"LLM: OK ({llm_url})")
-            else:
-                results.append(f"LLM: FAILED {r.status_code} ({llm_url})")
-        except Exception as e:
-            results.append(f"LLM: FAILED ({e})")
-
-        self.test_label.config(text="\n".join(results))
 
     def _reset(self):
         self.emb_url_var.set("http://localhost:1234/v1")
@@ -186,8 +362,11 @@ class PreferencesDialog(tk.Toplevel):
         self.profile_var.set("precision")
         self.expand_var.set(False)
         self.preset_var.set("lmstudio")
+        self.cost_input_var.set("0.0")
+        self.cost_output_var.set("0.0")
 
     def _on_ok(self):
+        # Save endpoint config
         self.config_data["preset"] = self.preset_var.get()
         self.config_data["embedding_url"] = self.emb_url_var.get()
         self.config_data["embedding_model"] = self.emb_model_var.get()
@@ -195,5 +374,17 @@ class PreferencesDialog(tk.Toplevel):
         self.config_data["llm_url"] = self.llm_url_var.get()
         self.config_data["llm_model"] = self.llm_model_var.get()
         self.config_data["expand_queries"] = self.expand_var.get()
+        self.config_data["cost_per_1m_input"] = float(self.cost_input_var.get() or 0)
+        self.config_data["cost_per_1m_output"] = float(self.cost_output_var.get() or 0)
+
+        # Save API keys to .env (never to gui.json)
+        keys = {}
+        for key_name, var in self._key_vars.items():
+            value = var.get().strip()
+            if value:
+                keys[key_name] = value
+        if keys:
+            save_env(keys)
+
         self.bus.emit("settings:changed", self.config_data)
         self.destroy()

@@ -62,12 +62,14 @@ class SearchService:
 
         try:
             from mini_rag.llm_synthesizer import LLMSynthesizer
+            from mini_rag.gui.env_manager import get_key
 
             logger.info(f"Synthesis: LLM={self.llm_url} model={self.llm_model}")
             synth = LLMSynthesizer(
                 base_url=self.llm_url,
                 model=self.llm_model if self.llm_model != "auto" else None,
                 provider="openai",
+                api_key=get_key("LLM_API_KEY") or get_key("OPENAI_API_KEY"),
             )
             t0 = time.time()
             result = synth.synthesize_search_results(query, results, Path(path))
@@ -77,6 +79,10 @@ class SearchService:
                 "text": result.summary,
                 "timing_ms": synth_ms,
             })
+            # Emit token usage for cost tracking
+            usage = synth.get_last_usage()
+            if usage:
+                self.bus.emit("llm:usage", usage)
         except Exception as e:
             self.bus.emit("search:error", {"error": f"Synthesis failed: {e}"})
 

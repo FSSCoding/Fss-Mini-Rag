@@ -75,12 +75,22 @@ class LLMSynthesizer:
         self.provider = provider  # "auto", "openai", "ollama"
         self.api_key = api_key
         self._active_provider = None  # Set during init: "openai" or "ollama"
+        self._last_usage = {}  # Token usage from last API call
 
         # Initialize safeguards
         if ModelRunawayDetector:
             self.safeguard_detector = ModelRunawayDetector(SafeguardConfig())
         else:
             self.safeguard_detector = None
+
+    def get_last_usage(self) -> dict:
+        """Return and clear token usage from the last API call.
+
+        Returns dict with prompt_tokens and completion_tokens.
+        """
+        usage = self._last_usage.copy()
+        self._last_usage = {}
+        return usage
 
     def _get_available_models(self) -> List[str]:
         """Get list of available LLM models from the active provider."""
@@ -143,6 +153,12 @@ class LLMSynthesizer:
             )
             response.raise_for_status()
             data = response.json()
+            # Extract token usage if available
+            usage = data.get("usage", {})
+            self._last_usage = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+            }
             return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
             logger.error(f"OpenAI-compatible LLM call failed: {e}")
@@ -163,12 +179,10 @@ class LLMSynthesizer:
             "temperature": temperature,
             "max_tokens": 2048,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
         try:
-            # Connect timeout 15s, read timeout 30s per chunk
-            # Short read timeout ensures iter_lines() yields control
-            # periodically so callers can check cancel flags
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
@@ -178,6 +192,7 @@ class LLMSynthesizer:
             )
             response.raise_for_status()
 
+            total_chars = 0
             for line in response.iter_lines():
                 if not line:
                     continue
@@ -189,12 +204,27 @@ class LLMSynthesizer:
                     break
                 try:
                     chunk = json.loads(data_str)
+                    # Check for usage in final chunk
+                    usage = chunk.get("usage")
+                    if usage:
+                        self._last_usage = {
+                            "prompt_tokens": usage.get("prompt_tokens", 0),
+                            "completion_tokens": usage.get("completion_tokens", 0),
+                        }
                     delta = chunk.get("choices", [{}])[0].get("delta", {})
                     token = delta.get("content", "")
                     if token:
+                        total_chars += len(token)
                         yield token
                 except (json.JSONDecodeError, IndexError, KeyError):
                     continue
+
+            # Fallback: estimate tokens from char count if provider didn't send usage
+            if not self._last_usage.get("completion_tokens"):
+                self._last_usage = {
+                    "prompt_tokens": len(prompt) // 4,
+                    "completion_tokens": total_chars // 4,
+                }
         except Exception as e:
             logger.error(f"OpenAI streaming call failed: {e}")
             yield f"\n\n[Streaming error: {e}]"

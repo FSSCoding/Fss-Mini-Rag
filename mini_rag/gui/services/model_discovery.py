@@ -10,8 +10,12 @@ from typing import Dict, List
 logger = logging.getLogger(__name__)
 
 
-def discover_models(base_url: str) -> Dict[str, List[str]]:
+def discover_models(base_url: str, api_key: str = None) -> Dict[str, List[str]]:
     """Discover available models from an OpenAI-compatible endpoint.
+
+    Args:
+        base_url: Base URL of the API endpoint
+        api_key: Optional API key for authenticated endpoints
 
     Returns:
         Dict with "embedding" and "llm" lists of model IDs.
@@ -19,7 +23,7 @@ def discover_models(base_url: str) -> Dict[str, List[str]]:
     try:
         from mini_rag.ollama_embeddings import OllamaEmbedder
 
-        emb = OllamaEmbedder(base_url=base_url)
+        emb = OllamaEmbedder(base_url=base_url, api_key=api_key)
         return emb.discover_models()
     except Exception as e:
         logger.debug(f"Model discovery failed for {base_url}: {e}")

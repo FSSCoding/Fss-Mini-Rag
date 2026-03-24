@@ -188,7 +188,7 @@ class TestEmbeddingEndpointFormat:
     def test_bobai_embedding_uses_custom_format(self):
         """BobAI embedding endpoint must be detected as custom."""
         from mini_rag.gui.config_store import PRESETS
-        bobai_url = PRESETS["bobai"]["embedding_url"]
+        bobai_url = PRESETS["bobai-local"]["embedding_url"]
         assert not bobai_url.rstrip("/").endswith("/v1"), (
             f"BobAI embedding URL {bobai_url} should NOT be OpenAI format"
         )
@@ -204,7 +204,7 @@ class TestEmbeddingEndpointFormat:
     def test_bobai_llm_endpoint_correct(self):
         """BobAI LLM must point to vLLM, not LM Studio."""
         from mini_rag.gui.config_store import PRESETS
-        llm_url = PRESETS["bobai"]["llm_url"]
+        llm_url = PRESETS["bobai-local"]["llm_url"]
         assert "11433" in llm_url, (
             f"BobAI LLM URL {llm_url} should point to :11433 (vLLM)"
         )
