@@ -196,6 +196,8 @@ class ResearchTab(ttk.Frame):
         self.bus.on("research:deep_progress", self._on_deep_progress)
         self.bus.on("research:deep_completed", self._on_deep_completed)
         self.bus.on("research:error", self._on_error)
+        self.bus.on("research:page_failed", self._on_page_failed)
+        self._failed_urls = []  # Collects failures during a scrape run
         # Show "Go to Search" only after a research session is indexed
         def _maybe_show_goto(d):
             path = str(d.get("path", ""))
@@ -287,6 +289,7 @@ class ResearchTab(ttk.Frame):
     # === Scrape actions ===
 
     def _on_scrape_selected(self):
+        self._failed_urls.clear()
         selected = self.results_tree.selection()
         urls = []
         for item in selected:
@@ -301,6 +304,7 @@ class ResearchTab(ttk.Frame):
             self.cancel_btn.config(state=tk.NORMAL)
 
     def _on_scrape_all(self):
+        self._failed_urls.clear()
         urls = [r["url"] for r in self._search_results]
         if urls:
             query = self.query_var.get().strip() or "research"
@@ -393,12 +397,41 @@ class ResearchTab(ttk.Frame):
         url = data.get("current_url", "")[:40]
         self.after(0, lambda: self._show_progress(f"Scraping {done}/{total}: {url}", pct))
 
+    def _on_page_failed(self, data):
+        """Collect failed URLs during scraping."""
+        self._failed_urls.append(data)
+
     def _on_scrape_completed(self, data):
         def _update():
             self._hide_progress()
             self.cancel_btn.config(state=tk.DISABLED)
             pages = data.get("pages_scraped", 0)
-            self.content.render(f"Scraping complete: {pages} pages saved.\n\nClick **Index Session** to make this content searchable.")
+            failed = self._failed_urls[:]
+            self._failed_urls.clear()
+
+            # Build completion message
+            parts = [f"## Scraping Complete\n\n**{pages} pages saved.**"]
+
+            if failed:
+                parts.append(f"\n\n### Failed: {len(failed)} URLs\n")
+                # Group by domain
+                from urllib.parse import urlparse
+                by_domain = {}
+                for f in failed:
+                    domain = urlparse(f["url"]).netloc
+                    by_domain.setdefault(domain, []).append(f)
+
+                for domain, items in sorted(by_domain.items()):
+                    if len(items) > 3:
+                        parts.append(f"- **{domain}** ({len(items)} failures)")
+                    else:
+                        for item in items:
+                            short_url = item["url"][:60]
+                            err = item.get("error", "unknown")[:80]
+                            parts.append(f"- {short_url}\n  *{err}*")
+
+            parts.append("\n\nClick **Index Session** to make this content searchable.")
+            self.content.render("\n".join(parts))
             self._on_refresh_sessions()
         self.after(0, _update)
 

@@ -360,6 +360,8 @@ class RenderedMarkdown(tk.Text):
                     self.tag_add(tag_name, start, end)
                     self.tag_bind(tag_name, "<Button-1>",
                                  lambda e, url=link_url: webbrowser.open(url))
+                    self.tag_bind(tag_name, "<Button-3>",
+                                 lambda e, url=link_url: self._show_link_menu(e, url))
                     self.tag_bind(tag_name, "<Enter>",
                                  lambda e: self.config(cursor="hand2"))
                     self.tag_bind(tag_name, "<Leave>",
@@ -368,6 +370,29 @@ class RenderedMarkdown(tk.Text):
                     self.insert(tk.END, part)
             else:
                 self.insert(tk.END, part)
+
+    def _show_link_menu(self, event, url: str):
+        """Right-click context menu for links."""
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Open in Browser", command=lambda: webbrowser.open(url))
+        menu.add_command(label="Copy Link", command=lambda: self._copy_to_clipboard(url))
+        menu.add_separator()
+        menu.add_command(label="Scrape URL", command=lambda: self._emit_scrape(url))
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _copy_to_clipboard(self, text: str):
+        self.clipboard_clear()
+        self.clipboard_append(text)
+
+    def _emit_scrape(self, url: str):
+        """Emit a scrape request for this URL (if event bus is available)."""
+        # Walk up to find the app and emit
+        widget = self.master
+        while widget:
+            if hasattr(widget, "bus"):
+                widget.bus.emit("research:scrape_single", {"url": url})
+                return
+            widget = getattr(widget, "master", None)
 
     def _insert_code_block(self, code: str, lang: str = ""):
         """Embed a syntax-highlighted code block widget."""

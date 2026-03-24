@@ -28,6 +28,19 @@ class PreferencesDialog(tk.Toplevel):
         # Auto-refresh models when dialog opens
         self.after(200, self._refresh_models)
 
+        # Track saved values for change detection
+        self._saved_values = {
+            "embedding_url": self.config_data.get("embedding_url", ""),
+            "embedding_model": self.config_data.get("embedding_model", "auto"),
+            "llm_url": self.config_data.get("llm_url", ""),
+            "llm_model": self.config_data.get("llm_model", "auto"),
+            "preset": self.config_data.get("preset", "lmstudio"),
+        }
+        # Monitor changes
+        for var in [self.emb_url_var, self.emb_model_var, self.llm_url_var,
+                    self.llm_model_var, self.preset_var]:
+            var.trace_add("write", lambda *_: self._check_unsaved())
+
     def _build(self):
         main = ttk.Frame(self, padding=10)
         main.pack(fill=tk.BOTH, expand=True)
@@ -430,6 +443,21 @@ class PreferencesDialog(tk.Toplevel):
         self.cost_input_var.set("0.0")
         self.cost_output_var.set("0.0")
 
+    def _check_unsaved(self):
+        """Update save status label when field values differ from saved."""
+        current = {
+            "embedding_url": self.emb_url_var.get(),
+            "embedding_model": self.emb_model_var.get(),
+            "llm_url": self.llm_url_var.get(),
+            "llm_model": self.llm_model_var.get(),
+            "preset": self.preset_var.get(),
+        }
+        has_changes = any(current[k] != self._saved_values.get(k) for k in current)
+        if has_changes:
+            self._save_status.config(text="Unsaved changes", foreground="orange")
+        else:
+            self._save_status.config(text="")
+
     def _on_save(self):
         """Save all settings — endpoints, models, keys, cost rates."""
         # Save endpoint config
@@ -454,12 +482,21 @@ class PreferencesDialog(tk.Toplevel):
 
         self.bus.emit("settings:changed", self.config_data)
 
+        # Update saved values snapshot so change detection resets
+        self._saved_values = {
+            "embedding_url": self.emb_url_var.get(),
+            "embedding_model": self.emb_model_var.get(),
+            "llm_url": self.llm_url_var.get(),
+            "llm_model": self.llm_model_var.get(),
+            "preset": self.preset_var.get(),
+        }
+
         # Confirm to user
         self._save_status.config(
             text="Settings saved successfully",
             foreground="green",
         )
-        self.after(2000, lambda: self._save_status.config(text=""))
+        self.after(3000, lambda: self._save_status.config(text=""))
 
     def _reset_to_defaults(self):
         """Reset ALL settings to factory defaults. Warns about key deletion."""

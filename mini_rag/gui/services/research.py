@@ -108,6 +108,7 @@ class ResearchService:
                 scraper = MiniWebScraper(WebScraperConfig())
 
                 total = len(urls)
+                failed_urls = []
                 for i, url in enumerate(urls):
                     if self._cancel.is_set():
                         self.bus.emit("research:cancelled", {})
@@ -117,11 +118,13 @@ class ResearchService:
                         "done": i, "total": total, "current_url": url,
                     })
 
+                    error_msg = ""
                     try:
                         page = scraper.fetch(url)
                     except Exception as fetch_err:
                         page = None
-                        _log_scrape(project_path, url, False, error=str(fetch_err))
+                        error_msg = str(fetch_err)
+                        _log_scrape(project_path, url, False, error=error_msg)
 
                     if page:
                         session.add_page(page)
@@ -133,13 +136,19 @@ class ResearchService:
                             "word_count": page.word_count,
                             "content": page.content,
                         })
-                    elif page is None:
-                        # fetch returned None (no exception)
-                        _log_scrape(project_path, url, False, error="fetch returned None")
+                    else:
+                        if not error_msg:
+                            error_msg = "extraction failed or content too thin"
+                        _log_scrape(project_path, url, False, error=error_msg)
+                        failed_urls.append({"url": url, "error": error_msg})
+                        self.bus.emit("research:page_failed", {
+                            "url": url, "error": error_msg,
+                        })
 
                 self.bus.emit("research:scrape_completed", {
                     "session_dir": str(session.session_dir),
                     "pages_scraped": session.metadata.get("pages_scraped", 0),
+                    "failed_urls": failed_urls,
                 })
 
             except Exception as e:
