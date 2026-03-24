@@ -1,44 +1,43 @@
-# 🛠️ Troubleshooting Guide - Common Issues & Solutions
-
-*Having problems? You're not alone! Here are solutions to the most common issues beginners encounter.*
+# Troubleshooting Guide — Common Issues & Solutions
 
 ---
 
-## 🚀 Installation & Setup Issues
+## Installation & Setup Issues
 
-### ❌ "Command not found: ollama"
-**Problem:** The system can't find Ollama  
-**Solution:** 
-```bash
-# Install Ollama
-curl -fsSL https://ollama.ai/install.sh | sh
-# Or on Mac: brew install ollama
-# Start Ollama
-ollama serve
-```
-**Alternative:** Use the system without Ollama - it will automatically fall back to other embedding methods.
-
-### ❌ "Permission denied" when running scripts
-**Problem:** Script files aren't executable  
+### "Command not found: rag-mini"
+**Problem:** The CLI isn't installed or the virtual environment isn't active.
 **Solution:**
 ```bash
-chmod +x rag-mini rag-tui
-# Or run with python directly:
-python3 rag-mini.py --help
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Or install in development mode
+pip install -e .
+
+# Verify
+rag-mini --help
 ```
 
-### ❌ "Module not found" or import errors
-**Problem:** Python dependencies not installed  
+### "Permission denied" when running scripts
+**Problem:** Script files aren't executable.
 **Solution:**
 ```bash
-# Install dependencies
-pip3 install -r requirements.txt
-# If that fails, try:
-pip3 install --user -r requirements.txt
+chmod +x rag-mini
+# Or run via Python directly:
+python3 -m mini_rag.cli --help
 ```
 
-### ❌ Installation fails
-**Problem:** Dependencies won't install
+### "Module not found" or import errors
+**Problem:** Python dependencies not installed.
+**Solution:**
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+```
+
+### Installation fails
+**Problem:** Dependencies won't install.
 **Solution:**
 ```bash
 # Proven manual method (100% reliable):
@@ -49,79 +48,55 @@ pip install -e .
 python3 -c "import mini_rag; print('Installation successful')"
 ```
 
-### ❌ Installation takes too long
-**Problem:** pip install seems stuck
-**Expected Timing:** 2-5 minutes (depends on internet speed)
+### Installation takes too long
+**Problem:** pip install seems stuck.
+**Expected timing:** 2-5 minutes (depends on internet speed).
 **Why:** Large but essential dependencies:
 - LanceDB: ~36MB (vector database)
 - PyArrow: ~43MB (data processing)
 - PyLance: ~44MB (language parsing)
 - Total: ~120MB download
 
-3. **Check if installation is actually progressing:**
-   ```bash
-   # Check pip cache (should be growing)
-   du -sh ~/.cache/pip
-   
-   # Check if Python packages are installing
-   ls -la .venv/lib/python*/site-packages/
-   ```
-
-4. **Slow connection fallback:**
-   ```bash
-   # Increase pip timeout
-   .venv/bin/python -m pip install -r requirements.txt --timeout 1000
-   ```
+**Slow connection fallback:**
+```bash
+pip install -r requirements.txt --timeout 1000
+```
 
 ---
 
-## 🔍 Search & Results Issues
+## Search & Results Issues
 
-### ❌ "No results found" for everything
-**Problem:** Search isn't finding anything  
-**Diagnosis & Solutions:**
+### "No results found" for everything
+**Diagnosis & solutions:**
 
 1. **Check if project is indexed:**
    ```bash
-   ./rag-mini status /path/to/project
+   rag-mini status
    # If not indexed:
-   ./rag-mini index /path/to/project
+   rag-mini init
    ```
 
-2. **Lower similarity threshold:**
-   - Edit config file, change `similarity_threshold: 0.05`
-   - Or try: `./rag-mini search /path/to/project "query" --threshold 0.05`
-
-3. **Try broader search terms:**
-   - Instead of: "getUserById" 
+2. **Try broader search terms:**
+   - Instead of: "getUserById"
    - Try: "user function" or "get user"
 
-4. **Enable query expansion:**
+3. **Enable query expansion:**
    - Edit config: `expand_queries: true`
-   - Or use TUI which enables it automatically
 
-### ❌ Search results are irrelevant/weird
-**Problem:** Getting results that don't match your search  
+### Search results are irrelevant
 **Solutions:**
 
-1. **Increase similarity threshold:**
-   ```yaml
-   search:
-     similarity_threshold: 0.3  # Higher = more picky
-   ```
-
-2. **Use more specific terms:**
+1. **Use more specific terms:**
    - Instead of: "function"
    - Try: "login function" or "authentication method"
 
-3. **Check BM25 setting:**
+2. **Check BM25 setting:**
    ```yaml
    search:
      enable_bm25: true  # Helps find exact word matches
    ```
 
-### ❌ Search is too slow
-**Problem:** Takes too long to get results  
+### Search is too slow
 **Solutions:**
 
 1. **Disable query expansion:**
@@ -133,51 +108,45 @@ python3 -c "import mini_rag; print('Installation successful')"
 2. **Reduce result limit:**
    ```yaml
    search:
-     default_top_k: 5  # Instead of 10
-   ```
-
-3. **Use faster embedding method:**
-   ```yaml
-   embedding:
-     preferred_method: hash  # Fastest but lower quality
-   ```
-
-4. **Smaller batch size:**
-   ```yaml
-   embedding:
-     batch_size: 16  # Instead of 32
+     default_top_k: 5
    ```
 
 ---
 
-## 🤖 AI/LLM Issues
+## Embedding & LLM Issues
 
-### ❌ "LLM synthesis unavailable" 
-**Problem:** AI explanations aren't working  
+### "No embedding provider available"
+**Problem:** No OpenAI-compatible embedding server is running.
 **Solutions:**
 
-1. **Check Ollama is running:**
-   ```bash
-   # In one terminal:
-   ollama serve
-   # In another:
-   ollama list  # Should show installed models
+1. **Start LM Studio** with an embedding model loaded (e.g. MiniLM L6 v2)
+2. **Or use vLLM** with an embedding model
+3. **Or use any OpenAI-compatible endpoint** and configure:
+   ```yaml
+   embedding:
+     base_url: http://localhost:1234/v1
    ```
 
-2. **Install a model:**
+Without an embedding server, BM25 keyword search still works — you just don't get semantic similarity.
+
+### "LLM synthesis unavailable"
+**Problem:** No LLM endpoint configured or reachable.
+**Solutions:**
+
+1. **Check your LLM server is running** (LM Studio, vLLM, or cloud provider)
+2. **Configure the endpoint:**
+   ```yaml
+   llm:
+     provider: openai
+     api_base: http://localhost:1234/v1
+   ```
+3. **Test the connection:**
    ```bash
-   ollama pull qwen2.5:3b    # Good balance of speed and quality
-   # Or: ollama pull qwen3:4b   # Larger but better quality
+   rag-mini gui
+   # Use Preferences > Test Connection
    ```
 
-3. **Test connection:**
-   ```bash
-   curl http://localhost:11434/api/tags
-   # Should return JSON with model list
-   ```
-
-### ❌ AI gives weird/wrong answers
-**Problem:** LLM responses don't make sense  
+### LLM gives poor answers
 **Solutions:**
 
 1. **Lower temperature:**
@@ -186,300 +155,160 @@ python3 -c "import mini_rag; print('Installation successful')"
      synthesis_temperature: 0.1  # More factual, less creative
    ```
 
-2. **Try different model:**
-   ```bash
-   ollama pull qwen3:1.7b   # Recommended: excellent quality (default priority)
-   ollama pull qwen3:0.6b   # Surprisingly good for CPU-only  
-   ollama pull qwen3:4b     # Highest quality, slower
-   ```
+2. **Try a different/larger model** in your LLM server
 
-3. **Use synthesis mode instead of exploration:**
+3. **Use synthesis mode instead of just search:**
    ```bash
-   ./rag-mini search /path "query" --synthesize
-   # Instead of: ./rag-mini explore /path
+   rag-mini search "query" --synthesize
    ```
 
 ---
 
-## 💾 Memory & Performance Issues
+## Web Research Issues
 
-### ❌ "Out of memory" or computer freezes during indexing
-**Problem:** System runs out of RAM  
+### Scraping fails or returns empty content
 **Solutions:**
 
-1. **Reduce batch size:**
-   ```yaml
-   embedding:
-     batch_size: 8  # Much smaller batches
-   ```
-
-2. **Lower streaming threshold:**
-   ```yaml
-   streaming:
-     threshold_bytes: 512000  # 512KB instead of 1MB
-   ```
-
-3. **Index smaller projects first:**
+1. **Check the URL is accessible:**
    ```bash
-   # Exclude large directories
-   ./rag-mini index /path/to/project --exclude "node_modules/**,dist/**"
+   rag-mini scrape https://example.com
    ```
 
-4. **Use hash embeddings:**
-   ```yaml
-   embedding:
-     preferred_method: hash  # Much less memory
+2. **Some sites block scrapers** — try a different source
+
+3. **For PDFs**, ensure pymupdf is installed:
+   ```bash
+   pip install pymupdf
    ```
 
-### ❌ Indexing is extremely slow
-**Problem:** Taking forever to index project  
+### Deep research runs out of time
+**Solution:** Increase the time budget:
+```bash
+rag-mini research "topic" --deep --time 2h
+```
+
+### Rate limiting errors
+The system has built-in rate limiting and retry logic. If you're hitting API limits:
+- Reduce `--max-pages` for web searches
+- Use a search engine with higher rate limits (Tavily with API key)
+
+---
+
+## GUI Issues
+
+### GUI won't launch
+**Problem:** Tkinter not installed.
+**Solution:**
+```bash
+# Ubuntu/Debian
+sudo apt install python3-tk
+
+# Fedora
+sudo dnf install python3-tkinter
+
+# macOS (usually included with Python)
+# Windows (usually included with Python)
+```
+
+### GUI looks wrong or has no theme
+**Problem:** Sun Valley theme not loading.
+**Solution:**
+```bash
+pip install sv-ttk
+```
+
+### GUI can't connect to endpoints
+**Solution:**
+1. Open Preferences dialog
+2. Set correct embedding and LLM endpoint URLs
+3. Click "Test Connection" to verify
+4. Use a preset (LM Studio, BobAI) if available
+
+---
+
+## Memory & Performance Issues
+
+### "Out of memory" or computer freezes during indexing
 **Solutions:**
 
-1. **Exclude unnecessary files:**
-   ```yaml
-   files:
-     exclude_patterns:
-       - "node_modules/**"
-       - ".git/**" 
-       - "*.log"
-       - "build/**"
-       - "*.min.js"  # Minified files
-   ```
-
-2. **Increase minimum file size:**
-   ```yaml
-   files:
-     min_file_size: 200  # Skip tiny files
-   ```
-
-3. **Use simpler chunking:**
-   ```yaml
-   chunking:
-     strategy: fixed  # Faster than semantic
-   ```
-
-4. **More workers (if you have good CPU):**
+1. **Index smaller projects** or exclude large directories
+2. **Use the `--force` flag** to rebuild cleanly:
    ```bash
-   ./rag-mini index /path/to/project --workers 8
+   rag-mini init --force
+   ```
+
+### Indexing is extremely slow
+**Solutions:**
+
+1. **Check exclude patterns** — make sure node_modules, .git, etc. are excluded
+2. **Force re-index:**
+   ```bash
+   rag-mini init --force
    ```
 
 ---
 
-## ⚙️ Configuration Issues
+## Configuration Issues
 
-### ❌ "Invalid configuration" errors
-**Problem:** Config file has errors  
+### Changes to config aren't taking effect
 **Solutions:**
 
-1. **Check YAML syntax:**
-   ```bash
-   python3 -c "import yaml; yaml.safe_load(open('config.yaml'))"
-   ```
-
-2. **Copy from working example:**
-   ```bash
-   cp examples/config.yaml .mini-rag/config.yaml
-   ```
-
-3. **Reset to defaults:**
-   ```bash
-   rm .mini-rag/config.yaml
-   # System will recreate with defaults
-   ```
-
-### ❌ Changes to config aren't taking effect
-**Problem:** Modified settings don't work  
-**Solutions:**
-
-1. **Restart TUI/CLI:**
-   - Configuration is loaded at startup
-   - Exit and restart the interface
-
+1. **Restart the CLI/GUI** — config is loaded at startup
 2. **Check config location:**
    ```bash
    # Project-specific config:
-   /path/to/project/.mini-rag/config.yaml
-   # Global config:
-   ~/.mini-rag/config.yaml
+   .mini-rag/config.yaml
    ```
-
 3. **Force re-index after config changes:**
    ```bash
-   ./rag-mini index /path/to/project --force
+   rag-mini init --force
    ```
+
+### Reset to defaults
+```bash
+rm .mini-rag/config.yaml
+# System will recreate with defaults on next run
+```
 
 ---
 
-## 🖥️ Interface Issues
-
-### ❌ TUI looks broken/garbled
-**Problem:** Text interface isn't displaying correctly  
-**Solutions:**
-
-1. **Try different terminal:**
-   ```bash
-   # Instead of basic terminal, try:
-   # - iTerm2 (Mac)
-   # - Windows Terminal (Windows)  
-   # - GNOME Terminal (Linux)
-   ```
-
-2. **Use CLI directly:**
-   ```bash
-   ./rag-mini --help  # Skip TUI entirely
-   ```
-
-3. **Check terminal size:**
-   ```bash
-   # Make terminal window larger (TUI needs space)
-   # At least 80x24 characters
-   ```
-
-### ❌ "Keyboard interrupt" or TUI crashes
-**Problem:** Interface stops responding  
-**Solutions:**
-
-1. **Use Ctrl+C to exit cleanly:**
-   - Don't force-quit if possible
-
-2. **Check for conflicting processes:**
-   ```bash
-   ps aux | grep rag-tui
-   # Kill any stuck processes
-   ```
-
-3. **Use CLI as fallback:**
-   ```bash
-   ./rag-mini search /path/to/project "your query"
-   ```
-
----
-
-## 📁 File & Path Issues
-
-### ❌ "Project not found" or "Permission denied"
-**Problem:** Can't access project directory  
-**Solutions:**
-
-1. **Check path exists:**
-   ```bash
-   ls -la /path/to/project
-   ```
-
-2. **Check permissions:**
-   ```bash
-   # Make sure you can read the directory
-   chmod -R +r /path/to/project
-   ```
-
-3. **Use absolute paths:**
-   ```bash
-   # Instead of: ./rag-mini index ../my-project
-   # Use: ./rag-mini index /full/path/to/my-project
-   ```
-
-### ❌ "No files found to index"
-**Problem:** System doesn't see any files  
-**Solutions:**
-
-1. **Check include patterns:**
-   ```yaml
-   files:
-     include_patterns:
-       - "**/*.py"     # Only Python files
-       - "**/*.js"     # Add JavaScript
-       - "**/*.md"     # Add Markdown
-   ```
-
-2. **Check exclude patterns:**
-   ```yaml
-   files:
-     exclude_patterns: []  # Remove all exclusions temporarily
-   ```
-
-3. **Lower minimum file size:**
-   ```yaml
-   files:
-     min_file_size: 10  # Instead of 50
-   ```
-
----
-
-## 🔍 Quick Diagnostic Commands
+## Quick Diagnostic Commands
 
 **Check system status:**
 ```bash
-./rag-mini status /path/to/project
+rag-mini status
 ```
 
-**Test embeddings:**
+**Show system info:**
 ```bash
-python3 -c "from mini_rag.ollama_embeddings import OllamaEmbedder; e=OllamaEmbedder(); print(e.get_embedding_info())"
+rag-mini info
 ```
 
 **Verify installation:**
 ```bash
-python3 -c "import mini_rag; print('✅ RAG system installed')"
-```
-
-**Test Ollama connection:**
-```bash
-curl -s http://localhost:11434/api/tags | python3 -m json.tool
-```
-
-**Check disk space:**
-```bash
-df -h .mini-rag/  # Make sure you have space for index
+python3 -c "import mini_rag; print('RAG system installed')"
 ```
 
 ---
 
-## 🆘 When All Else Fails
+## When All Else Fails
 
 1. **Start fresh:**
    ```bash
    rm -rf .mini-rag/
-   ./rag-mini index /path/to/project
+   rag-mini init
    ```
 
-2. **Use minimal config:**
-   ```yaml
-   # Simplest possible config:
-   chunking:
-     strategy: fixed
-   embedding:  
-     preferred_method: auto
-   search:
-     expand_queries: false
-   ```
-
-3. **Try a tiny test project:**
+2. **Try a tiny test project:**
    ```bash
    mkdir test-project
    echo "def hello(): print('world')" > test-project/test.py
-   ./rag-mini index test-project
-   ./rag-mini search test-project "hello function"
+   cd test-project
+   rag-mini init
+   rag-mini search "hello function"
    ```
 
-4. **Get help:**
-   - Check the main README.md
-   - Look at examples/ directory
-   - Try the basic_usage.py example
-
----
-
-## 💡 Prevention Tips
-
-**For beginners:**
-- Start with default settings
-- Use the TUI interface first
-- Test with small projects initially
-- Keep Ollama running in background
-
-**For better results:**
-- Be specific in search queries
-- Use the glossary to understand terms
-- Experiment with config settings on test projects first
-- Use synthesis mode for quick answers, exploration for learning
-
-**Remember:** This is a learning tool! Don't be afraid to experiment and try different settings. The worst thing that can happen is you delete the `.mini-rag` directory and start over. 🚀
+3. **Check the docs:**
+   - [Getting Started](GETTING_STARTED.md)
+   - [LLM Providers](LLM_PROVIDERS.md)
+   - [Web Search & Research](WEB_SEARCH_AND_RESEARCH.md)

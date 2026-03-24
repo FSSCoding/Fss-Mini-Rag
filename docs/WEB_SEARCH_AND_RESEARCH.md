@@ -556,7 +556,7 @@ For academic content, arXiv works well (both abstract pages and PDFs).
 ### LLM not responding
 
 Deep research needs an LLM for gap analysis. Check:
-- Is your LLM endpoint running? (configured in `.mini-rag/config.yaml` under `embedding.base_url` or `llm.ollama_host`)
+- Is your LLM endpoint running? (configured in `.mini-rag/config.yaml` under `embedding.base_url` or `llm.api_base`)
 - The engine degrades gracefully — without LLM, it falls back to using the original query for each round
 
 ### Rate limit errors

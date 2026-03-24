@@ -16,58 +16,45 @@ graph LR
     A[User Query] --> B[LLM Expands]
     B --> C[Enhanced Search]
     C --> D[Better Results]
-    
+
     style A fill:#e1f5fe
     style D fill:#e8f5e8
 ```
 
-1. **Your query** goes to a small, fast LLM (like qwen3:1.7b)
+1. **Your query** goes to a small, fast LLM via your configured endpoint
 2. **LLM adds related terms** that people might use when writing about the topic
 3. **Both semantic and keyword search** use the expanded query
 4. **You get much better results** without changing anything
 
-## When Is It Enabled?
-
-- ❌ **CLI commands**: Disabled by default (for speed)
-- ✅ **TUI interface**: Auto-enabled (when you have time to explore)
-- ⚙️ **Configurable**: Can be enabled/disabled in config.yaml
-
 ## Configuration
 
-### Easy Configuration (TUI)
+### Via GUI
 
-Use the interactive Configuration Manager in the TUI:
+Open the desktop GUI (`rag-mini gui`), go to Preferences, and configure your LLM endpoint. Query expansion uses the same LLM endpoint as synthesis.
 
-1. **Start TUI**: `./rag-tui` or `rag.bat` (Windows)
-2. **Select Option 6**: Configuration Manager
-3. **Choose Option 2**: Toggle query expansion
-4. **Follow prompts**: Get explanation and easy on/off toggle
+### Via Config File
 
-The TUI will:
-- Explain benefits and requirements clearly
-- Check if Ollama is available
-- Show current status (enabled/disabled)
-- Save changes automatically
-
-### Manual Configuration (Advanced)
-
-Edit `config.yaml` directly:
+Edit `.mini-rag/config.yaml`:
 
 ```yaml
-# Search behavior settings
 search:
   expand_queries: false         # Enable automatic query expansion
 
-# LLM expansion settings  
 llm:
   max_expansion_terms: 8        # How many terms to add
   expansion_model: auto         # Which model to use
-  ollama_host: localhost:11434  # Ollama server
+  api_base: http://localhost:1234/v1  # LLM server endpoint
 ```
+
+## When Is It Enabled?
+
+- **CLI commands**: Disabled by default (for speed)
+- **Configurable**: Can be enabled/disabled in config.yaml
+- **Per-query**: Use `--synthesize` flag for individual queries
 
 ## Performance
 
-- **Speed**: ~100ms on most systems (depends on your hardware)
+- **Speed**: ~100ms on most systems (depends on your hardware and model)
 - **Caching**: Repeated queries are instant
 - **Model Selection**: Automatically uses fastest available model
 
@@ -75,32 +62,32 @@ llm:
 
 **Code Search:**
 ```
-"error handling" → "error handling exception try catch fault tolerance recovery"
+"error handling" -> "error handling exception try catch fault tolerance recovery"
 ```
 
 **Documentation Search:**
 ```
-"installation" → "installation setup install deploy configuration getting started"
+"installation" -> "installation setup install deploy configuration getting started"
 ```
 
 **Any Content:**
 ```
-"budget planning" → "budget planning financial forecast cost analysis spending plan"
+"budget planning" -> "budget planning financial forecast cost analysis spending plan"
 ```
 
 ## Troubleshooting
 
 **Query expansion not working?**
-1. Check if Ollama is running: `curl http://localhost:11434/api/tags`
-2. Verify you have a model installed: `ollama list`
+1. Check your LLM endpoint is running (LM Studio, vLLM, etc.)
+2. Verify `expand_queries: true` in config
 3. Check logs with `--verbose` flag
 
 **Too slow?**
-1. Disable in config.yaml: `expand_queries: false`
-2. Or use faster model: `expansion_model: "qwen3:0.6b"`
+1. Disable in config: `expand_queries: false`
+2. Or use a faster/smaller model in your LLM server
 
 **Poor expansions?**
-1. Try different model: `expansion_model: "qwen3:1.7b"`
+1. Try a different model in your LLM server
 2. Reduce terms: `max_expansion_terms: 5`
 
 ## Technical Details
@@ -111,4 +98,4 @@ The QueryExpander class:
 - Handles model selection automatically
 - Includes smart caching to avoid repeated calls
 
-Perfect for beginners because it "just works" - enable it when you want better results, disable when you want maximum speed.
+Enable it when you want better results, disable when you want maximum speed.

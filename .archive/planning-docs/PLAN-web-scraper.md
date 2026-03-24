@@ -1,6 +1,6 @@
 # PLAN: Web Scraper & Research Engine Integration
 
-**Status:** Planning — awaiting approval to build
+**Status:** Implemented — core features complete as of March 23, 2026
 **Version target:** v2.2.0 (core), v2.2.x (extras), v2.3.0 (deep research)
 **Date:** 2026-03-23
 **Ref spec:** Obsidian `SPEC-Mini-RAG-Web-Scraper-Integration.md`

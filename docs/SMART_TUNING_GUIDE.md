@@ -1,126 +1,78 @@
-# 🎯 FSS-Mini-RAG Smart Tuning Guide
+# FSS-Mini-RAG Smart Tuning Guide
 
-## 🚀 **Performance Improvements Implemented**
+## Performance Tuning
 
-### **1. 📊 Intelligent Analysis**
-```bash
-# Analyze your project patterns and get optimization suggestions
-./rag-mini analyze /path/to/project
-
-# Get smart recommendations based on actual usage
-./rag-mini status /path/to/project
-```
-
-**What it analyzes:**
-- Language distribution and optimal chunking strategies
-- File size patterns for streaming optimization  
-- Chunk-to-file ratios for search quality
-- Large file detection for performance tuning
-
-### **2. 🧠 Smart Search Enhancement**
+### Search Enhancement
 ```bash
 # Enhanced search with query intelligence
-./rag-mini search /project "MyClass"     # Detects class names
-./rag-mini search /project "login()"     # Detects function calls  
-./rag-mini search /project "user auth"   # Natural language
+rag-mini search "MyClass"     # Detects class names
+rag-mini search "login()"     # Detects function calls
+rag-mini search "user auth"   # Natural language
 ```
 
-### **3. ⚙️ Language-Specific Optimizations**
+### Language-Specific Optimisations
 
 **Automatic tuning based on your project:**
-- **Python projects**: Function-level chunking, 3000 char chunks
-- **Documentation**: Header-based chunking, preserve structure
+- **Python projects**: AST-based function/class chunking
+- **Documentation**: Paragraph-based splitting with header hierarchy
 - **Config files**: Smaller chunks, skip huge JSONs
 - **Mixed projects**: Adaptive strategies per file type
 
-### **4. 🔄 Auto-Optimization**
+## Configuration
 
-The system automatically suggests improvements based on:
-```
-📈 Your Project Analysis:
-   - 76 Python files → Use function-level chunking
-   - 63 Markdown files → Use header-based chunking  
-   - 47 large files → Reduce streaming threshold to 5KB
-   - 1.5 chunks/file → Consider smaller chunks for better search
-```
+Edit `.mini-rag/config.yaml`:
 
-## 🎯 **Applied Optimizations**
+```yaml
+chunking:
+  max_size: 2000              # Characters per chunk (adjust per project)
+  min_size: 150               # Skip tiny chunks
 
-### **Chunking Intelligence**
-```json
-{
-  "python": { "max_size": 3000, "strategy": "function" },
-  "markdown": { "max_size": 2500, "strategy": "header" },
-  "json": { "max_size": 1000, "skip_large": true },
-  "bash": { "max_size": 1500, "strategy": "function" }
-}
+embedding:
+  provider: openai
+  base_url: http://localhost:1234/v1
+  profile: precision          # precision (MiniLM) or conceptual (Nomic)
+
+search:
+  default_top_k: 10
+  enable_bm25: true
+  expand_queries: false       # Enable for broader searches
 ```
 
-### **Search Query Enhancement**
-- **Class detection**: `MyClass` → `class MyClass OR function MyClass`
-- **Function detection**: `login()` → `def login OR function login`  
-- **Pattern matching**: Smart semantic expansion
-
-### **Performance Micro-Optimizations**
-- **Smart streaming**: 5KB threshold for projects with many large files
-- **Tiny file skipping**: Skip files <30 bytes (metadata noise)
-- **JSON filtering**: Skip huge config files, focus on meaningful JSONs
-- **Concurrent embeddings**: 4-way parallel processing with Ollama
-
-## 📊 **Performance Impact**
-
-**Before tuning:**
-- 376 files → 564 chunks (1.5 avg)
-- Large files streamed at 1MB threshold
-- Generic chunking for all languages
-
-**After smart tuning:**
-- **Better search relevance** (language-aware chunks)
-- **Faster indexing** (smart file filtering) 
-- **Improved context** (function/header-level chunks)
-- **Enhanced queries** (automatic query expansion)
-
-## 🛠️ **Manual Tuning Options**
-
-### **Custom Configuration**
-Edit `.mini-rag/config.json` in your project:
-```json
-{
-  "chunking": {
-    "max_size": 3000,           # Larger for Python projects
-    "language_specific": {
-      "python": { "strategy": "function" },
-      "markdown": { "strategy": "header" }
-    }
-  },
-  "streaming": {
-    "threshold_bytes": 5120     # 5KB for faster large file processing
-  },
-  "search": {
-    "smart_query_expansion": true,
-    "boost_exact_matches": 1.2
-  }
-}
-```
-
-### **Project-Specific Tuning**
+### Project-Specific Tuning
 ```bash
 # Force reindex with new settings
-./rag-mini index /project --force
+rag-mini init --force
 
-# Test search quality improvements
-./rag-mini search /project "your test query"
+# Test search quality
+rag-mini search "your test query"
 
-# Verify optimization impact
-./rag-mini analyze /project
+# Check index stats
+rag-mini stats
 ```
 
-## 🎊 **Result: Smarter, Faster, Better**
+## Tuning by Project Type
 
-✅ **20-30% better search relevance** (language-aware chunking)  
-✅ **15-25% faster indexing** (smart file filtering)  
-✅ **Automatic optimization** (no manual tuning needed)  
-✅ **Enhanced user experience** (smart query processing)  
-✅ **Portable intelligence** (works across projects)
+### Small Projects (< 100 files)
+- Default settings work well
+- Consider smaller chunk sizes for granular search
 
-The system now **learns from your project patterns** and **automatically tunes itself** for optimal performance!
+### Large Projects (> 1000 files)
+- Exclude build directories and dependencies
+- Increase chunk sizes for broader context
+- Use the `precision` embedding profile for speed
+
+### Code-Heavy Projects
+- AST-based chunking is automatic for Python
+- The code-aware BM25 tokenizer handles `snake_case` and `CamelCase` splitting
+
+### Documentation-Heavy Projects
+- Paragraph-based markdown splitting preserves structure
+- Header hierarchy is maintained in chunks
+- File overview chunks help with "what's in this file" queries
+
+## Performance Impact
+
+- **Better search relevance** from language-aware chunks
+- **Faster indexing** from smart file filtering
+- **Improved context** from function/header-level chunks
+- **Enhanced queries** from automatic query expansion (when enabled)

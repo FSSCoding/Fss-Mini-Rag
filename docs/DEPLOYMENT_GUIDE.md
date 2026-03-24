@@ -1,384 +1,176 @@
 # FSS-Mini-RAG Deployment Guide
 
-> **Run semantic search anywhere - from smartphones to edge devices**  
-> *Complete guide to deploying FSS-Mini-RAG on every platform imaginable*
+> **Run semantic search anywhere — from laptops to edge devices**
 
-## Platform Compatibility Matrix
+## Platform Compatibility
 
 | Platform | Status | AI Features | Installation | Notes |
 |----------|--------|-------------|--------------|-------|
-| **Linux** | ✅ Full | ✅ Full | `./install.sh` | Primary platform |
-| **Windows** | ✅ Full | ✅ Full | `install_windows.bat` | Desktop shortcuts |
-| **macOS** | ✅ Full | ✅ Full | `./install.sh` | Works perfectly |
-| **Raspberry Pi** | ✅ Excellent | ✅ AI ready | `./install.sh` | ARM64 optimized |
-| **Android (Termux)** | ✅ Good | 🟡 Limited | Manual install | Terminal interface |
-| **iOS (a-Shell)** | 🟡 Limited | ❌ Text only | Manual install | Sandbox limitations |
-| **Docker** | ✅ Excellent | ✅ Full | Dockerfile | Any platform |
+| **Linux** | Full | Full | `pip install -e .` | Primary platform |
+| **Windows** | Full | Full | `install_windows.bat` | Desktop GUI works |
+| **macOS** | Full | Full | `pip install -e .` | Works perfectly |
+| **Raspberry Pi** | Good | Limited | `pip install -e .` | ARM64, use small models |
+| **Docker** | Excellent | Full | Dockerfile | Any platform |
 
-## Desktop & Server Deployment
+## Desktop Deployment
 
-### 🐧 **Linux** (Primary Platform)
+### Linux / macOS
 ```bash
-# Full installation with AI features
-./install.sh
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
 
-# What you get:
-# ✅ Desktop shortcuts (.desktop files)
-# ✅ Application menu integration  
-# ✅ Full AI model downloads
-# ✅ Complete terminal interface
+# Launch GUI
+rag-mini gui
+
+# Or use CLI
+rag-mini init
+rag-mini search "query"
 ```
 
-### 🪟 **Windows** (Fully Supported)
+### Windows
 ```cmd
-# Full installation with desktop integration
-install_windows.bat
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+pip install -e .
 
-# What you get:
-# ✅ Desktop shortcuts (.lnk files)
-# ✅ Start Menu entries
-# ✅ Full AI model downloads  
-# ✅ Beautiful terminal interface
+rag-mini gui
 ```
 
-### 🍎 **macOS** (Excellent Support)
+Or use the interactive installer: `install_windows.bat`
+
+## Server Deployment
+
+### REST API Server
 ```bash
-# Same as Linux - works perfectly
-./install.sh
-
-# Additional macOS optimizations:
-brew install python3           # If needed
-brew install ollama           # For AI features
+rag-mini server --port 7777
 ```
 
-**macOS-specific features:**
-- Automatic path detection for common project locations
-- Integration with Spotlight search locations
-- Support for `.app` bundle creation (advanced)
-
-## Edge Device Deployment
-
-### 🥧 **Raspberry Pi** (Recommended Edge Platform)
-
-**Perfect for:**
-- Home lab semantic search server
-- Portable development environment  
-- IoT project documentation search
-- Offline code search station
-
-**Installation:**
-```bash
-# On Raspberry Pi OS (64-bit recommended)
-sudo apt update && sudo apt upgrade
-./install.sh
-
-# The installer automatically detects ARM and optimizes:
-# ✅ Suggests lightweight models (qwen3:0.6b)
-# ✅ Reduces memory usage
-# ✅ Enables efficient chunking
-```
-
-**Raspberry Pi optimized config:**
-```yaml
-# Automatically generated for Pi
-embedding:
-  preferred_method: ollama
-  ollama_model: nomic-embed-text  # 270MB - perfect for Pi
-
-llm:
-  synthesis_model: qwen3:0.6b     # 500MB - fast on Pi 4+
-  context_window: 4096            # Conservative memory use
-  cpu_optimized: true
-
-chunking:
-  max_size: 1500                  # Smaller chunks for efficiency
-```
-
-**Performance expectations:**
-- **Pi 4 (4GB)**: Excellent performance, full AI features
-- **Pi 4 (2GB)**: Good performance, text-only or small models
-- **Pi 5**: Outstanding performance, handles large models
-- **Pi Zero**: Text-only search (hash-based embeddings)
-
-### 🔧 **Other Edge Devices**
-
-**NVIDIA Jetson Series:**
-- Overkill performance for this use case
-- Can run largest models with GPU acceleration
-- Perfect for AI-heavy development workstations
-
-**Intel NUC / Mini PCs:**
-- Excellent performance
-- Full desktop experience
-- Can serve multiple users simultaneously
-
-**Orange Pi / Rock Pi:**
-- Similar to Raspberry Pi
-- Same installation process
-- May need manual Ollama compilation
-
-## Mobile Deployment
-
-### 📱 **Android (Recommended: Termux)**
-
-**Installation in Termux:**
-```bash
-# Install Termux from F-Droid (not Play Store)
-# In Termux:
-pkg update && pkg upgrade
-pkg install python python-pip git
-pip install --upgrade pip
-
-# Clone and install FSS-Mini-RAG
-git clone https://github.com/your-repo/fss-mini-rag
-cd fss-mini-rag
-
-# Install dependencies (5-15 minutes due to compilation)
-python -m pip install -r requirements.txt  # Large downloads + ARM compilation
-python -m pip install .                    # ~1 minute
-
-# Quick start
-python -m mini_rag index /storage/emulated/0/Documents/myproject
-python -m mini_rag search /storage/emulated/0/Documents/myproject "your query"
-```
-
-**Android-optimized config:**
-```yaml
-# config-android.yaml
-embedding:
-  preferred_method: hash    # No heavy models needed
-  
-chunking:
-  max_size: 800            # Small chunks for mobile
-  
-files:
-  min_file_size: 20        # Include more small files
-  
-llm:
-  enable_synthesis: false  # Text-only for speed
-```
-
-**What works on Android:**
-- ✅ Full text search and indexing
-- ✅ Terminal interface (`rag-tui`)
-- ✅ Project indexing from phone storage
-- ✅ Search your phone's code projects
-- ❌ Heavy AI models (use cloud providers instead)
-
-**Android use cases:**
-- Search your mobile development projects
-- Index documentation on your phone
-- Quick code reference while traveling
-- Offline search of downloaded repositories
-
-### 🍎 **iOS (Limited but Possible)**
-
-**Option 1: a-Shell (Free)**
-```bash
-# Install a-Shell from App Store
-# In a-Shell:
-pip install requests pathlib
-
-# Limited installation (core features only)
-# Files must be in app sandbox
-```
-
-**Option 2: iSH (Alpine Linux)**
-```bash
-# Install iSH from App Store  
-# In iSH terminal:
-apk add python3 py3-pip git
-pip install -r requirements-light.txt
-
-# Basic functionality only
-```
-
-**iOS limitations:**
-- Sandbox restricts file access
-- No full AI model support
-- Terminal interface only
-- Limited to app-accessible files
-
-## Specialized Deployment Scenarios
-
-### 🐳 **Docker Deployment**
-
-**For any platform with Docker:**
+### Docker
 ```dockerfile
-# Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 COPY . .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt && pip install -e .
 
-# Expose ports for server mode
 EXPOSE 7777
-
-# Default to TUI interface
-CMD ["python", "-m", "mini_rag.cli"]
+CMD ["rag-mini", "server"]
 ```
 
-**Usage:**
 ```bash
-# Build and run
 docker build -t fss-mini-rag .
 docker run -it -v $(pwd)/projects:/projects fss-mini-rag
 
-# Server mode for web access
-docker run -p 7777:7777 fss-mini-rag python -m mini_rag server
+# Server mode
+docker run -p 7777:7777 fss-mini-rag
 ```
 
-### ☁️ **Cloud Deployment**
+### Cloud (AWS/GCP/Azure)
+Same as Linux installation. Can serve multiple users via the REST API.
 
-**AWS/GCP/Azure VM:**
-- Same as Linux installation
-- Can serve multiple users
-- Perfect for team environments
+## Edge Device Deployment
 
-**GitHub Codespaces:**
+### Raspberry Pi
 ```bash
-# Works in any Codespace
-./install.sh
-# Perfect for searching your workspace
+# Raspberry Pi OS 64-bit
+sudo apt update && sudo apt install python3-venv python3-pip python3-tk
+git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
+cd Fss-Mini-Rag
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
 ```
 
-**Replit/CodeSandbox:**
-- Limited by platform restrictions
-- Basic functionality available
+For embeddings, either:
+- Install `sentence-transformers` for local ML fallback
+- Point to a remote LM Studio instance on your network
 
-### 🏠 **Home Lab Integration**
-
-**Home Assistant Add-on:**
-- Package as Home Assistant add-on
-- Search home automation configs
-- Voice integration possible
-
-**NAS Integration:**
-- Install on Synology/QNAP
-- Search all stored documents
-- Family code documentation
-
-**Router with USB:**
-- Install on OpenWrt routers with USB storage
-- Search network documentation
-- Configuration management
+**Performance expectations:**
+- **Pi 4 (4GB+)**: Good performance, BM25 search works well
+- **Pi 5**: Excellent performance
 
 ## Configuration by Use Case
 
-### 🪶 **Ultra-Lightweight (Old hardware, mobile)**
+### Lightweight (old hardware, limited RAM)
 ```yaml
-# Minimal resource usage
 embedding:
-  preferred_method: hash
+  provider: openai
+  base_url: http://localhost:1234/v1
+  profile: precision
+
+search:
+  default_top_k: 5
+  expand_queries: false
+
 chunking:
-  max_size: 800
-  strategy: fixed
-llm:
-  enable_synthesis: false
+  max_size: 1500
 ```
 
-### ⚖️ **Balanced (Raspberry Pi, older laptops)**
+### Balanced (laptop, desktop)
 ```yaml
-# Good performance with AI features
 embedding:
-  preferred_method: ollama
-  ollama_model: nomic-embed-text
-llm:
-  synthesis_model: qwen3:0.6b
-  context_window: 4096
+  provider: openai
+  base_url: http://localhost:1234/v1
+  profile: precision
+
+search:
+  default_top_k: 10
+  enable_bm25: true
 ```
 
-### 🚀 **Performance (Modern hardware)**
+### Full Features (good hardware + LLM server)
 ```yaml
-# Full features and performance
 embedding:
-  preferred_method: ollama
-  ollama_model: nomic-embed-text
-llm:
-  synthesis_model: qwen3:1.7b
-  context_window: 16384
-  enable_thinking: true
-```
+  provider: openai
+  base_url: http://localhost:1234/v1
+  profile: conceptual
 
-### ☁️ **Cloud-Hybrid (Mobile + Cloud AI)**
-```yaml
-# Local search, cloud intelligence
-embedding:
-  preferred_method: hash
 llm:
   provider: openai
-  api_key: your_api_key
-  synthesis_model: gpt-4
+  api_base: http://localhost:1234/v1
+  enable_synthesis: true
+  enable_thinking: true
+
+search:
+  expand_queries: true
+  default_top_k: 10
+```
+
+### Cloud Hybrid (local search + cloud LLM)
+```yaml
+embedding:
+  provider: openai
+  base_url: http://localhost:1234/v1
+
+llm:
+  provider: openai
+  api_base: https://openrouter.ai/api/v1
+  api_key: "your-key"
+  synthesis_model: "gpt-4o-mini"
 ```
 
 ## Troubleshooting by Platform
 
-### **Raspberry Pi Issues**
-- **Out of memory**: Reduce context window, use smaller models
-- **Slow indexing**: Use hash-based embeddings
-- **Model download fails**: Check internet, use smaller models
+### Linux/macOS
+- **Missing tkinter**: `sudo apt install python3-tk` (Ubuntu) or `brew install python-tk` (macOS)
+- **Permission denied**: Check file permissions, use venv
 
-### **Android/Termux Issues**  
-- **Permission denied**: Use `termux-setup-storage`
-- **Package install fails**: Update packages first
-- **Can't access files**: Use `/storage/emulated/0/` paths
+### Windows
+- **Long path errors**: Enable long paths in Windows settings
+- **Tkinter missing**: Reinstall Python with tkinter option checked
 
-### **iOS Issues**
-- **Limited functionality**: Expected due to iOS restrictions
-- **Can't install packages**: Use lighter requirements file
-- **File access denied**: Files must be in app sandbox
+### Raspberry Pi
+- **Out of memory**: Use BM25 only, reduce chunk sizes
+- **Slow indexing**: Expected — use smaller projects or remote embedding server
 
-### **Edge Device Issues**
-- **ARM compatibility**: Ensure using ARM64 Python packages
-- **Limited RAM**: Use hash embeddings, reduce chunk sizes
-- **No internet**: Skip AI model downloads, use text-only
-
-## Advanced Edge Deployments
-
-### **IoT Integration**
-- Index sensor logs and configurations
-- Search device documentation
-- Troubleshoot IoT deployments
-
-### **Offline Development**
-- Complete development environment on edge device
-- No internet required after setup
-- Perfect for remote locations
-
-### **Educational Use**
-- Raspberry Pi computer labs
-- Student project search
-- Coding bootcamp environments
-
-### **Enterprise Edge**
-- Factory floor documentation search
-- Field service technical reference
-- Remote site troubleshooting
-
----
-
-## Quick Start by Platform
-
-### Desktop Users
-```bash
-# Linux/macOS
-./install.sh
-
-# Windows  
-install_windows.bat
-```
-
-### Edge/Mobile Users
-```bash
-# Raspberry Pi
-./install.sh
-
-# Android (Termux) - 5-15 minutes due to ARM compilation
-pkg install python git && python -m pip install -r requirements.txt && python -m pip install .
-
-# Any Docker platform
-docker run -it fss-mini-rag
-```
-
-**💡 Pro tip**: Start with your current platform, then expand to edge devices as needed. The system scales from smartphones to servers seamlessly!
+### Docker
+- **No GUI**: Docker containers are headless — use CLI or server mode
+- **Volume mounts**: Use `-v` to mount project directories

@@ -45,7 +45,7 @@ When enabled (`config.search.expand_queries = true`), the query is sent to a sma
 - Example: `"authentication"` -> `"authentication login user verification credentials"`
 - Adds ~100ms latency
 - Results are cached per-query to avoid repeated API calls
-- Disabled by default in CLI, enabled in TUI
+- Disabled by default in CLI, configurable in config.yaml
 
 ---
 

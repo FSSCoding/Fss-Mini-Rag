@@ -1,18 +1,19 @@
 # FSS-Mini-RAG Technical Deep Dive
 
-> **How the system actually works under the hood**  
+> **How the system actually works under the hood**
 > *For developers who want to understand, modify, and extend the implementation*
 
 ## Table of Contents
 
 - [System Architecture](#system-architecture)
-- [How Text Becomes Searchable](#how-text-becomes-searchable)
-- [The Embedding Pipeline](#the-embedding-pipeline)
-- [Chunking Strategies](#chunking-strategies)
-- [Search Algorithm](#search-algorithm)
-- [Performance Architecture](#performance-architecture)
+- [Core Components](#core-components)
+- [Chunking Pipeline](#chunking-pipeline)
+- [Embedding System](#embedding-system)
+- [Search Pipeline](#search-pipeline)
+- [Indexing Engine](#indexing-engine)
+- [Web Research Pipeline](#web-research-pipeline)
 - [Configuration System](#configuration-system)
-- [Error Handling & Fallbacks](#error-handling--fallbacks)
+- [Desktop GUI](#desktop-gui)
 
 ## System Architecture
 
@@ -21,30 +22,29 @@ FSS-Mini-RAG implements a hybrid semantic search system with three core stages:
 ```mermaid
 graph LR
     subgraph "Input Processing"
-        Files[📁 Source Files<br/>.py .md .js .json]
-        Language[🔤 Language Detection]
-        Files --> Language
+        Files[Source Files] --> Language[Language Detection]
     end
-    
+
     subgraph "Intelligent Chunking"
-        Language --> Python[🐍 Python AST<br/>Functions & Classes]
-        Language --> Markdown[📝 Markdown<br/>Header Sections]
-        Language --> Code[💻 Other Code<br/>Smart Boundaries]
-        Language --> Text[📄 Plain Text<br/>Fixed Size]
+        Language --> Python[Python AST]
+        Language --> Markdown[Markdown Paragraphs]
+        Language --> JS[JavaScript/Go/Java]
+        Language --> Config[Config Files]
+        Language --> Generic[Generic Fallback]
     end
-    
+
     subgraph "Embedding Pipeline"
-        Python --> Embed[🧠 Generate Embeddings]
+        Python --> Embed[Generate Embeddings]
         Markdown --> Embed
-        Code --> Embed
-        Text --> Embed
-        
+        JS --> Embed
+        Config --> Embed
+        Generic --> Embed
         Embed --> API[OpenAI-Compatible API]
         Embed --> ML[ML Models Fallback]
     end
 
     subgraph "Storage & Search"
-        API --> Store[(LanceDB Vector Database)]
+        API --> Store[(LanceDB)]
         ML --> Store
 
         Query[Search Query] --> Semantic[Semantic Search]
@@ -55,706 +55,498 @@ graph LR
         BM25 --> RRF
         RRF --> Ranked[Ranked Output]
     end
-    
-    style Files fill:#e3f2fd
-    style Store fill:#fff3e0
-    style Ranked fill:#e8f5e8
 ```
 
 ### Core Components
 
-1. **ProjectIndexer** (`indexer.py`) - Orchestrates the indexing pipeline
-2. **CodeChunker** (`chunker.py`) - Breaks files into meaningful pieces
-3. **OllamaEmbedder** (`ollama_embeddings.py`) - Converts text to vectors via OpenAI-compatible API
-4. **CodeSearcher** (`search.py`) - Finds and ranks relevant content
-5. **FileWatcher** (`watcher.py`) - Monitors changes for incremental updates
+1. **ProjectIndexer** (`indexer.py`) — Parallel indexing with cancellation, progress reporting, and manifest tracking
+2. **CodeChunker** (`chunker.py`) — Language-aware chunking with AST parsing, paragraph splitting, and file overviews
+3. **OllamaEmbedder** (`ollama_embeddings.py`) — OpenAI-compatible embedding provider with auto-detection and ML fallback
+4. **CodeSearcher** (`search.py`) — Independent BM25 + semantic search with RRF fusion
+5. **LLMSynthesizer** (`llm_synthesizer.py`) — LLM synthesis with streaming SSE support
+6. **DeepResearchEngine** (`deep_research.py`) — Iterative web research with time budgets and corpus pruning
+7. **MiniWebScraper** (`web_scraper.py`) — Rate-limited web fetcher with robots.txt compliance
+8. **SearchEngineManager** (`search_engines.py`) — DuckDuckGo/Tavily/Brave unified interface
+9. **ContentExtractors** (`extractors.py`) — HTML, PDF, arXiv, GitHub content extraction
+10. **RateLimiter** (`rate_limiter.py`) — Retry infrastructure with backoff for all API calls
+11. **NonInvasiveFileWatcher** (`non_invasive_watcher.py`) — Monitors changes for incremental updates
 
-## How Text Becomes Searchable
+---
 
-### Step 1: File Discovery and Filtering
+## Chunking Pipeline
 
-The system scans directories recursively, applying these filters:
-- **Supported extensions**: `.py`, `.js`, `.md`, `.json`, etc. (50+ types)
-- **Size limits**: Skip files larger than 10MB (configurable)
-- **Exclusion patterns**: Skip `node_modules`, `.git`, `__pycache__`, etc.
-- **Binary detection**: Skip binary files automatically
+Source: `mini_rag/chunker.py` — class `CodeChunker`
 
-### Step 2: Change Detection (Incremental Updates)
+The chunker breaks files into semantically meaningful pieces. Language is detected from the file extension, then a language-specific strategy is applied.
 
-Before processing any file, the system checks if re-indexing is needed:
+### Language Detection
+
+The chunker maps file extensions to languages:
 
 ```python
-def _needs_reindex(self, file_path: Path, manifest: Dict) -> bool:
-    """Smart change detection to avoid unnecessary work."""
-    file_info = manifest.get('files', {}).get(str(file_path))
-    
-    # Quick checks first (fast)
-    current_size = file_path.stat().st_size
-    current_mtime = file_path.stat().st_mtime
-    
-    if not file_info:
-        return True  # New file
-    
-    if (file_info.get('size') != current_size or 
-        file_info.get('mtime') != current_mtime):
-        return True  # Size or time changed
-    
-    # Content hash check (slower, only when needed)
-    if file_info.get('hash') != self._get_file_hash(file_path):
-        return True  # Content actually changed
-    
-    return False  # File unchanged, skip processing
+# From chunker.py — self.language_patterns
+".py"  -> "python"      ".md"   -> "markdown"    ".json" -> "json"
+".js"  -> "javascript"  ".txt"  -> "text"        ".yaml" -> "yaml"
+".ts"  -> "typescript"  ".go"   -> "go"          ".toml" -> "toml"
+".java" -> "java"       ".rs"   -> "rust"        # ... 30+ extensions
 ```
 
-### Step 3: Streaming for Large Files
+### Per-Language Size Configs
 
-Files larger than 1MB are processed in chunks to avoid memory issues:
+Each language has tuned chunk sizes (from `DEFAULT_LANGUAGE_CONFIGS`):
+
+| Language | Max Size | Min Size | Notes |
+|----------|----------|----------|-------|
+| Python | 3000 | 200 | AST-based |
+| JavaScript/TypeScript | 2500 | 150 | Regex-based function detection |
+| Go / Java | 2500-3000 | 150-200 | Regex-based |
+| Markdown | 2500 | 300 | Paragraph-based |
+| JSON | 1000 | 50 | Max file size: 50KB |
+| YAML / Bash | 1500 | 100 | |
+| Text | 2000 | 200 | Fixed-size fallback |
+
+### Chunking Strategies
+
+The `chunk_file` method dispatches to a language-specific chunker:
 
 ```python
-def _read_file_streaming(self, file_path: Path) -> str:
-    """Read large files in chunks to manage memory."""
-    content_parts = []
-    
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        while True:
-            chunk = f.read(8192)  # 8KB chunks
-            if not chunk:
-                break
-            content_parts.append(chunk)
-    
-    return ''.join(content_parts)
+# From chunker.py:261-281 — strategy dispatch
+if language == "python":
+    chunks = self._chunk_python(content, str(file_path))
+elif language in ["javascript", "typescript"]:
+    chunks = self._chunk_javascript(content, str(file_path), language)
+elif language == "go":
+    chunks = self._chunk_go(content, str(file_path))
+elif language == "java":
+    chunks = self._chunk_java(content, str(file_path))
+elif language in ["markdown", "text", "restructuredtext", "asciidoc"]:
+    chunks = self._chunk_markdown(content, str(file_path), language)
+elif language in ["json", "yaml", "toml", "ini", "xml", "config"]:
+    chunks = self._chunk_config(content, str(file_path), language)
+else:
+    chunks = self._chunk_generic(content, str(file_path), language)
 ```
 
-## The Embedding Pipeline
+**Python (`_chunk_python`)**: Uses `ast.parse()` to extract functions, classes, methods, and module-level code. Each AST node becomes a chunk with accurate line numbers. Falls back to generic chunking on `SyntaxError`.
 
-### OpenAI-Compatible Endpoint (Default)
+**Markdown (`_chunk_markdown`)**: Paragraph-based splitting that preserves code blocks (fenced ``` blocks are never split mid-block) and header hierarchy. Section boundaries are respected.
 
-The system uses any OpenAI-compatible embedding API as the primary provider. This works with LM Studio, vLLM, OpenAI, or any compatible proxy.
+**Config files (`_chunk_config`)**: Smaller chunks for JSON/YAML/TOML. Large JSON files (>50KB) are skipped entirely.
 
-On startup, the embedder:
-1. Queries `GET /v1/models` to discover available models
-2. Auto-selects the best embedding model (prefers MiniLM for precision, Nomic for conceptual depth)
-3. Sends a test embedding request to verify the connection and detect dimension
+**Generic (`_chunk_generic`)**: Fixed-size chunking with overlap. Breaks at line boundaries, avoids splitting mid-line.
+
+### Post-Processing
+
+After chunking, two things happen:
+
+1. **Size enforcement** (`_enforce_size_constraints`): Chunks exceeding `max_size` are split further. Chunks below `min_size` are discarded or merged.
+
+2. **File overview chunk** (`_create_file_overview`): A special chunk is prepended listing all functions and classes in the file. This handles "what's in this file?" queries.
+
+### CodeChunk Data Model
+
+Each chunk carries rich metadata:
 
 ```python
-# Default: connects to LM Studio at localhost:1234
-embedder = OllamaEmbedder()  # Auto-detects model
+# From chunker.py — CodeChunk fields
+content: str           # The actual text
+file_path: str         # Relative path
+start_line: int        # First line number
+end_line: int          # Last line number
+chunk_type: str        # 'function', 'class', 'method', 'module', 'module_header'
+name: str              # Function/class name (if applicable)
+language: str          # Detected language
+parent_class: str      # Enclosing class (for methods)
+chunk_index: int       # Position in file
+total_chunks: int      # Total chunks from this file
+prev_chunk_id: str     # Linked-list navigation
+next_chunk_id: str     # Linked-list navigation
+```
 
-# Or specify explicitly
-embedder = OllamaEmbedder(
-    model_name="text-embedding-all-minilm-l6-v2-embedding",
-    base_url="http://localhost:1234/v1"
+---
+
+## Embedding System
+
+Source: `mini_rag/ollama_embeddings.py` — class `OllamaEmbedder`
+
+Despite the legacy class name, this module supports any OpenAI-compatible embedding endpoint.
+
+### Provider Priority Chain
+
+```
+1. OpenAI-compatible endpoint (LM Studio, vLLM, OpenAI, any proxy)
+   ↓ if unavailable
+2. ML fallback (sentence-transformers, if installed)
+   ↓ if unavailable
+3. Mode: "unavailable" — semantic search skipped, BM25 only
+```
+
+There are no fake embeddings. If nothing is available, the system says so honestly and runs keyword search only.
+
+### Auto-Detection
+
+When `model_name="auto"`, the embedder:
+
+1. Queries `GET /v1/models` (OpenAI) or `GET /api/tags` (legacy) to discover available models
+2. Classifies models as embedding or LLM based on name patterns (`embed`, `bge-`, `e5-`, `gte-`)
+3. Excludes multimodal/VL models from auto-selection
+4. Selects based on the configured profile:
+
+| Profile | Selection Order | Best For |
+|---------|----------------|----------|
+| `precision` | MiniLM > Granite > Nomic | Literal code matching, fast |
+| `conceptual` | Nomic > BGE > E5 > MiniLM | Semantic depth, "why" queries |
+
+### Embedding Modes
+
+```python
+# From ollama_embeddings.py — self.mode values
+"openai"      # Connected to OpenAI-compatible endpoint
+"ollama"      # Connected to Ollama native API
+"fallback"    # Using local ML models (sentence-transformers)
+"unavailable" # Nothing available — BM25 only
+```
+
+### Manifest Tracking
+
+The index manifest stores which model was used for embedding. If you search with a different model than what was indexed, the system warns you to re-index.
+
+---
+
+## Search Pipeline
+
+Source: `mini_rag/search.py` — class `CodeSearcher`
+
+The search runs a **two-retriever hybrid** approach adapted from the FSS-RAG architecture.
+
+### Pipeline Overview
+
+```
+Query
+  |
+  v
+[Query Expansion] ---- optional LLM-based synonym expansion
+  |
+  +---> [Semantic Search]  (LanceDB vector similarity, top_k*3)
+  |           |
+  +---> [BM25 Search]      (BM25Okapi full index, top_k*3)
+  |           |
+  v           v
+  +-----+-----+
+        |
+  [RRF Fusion]  ---- merge by rank, not score
+        |
+  [Smart Re-rank] ---- boost by file importance, recency, chunk type
+        |
+  [Diversity Filter] ---- max 2 per file, type diversity, dedup
+        |
+  [Chunk Consolidation] ---- merge adjacent chunks from same file
+        |
+        v
+    Final Results
+```
+
+### Stage 1: Query Expansion (optional)
+
+Source: `mini_rag/query_expander.py`
+
+When `config.search.expand_queries = true`, the query is sent to an LLM which adds synonym/related terms. Results are cached per-query. Disabled by default in CLI.
+
+### Stage 2a: Semantic Search
+
+Source: `search.py:497-521`
+
+Uses LanceDB's built-in vector search. The query is embedded using the same model that built the index.
+
+```python
+# From search.py:508-518 — actual code
+results_df = (
+    self.table.search(query_embedding)
+    .limit(top_k * 3)
+    .to_pandas()
 )
+
+for _, row in results_df.iterrows():
+    distance = row["_distance"]
+    score = 1 / (1 + distance)  # Convert L2 distance to 0-1 similarity
 ```
 
-**Embedding profiles** (set in config.yaml):
-- `precision` (default): Prefers MiniLM (384 dim, 2x faster, better at literal code matching)
-- `conceptual`: Prefers Nomic (768 dim, better at "why does X happen" questions)
+Skipped entirely if embedder mode is `"unavailable"` — falls back to BM25-only.
 
-**Fallback chain:** If the primary endpoint is unavailable, falls back to local ML models (sentence-transformers) if installed. If nothing is available, semantic search is disabled and BM25 keyword search runs solo.
+### Stage 2b: BM25 Keyword Search
 
-The index stores which model was used (`manifest.json`). If you search with a different model than what was indexed, you get a warning to re-index.
+Source: `search.py:356-386`
 
-### ML Fallback (Optional)
+Uses `rank_bm25.BM25Okapi` over the full chunk corpus.
 
-If `sentence-transformers` is installed, it serves as a fallback when no API endpoint is available:
+**Code-aware tokenizer** (`_tokenize_for_bm25`, `search.py:25-58`):
 
 ```python
-# Install optional ML support
-pip install sentence-transformers torch
+# From search.py — actual tokenization logic
+# Splits on: whitespace, non-alphanumeric, snake_case, camelCase
+# "get_auth_token" -> ["get_auth_token", "get", "auth", "token"]
+# "getAuthToken"   -> ["getauthtoken", "get", "auth", "token"]
 ```
 
-### Batch Processing for Efficiency
+The original compound token is kept alongside split parts so exact matches still work.
 
-When processing multiple texts, the system batches requests:
+### Stage 3: RRF Fusion
+
+Source: `search.py:390-452`
+
+Reciprocal Rank Fusion merges the two ranked lists using rank position rather than raw scores. This avoids the calibration problem of mixing BM25 scores (unbounded) with cosine similarity (0-1).
+
+```
+RRF_score = sum( 1 / (k + rank + 1) )  for each list containing this result
+```
+
+- **k = 60** (standard constant from the original RRF paper, Cormack et al. 2009)
+- Results appearing in both lists score highest
+- Deduplication by `(file_path, start_line, end_line)`
+- Typical score range: 0.01 - 0.05
+
+### Stage 4: Smart Re-ranking
+
+Source: `search.py:622-678`
+
+Post-fusion score adjustments (multiplicative boosts):
+
+| Condition | Boost | Rationale |
+|-----------|-------|-----------|
+| Important file patterns (`readme`, `main.`, `__init__`, `config`) | x1.05 | Core files are usually more relevant |
+| Modified in last 7 days | x1.02 | Recently touched code |
+| Chunk type is `function`, `class`, or `method` | x1.10 | Code definitions > raw blocks |
+| Chunk type is `comment` or `docstring` | x1.05 | Documentation helps understanding |
+| Content has 3+ substantive lines | x1.02 | Well-structured content |
+| Content < 50 characters | x0.90 | Penalty: too short to be useful |
+
+### Stage 5: Diversity Constraints
+
+- **Max 2 chunks per file** — prevents one large file from dominating
+- **Chunk type diversity** — limits any single type to max 1/3 of results
+- **Content deduplication** — hashes first 200 chars, skips duplicates
+
+### Stage 6: Chunk Consolidation
+
+Source: `search.py:561-620`
+
+Merges adjacent/overlapping chunks from the same file into contiguous passages. Groups by file path, sorts by start line, merges where the gap is <= 1 line.
+
+### Score Labels
+
+The display system auto-detects the RRF score scale:
+
+| Score Range | Label |
+|-------------|-------|
+| >= 0.035 | HIGH |
+| >= 0.025 | GOOD |
+| >= 0.018 | FAIR |
+| >= 0.010 | LOW |
+| < 0.010 | WEAK |
+
+---
+
+## Indexing Engine
+
+Source: `mini_rag/indexer.py` — class `ProjectIndexer`
+
+### File Discovery
+
+The indexer scans the project directory recursively with:
+
+- **Include patterns**: 40+ file extensions — `.py`, `.js`, `.md`, `.json`, `.yaml`, etc. plus extensionless files like `README`, `LICENSE`
+- **Exclude patterns**: `__pycache__`, `.git`, `.mini-rag`, `node_modules`, `.venv`, `dist`, `build`, `*.pyc`, `*.so`, `*.log`, etc.
+- **Max file size**: 50MB (configurable)
+
+### Incremental Indexing
+
+The `_needs_reindex` method checks each file against the manifest:
+
+1. **New file?** → Index it
+2. **Size or mtime changed?** → Re-index
+3. **Content hash (SHA-256) changed?** → Re-index (slower check, only when mtime differs)
+4. **File unchanged?** → Skip
+
+### Parallel Processing
+
+Files are processed in parallel using `ThreadPoolExecutor`:
 
 ```python
-def embed_texts_batch(self, texts: List[str]) -> np.ndarray:
-    """Process multiple texts efficiently with batching."""
-    embeddings = []
-    
-    # Process in batches to manage memory and API limits
-    batch_size = self.batch_size  # Default: 32
-    
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        
-        if self.ollama_available:
-            # Concurrent Ollama requests
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(self._get_ollama_embedding, text) 
-                          for text in batch]
-                batch_embeddings = [f.result() for f in futures]
-        else:
-            # Sequential fallback processing
-            batch_embeddings = [self.embed_text(text) for text in batch]
-        
-        embeddings.extend(batch_embeddings)
-    
-    return np.array(embeddings)
+# From indexer.py:910-914 — actual parallel processing
+with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+    future_to_file = {
+        executor.submit(self._process_file, file_path): file_path
+        for file_path in files_to_index
+    }
 ```
 
-## Chunking Strategies
+Default: 4 workers. Each file is chunked, embedded, and added to LanceDB independently.
 
-The system uses different chunking strategies based on file type and content:
+### Cancellation Support
 
-### Python Files: AST-Based Chunking
-```python
-def chunk_python_file(self, content: str, file_path: str) -> List[CodeChunk]:
-    """Parse Python files using AST for semantic boundaries."""
-    try:
-        tree = ast.parse(content)
-        chunks = []
-        
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                # Extract function with context
-                start_line = node.lineno
-                end_line = getattr(node, 'end_lineno', start_line + 10)
-                
-                func_content = self._extract_lines(content, start_line, end_line)
-                
-                chunks.append(CodeChunk(
-                    content=func_content,
-                    file_path=file_path,
-                    start_line=start_line,
-                    end_line=end_line,
-                    chunk_type='function',
-                    name=node.name,
-                    language='python'
-                ))
-                
-            elif isinstance(node, ast.ClassDef):
-                # Similar extraction for classes...
-                
-    except SyntaxError:
-        # Fall back to fixed-size chunking for invalid Python
-        return self.chunk_fixed_size(content, file_path)
-```
+The indexer supports cancellation via `threading.Event`. The GUI uses this to provide a cancel button during indexing. When cancelled, remaining futures are cancelled and partial results are preserved.
 
-### Markdown Files: Header-Based Chunking
-```python
-def chunk_markdown_file(self, content: str, file_path: str) -> List[CodeChunk]:
-    """Split markdown on headers for logical sections."""
-    lines = content.split('\n')
-    chunks = []
-    current_chunk = []
-    current_header = None
-    
-    for line_num, line in enumerate(lines, 1):
-        if line.startswith('#'):
-            # New header found - save previous chunk
-            if current_chunk:
-                chunk_content = '\n'.join(current_chunk)
-                chunks.append(CodeChunk(
-                    content=chunk_content,
-                    file_path=file_path,
-                    start_line=line_num - len(current_chunk),
-                    end_line=line_num - 1,
-                    chunk_type='section',
-                    name=current_header,
-                    language='markdown'
-                ))
-                current_chunk = []
-            
-            current_header = line.strip('#').strip()
-        
-        current_chunk.append(line)
-    
-    # Don't forget the last chunk
-    if current_chunk:
-        # ... save final chunk
-```
+### Progress Reporting
 
-### Fixed-Size Chunking with Overlap
-```python
-def chunk_fixed_size(self, content: str, file_path: str) -> List[CodeChunk]:
-    """Fallback chunking for unsupported file types."""
-    chunks = []
-    max_size = self.config.chunking.max_size  # Default: 2000 chars
-    overlap = 200  # Character overlap between chunks
-    
-    for i in range(0, len(content), max_size - overlap):
-        chunk_content = content[i:i + max_size]
-        
-        # Try to break at word boundaries
-        if i + max_size < len(content):
-            last_space = chunk_content.rfind(' ')
-            if last_space > max_size * 0.8:  # Don't break too early
-                chunk_content = chunk_content[:last_space]
-        
-        if len(chunk_content.strip()) >= self.config.chunking.min_size:
-            chunks.append(CodeChunk(
-                content=chunk_content.strip(),
-                file_path=file_path,
-                start_line=None,  # Unknown for fixed-size chunks
-                end_line=None,
-                chunk_type='text',
-                name=None,
-                language='text'
-            ))
-    
-    return chunks
-```
+A callback system (`_progress_callback`) reports `(files_done, files_total, chunks_so_far)` for GUI progress bars.
 
-## Search Algorithm
+### Storage
 
-### Hybrid Semantic + Keyword Search
+Data is stored in LanceDB (embedded vector database) at `.mini-rag/`:
 
-The search runs two independent pipelines and merges results with Reciprocal Rank Fusion (RRF). This ensures keyword matches are found even when embeddings are poor, and semantic matches are found even when keywords don't match exactly.
+- `lance/` — vector database files
+- `manifest.json` — file hashes, chunk counts, embedding model info
+- `config.json` — indexer-specific configuration
+
+---
+
+## Web Research Pipeline
+
+### Web Scraper
+
+Source: `mini_rag/web_scraper.py` — class `MiniWebScraper`
+
+A lightweight scraper using `requests` (no Playwright). Features:
+- Rate limiting with per-domain tracking
+- robots.txt compliance
+- Session management with 3-bucket directory structure: `sources/`, `notes/`, `agent-notes/`
+
+### Content Extractors
+
+Source: `mini_rag/extractors.py`
+
+| Extractor | Input | Method |
+|-----------|-------|--------|
+| HTML | Web pages | BeautifulSoup — strips nav/footer/ads, extracts article content |
+| PDF | PDF files | pymupdf — page-by-page text extraction |
+| arXiv | arXiv URLs | Fetches abstract + PDF, extracts structured content |
+| GitHub | GitHub URLs | Fetches README, file contents via raw URLs |
+
+### Search Engines
+
+Source: `mini_rag/search_engines.py`
+
+| Engine | Auth Required | Method |
+|--------|---------------|--------|
+| DuckDuckGo | No | HTML scraping with fallback (no API key needed) |
+| Tavily | Yes (API key) | REST API |
+| Brave | Yes (API key) | REST API |
+
+### Deep Research Engine
+
+Source: `mini_rag/deep_research.py` — class `DeepResearchEngine`
+
+Iterative research cycles with time budgets:
 
 ```
-Query -> [Semantic Pipeline] -> ranked results by cosine similarity
-      -> [BM25 Pipeline]    -> ranked results by term frequency (full index)
-      -> [RRF Fusion]       -> merged by rank position
-      -> [Smart Rerank]     -> minor boosts for important files
-      -> [Diversity Filter] -> prevent one file dominating
-      -> [Consolidation]    -> merge adjacent chunks from same file
+ANALYZE → SEARCH → SCRAPE → PRUNE → REPORT → (repeat if time remains)
 ```
 
-**Reciprocal Rank Fusion (RRF):**
-```python
-# For each result appearing in any pipeline:
-rrf_score = sum(1 / (60 + rank_in_method)) for each method
-# Results appearing in BOTH methods score highest
-```
+1. **Analyze**: LLM reads current corpus, identifies knowledge gaps
+2. **Search**: Generates new queries from gaps, searches the web
+3. **Scrape**: Fetches and extracts content from results
+4. **Prune**: Trigram fuzzy deduplication, keyword overlap for corroboration scoring
+5. **Report**: Generates comprehensive research report
 
-**BM25 tokenizer** splits code identifiers for better matching:
-- `snake_case_function` -> `[snake_case_function, snake, case, function]`
-- `CamelCaseClass` -> `[camelcaseclass, camel, case, class]`
-- Searching "auth" matches `getAuthManager` and `auth_handler`
+Features:
+- `SessionMetrics` analytics layer tracking file records, round history
+- Time budget enforcement (e.g. `--time 1h`)
+- Live progress visibility during rounds
+- Corpus pruning to keep quality high
 
-**Score labels** auto-detect the scoring scale (RRF vs cosine) and display human-readable quality indicators (HIGH/GOOD/FAIR/LOW/WEAK) next to each result.
+### Rate Limiter
 
-If no embedding provider is available, semantic search is skipped and BM25 runs solo (honest degradation, no fake embeddings).
+Source: `mini_rag/rate_limiter.py`
 
-### Vector Database Operations
+Global retry infrastructure used by all API calls:
+- Exponential backoff with jitter
+- Per-domain rate limiting
+- Configurable max retries and base delay
 
-Storage and retrieval using LanceDB:
-
-```python
-def _create_vector_table(self, chunks: List[CodeChunk], embeddings: np.ndarray):
-    """Create LanceDB table with vectors and metadata."""
-    
-    # Prepare data for LanceDB
-    data = []
-    for chunk, embedding in zip(chunks, embeddings):
-        data.append({
-            'vector': embedding.tolist(),  # LanceDB requires lists
-            'content': chunk.content,
-            'file_path': str(chunk.file_path),
-            'start_line': chunk.start_line or 0,
-            'end_line': chunk.end_line or 0,
-            'chunk_type': chunk.chunk_type,
-            'name': chunk.name or '',
-            'language': chunk.language,
-            'created_at': datetime.now().isoformat()
-        })
-    
-    # Create table with vector index
-    table = self.db.create_table("chunks", data, mode="overwrite")
-    
-    # Add vector index for fast similarity search
-    table.create_index("vector", metric="cosine")
-    
-    return table
-
-def vector_search(self, query_embedding: np.ndarray, top_k: int) -> List[SearchResult]:
-    """Fast vector similarity search."""
-    table = self.db.open_table("chunks")
-    
-    # LanceDB vector search
-    results = (table
-               .search(query_embedding.tolist())
-               .limit(limit)
-               .to_pandas())
-    
-    search_results = []
-    for _, row in results.iterrows():
-        search_results.append(SearchResult(
-            content=row['content'],
-            file_path=Path(row['file_path']),
-            similarity_score=1.0 - row['_distance'],  # Convert distance to similarity
-            start_line=row['start_line'] if row['start_line'] > 0 else None,
-            end_line=row['end_line'] if row['end_line'] > 0 else None,
-            chunk_type=row['chunk_type'],
-            name=row['name'] if row['name'] else None
-        ))
-    
-    return search_results
-```
-
-## Performance Architecture
-
-### Memory Management
-
-The system is designed to handle large codebases efficiently:
-
-```python
-class MemoryEfficientIndexer:
-    """Streaming indexer that processes files without loading everything into memory."""
-    
-    def __init__(self, max_memory_mb: int = 500):
-        self.max_memory_mb = max_memory_mb
-        self.current_batch = []
-        self.batch_size_bytes = 0
-        
-    def process_file_batch(self, files: List[Path]):
-        """Process files in memory-efficient batches."""
-        for file_path in files:
-            file_size = file_path.stat().st_size
-            
-            # Check if adding this file would exceed memory limit
-            if (self.batch_size_bytes + file_size > 
-                self.max_memory_mb * 1024 * 1024):
-                
-                # Process current batch and start new one
-                self._process_current_batch()
-                self._clear_batch()
-            
-            self.current_batch.append(file_path)
-            self.batch_size_bytes += file_size
-        
-        # Process remaining files
-        if self.current_batch:
-            self._process_current_batch()
-```
-
-### Concurrent Processing
-
-Multiple files are processed in parallel:
-
-```python
-def index_files_parallel(self, file_paths: List[Path]) -> List[CodeChunk]:
-    """Process multiple files concurrently."""
-    all_chunks = []
-    
-    # Determine optimal worker count based on CPU and file count
-    max_workers = min(4, len(file_paths), os.cpu_count() or 1)
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all files for processing
-        future_to_file = {
-            executor.submit(self._process_single_file, file_path): file_path
-            for file_path in file_paths
-        }
-        
-        # Collect results as they complete
-        for future in as_completed(future_to_file):
-            file_path = future_to_file[future]
-            try:
-                chunks = future.result()
-                all_chunks.extend(chunks)
-                
-                # Update progress
-                self._update_progress(file_path)
-                
-            except Exception as e:
-                logger.error(f"Failed to process {file_path}: {e}")
-                self.failed_files.append(file_path)
-    
-    return all_chunks
-```
-
-### Database Optimization
-
-LanceDB is optimized for vector operations:
-
-```python
-def optimize_database(self):
-    """Optimize database for search performance."""
-    table = self.db.open_table("chunks")
-    
-    # Compact the table to remove deleted rows
-    table.compact_files()
-    
-    # Rebuild vector index for optimal performance
-    table.create_index("vector", 
-                      metric="cosine",
-                      num_partitions=256,  # Optimize for dataset size
-                      num_sub_vectors=96)  # Balance speed vs accuracy
-    
-    # Add secondary indexes for filtering
-    table.create_index("file_path")
-    table.create_index("chunk_type")
-    table.create_index("language")
-```
+---
 
 ## Configuration System
 
-### Hierarchical Configuration
+Source: `mini_rag/config.py`
 
-Configuration is loaded from multiple sources with precedence:
+Configuration uses Python dataclasses with YAML persistence.
 
-```python
-def load_configuration(self, project_path: Path) -> RAGConfig:
-    """Load configuration with hierarchical precedence."""
-    
-    # 1. Start with system defaults
-    config = RAGConfig()  # Built-in defaults
-    
-    # 2. Apply global user config if it exists
-    global_config_path = Path.home() / '.config' / 'fss-mini-rag' / 'config.yaml'
-    if global_config_path.exists():
-        global_config = self._load_yaml_config(global_config_path)
-        config = self._merge_configs(config, global_config)
-    
-    # 3. Apply project-specific config
-    project_config_path = project_path / '.mini-rag' / 'config.yaml'
-    if project_config_path.exists():
-        project_config = self._load_yaml_config(project_config_path)
-        config = self._merge_configs(config, project_config)
-    
-    # 4. Apply environment variable overrides
-    config = self._apply_env_overrides(config)
-    
-    return config
-```
-
-### Auto-Optimization
-
-The system analyzes projects and suggests optimizations:
+### Dataclass Hierarchy
 
 ```python
-class ProjectAnalyzer:
-    """Analyzes project characteristics to suggest optimal configuration."""
-    
-    def analyze_project(self, project_path: Path) -> Dict[str, Any]:
-        """Analyze project structure and content patterns."""
-        analysis = {
-            'total_files': 0,
-            'languages': Counter(),
-            'file_sizes': [],
-            'avg_function_length': 0,
-            'documentation_ratio': 0.0
-        }
-        
-        for file_path in project_path.rglob('*'):
-            if not file_path.is_file():
-                continue
-                
-            analysis['total_files'] += 1
-            
-            # Detect language from extension
-            language = self._detect_language(file_path)
-            analysis['languages'][language] += 1
-            
-            # Analyze file size
-            size = file_path.stat().st_size
-            analysis['file_sizes'].append(size)
-            
-            # Analyze content patterns for supported languages
-            if language == 'python':
-                func_lengths = self._analyze_python_functions(file_path)
-                analysis['avg_function_length'] = np.mean(func_lengths)
-        
-        return analysis
-    
-    def generate_recommendations(self, analysis: Dict[str, Any]) -> RAGConfig:
-        """Generate optimal configuration based on analysis."""
-        config = RAGConfig()
-        
-        # Adjust chunk size based on average function length
-        if analysis['avg_function_length'] > 0:
-            # Make chunks large enough to contain average function
-            optimal_chunk_size = min(4000, int(analysis['avg_function_length'] * 1.5))
-            config.chunking.max_size = optimal_chunk_size
-        
-        # Adjust streaming threshold based on project size
-        if analysis['total_files'] > 1000:
-            # Use streaming for smaller files in large projects
-            config.streaming.threshold_bytes = 512 * 1024  # 512KB
-        
-        # Optimize for dominant language
-        dominant_language = analysis['languages'].most_common(1)[0][0]
-        if dominant_language == 'python':
-            config.chunking.strategy = 'semantic'  # Use AST parsing
-        elif dominant_language in ['markdown', 'text']:
-            config.chunking.strategy = 'header'    # Use header-based
-        
-        return config
+@dataclass RAGConfig          # Top-level config
+  ├── ChunkingConfig          # max_size, min_size, strategy
+  ├── EmbeddingConfig         # provider, base_url, model, profile, api_key
+  ├── StreamingConfig         # enabled, threshold_bytes
+  ├── FilesConfig             # min_file_size, exclude_patterns
+  ├── SearchConfig            # default_top_k, enable_bm25, expand_queries
+  ├── LLMConfig               # provider, api_base, synthesis_model, temperature
+  └── DeepResearchConfig      # time_budget, max_rounds, search_engine
 ```
 
-## Error Handling & Fallbacks
+### Configuration Sources
 
-### Graceful Degradation
+1. **Built-in defaults** — hardcoded in dataclass definitions
+2. **Project config** — `.mini-rag/config.yaml` (created on first run)
+3. **GUI config** — `~/.config/fss-mini-rag/gui_config.json` (GUI-specific settings)
 
-The system continues working even when components fail:
+### Key Defaults
 
-```python
-class RobustIndexer:
-    """Indexer with comprehensive error handling and recovery."""
-    
-    def index_project_with_recovery(self, project_path: Path) -> Dict[str, Any]:
-        """Index project with automatic error recovery."""
-        results = {
-            'files_processed': 0,
-            'files_failed': 0,
-            'chunks_created': 0,
-            'errors': [],
-            'fallbacks_used': []
-        }
-        
-        try:
-            # Primary indexing path
-            return self._index_project_primary(project_path)
-            
-        except DatabaseCorruptionError as e:
-            # Database corrupted - rebuild from scratch
-            logger.warning(f"Database corruption detected: {e}")
-            self._rebuild_database(project_path)
-            results['fallbacks_used'].append('database_rebuild')
-            return self._index_project_primary(project_path)
-            
-        except EmbeddingServiceError as e:
-            # Embedding service failed - try fallback
-            logger.warning(f"Primary embedding service failed: {e}")
-            self.embedder.force_fallback_mode()
-            results['fallbacks_used'].append('embedding_fallback')
-            return self._index_project_primary(project_path)
-            
-        except InsufficientMemoryError as e:
-            # Out of memory - switch to streaming mode
-            logger.warning(f"Memory limit exceeded: {e}")
-            self.config.streaming.enabled = True
-            self.config.streaming.threshold_bytes = 100 * 1024  # 100KB
-            results['fallbacks_used'].append('streaming_mode')
-            return self._index_project_primary(project_path)
-            
-        except Exception as e:
-            # Unknown error - attempt minimal indexing
-            logger.error(f"Unexpected error during indexing: {e}")
-            results['errors'].append(str(e))
-            return self._index_project_minimal(project_path, results)
-    
-    def _index_project_minimal(self, project_path: Path, results: Dict) -> Dict:
-        """Minimal indexing mode that processes files individually."""
-        # Process files one by one with individual error handling
-        for file_path in self._discover_files(project_path):
-            try:
-                chunks = self._process_single_file_safe(file_path)
-                results['chunks_created'] += len(chunks)
-                results['files_processed'] += 1
-                
-            except Exception as e:
-                logger.debug(f"Failed to process {file_path}: {e}")
-                results['files_failed'] += 1
-                results['errors'].append(f"{file_path}: {e}")
-        
-        return results
+| Setting | Default | Source |
+|---------|---------|--------|
+| `embedding.provider` | `"openai"` | `EmbeddingConfig` |
+| `embedding.base_url` | `"http://localhost:1234/v1"` | `EmbeddingConfig` |
+| `embedding.model` | `"auto"` | `EmbeddingConfig` |
+| `embedding.profile` | `"precision"` | `EmbeddingConfig` |
+| `chunking.max_size` | `2000` | `ChunkingConfig` |
+| `chunking.min_size` | `150` | `ChunkingConfig` |
+| `search.default_top_k` | `10` | `SearchConfig` |
+| `search.enable_bm25` | `true` | `SearchConfig` |
+
+---
+
+## Desktop GUI
+
+Source: `mini_rag/gui/`
+
+Tkinter application with Sun Valley theme (dark/light). Two-tab layout:
+
+### Architecture
+
+```
+gui/
+  app.py                    — Main application, ttk.Notebook with 2 tabs
+  config_store.py           — GUI settings persistence (~/.config/fss-mini-rag/)
+  tooltip.py                — Tooltip widget
+  components/
+    search_bar.py           — Search input with synthesis toggle
+    results_table.py        — Treeview with score labels and chunk types
+    content_panel.py        — Content viewer using RenderedMarkdown
+    collection_panel.py     — Project browser with index/re-index buttons
+    status_bar.py           — Connection status, timing, progress
+    rendered_markdown.py    — Rich markdown rendering widget
+    research_tab.py         — Web research tab (search, scrape, deep research)
+  dialogs/
+    about.py                — About dialog
+    preferences.py          — Endpoint configuration with presets and Test Connection
+  services/
+    research.py             — Web research service layer
+    streaming.py            — SSE streaming for live LLM token rendering
 ```
 
-### Validation and Recovery
+### EventBus
 
-The system validates data integrity and can recover from corruption:
+Components communicate via a publish/subscribe EventBus. This keeps components decoupled — the SearchBar doesn't know about the ResultsTable, it just publishes a `search_complete` event.
 
-```python
-def validate_index_integrity(self, project_path: Path) -> bool:
-    """Validate that the index is consistent and complete."""
-    try:
-        rag_dir = project_path / '.mini-rag'
-        
-        # Check required files exist
-        required_files = ['manifest.json', 'database.lance']
-        for filename in required_files:
-            if not (rag_dir / filename).exists():
-                raise IntegrityError(f"Missing required file: {filename}")
-        
-        # Validate manifest structure
-        with open(rag_dir / 'manifest.json') as f:
-            manifest = json.load(f)
-            
-        required_keys = ['file_count', 'chunk_count', 'indexed_at']
-        for key in required_keys:
-            if key not in manifest:
-                raise IntegrityError(f"Missing manifest key: {key}")
-        
-        # Validate database accessibility
-        db = lancedb.connect(rag_dir / 'database.lance')
-        table = db.open_table('chunks')
-        
-        # Quick consistency check
-        chunk_count_db = table.count_rows()
-        chunk_count_manifest = manifest['chunk_count']
-        
-        if abs(chunk_count_db - chunk_count_manifest) > 0.1 * chunk_count_manifest:
-            raise IntegrityError(f"Chunk count mismatch: DB={chunk_count_db}, Manifest={chunk_count_manifest}")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Index integrity validation failed: {e}")
-        return False
+### RenderedMarkdown Widget
 
-def repair_index(self, project_path: Path) -> bool:
-    """Attempt to repair a corrupted index."""
-    try:
-        rag_dir = project_path / '.mini-rag'
-        
-        # Create backup of existing index
-        backup_dir = rag_dir.parent / f'.mini-rag-backup-{int(time.time())}'
-        shutil.copytree(rag_dir, backup_dir)
-        
-        # Attempt repair operations
-        if (rag_dir / 'database.lance').exists():
-            # Try to rebuild manifest from database
-            db = lancedb.connect(rag_dir / 'database.lance')
-            table = db.open_table('chunks')
-            
-            # Reconstruct manifest
-            manifest = {
-                'chunk_count': table.count_rows(),
-                'file_count': len(set(table.to_pandas()['file_path'])),
-                'indexed_at': datetime.now().isoformat(),
-                'repaired_at': datetime.now().isoformat(),
-                'backup_location': str(backup_dir)
-            }
-            
-            with open(rag_dir / 'manifest.json', 'w') as f:
-                json.dump(manifest, f, indent=2)
-            
-            logger.info(f"Index repaired successfully. Backup saved to {backup_dir}")
-            return True
-        else:
-            # Database missing - need full rebuild
-            logger.warning("Database missing - full rebuild required")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Index repair failed: {e}")
-        return False
-```
+A custom Tk Text widget that renders markdown as rich text:
+- Strips markdown syntax for clean display
+- Code blocks rendered as embedded syntax-highlighted widgets
+- Tables rendered as Treeview widgets
+- Clickable links (opens browser)
+- Collapsible thinking blocks (for LLM reasoning output)
 
-## LLM Model Selection & Performance
+### LLM Streaming
 
-### Model Recommendations by Use Case
-
-FSS-Mini-RAG works well with various LLM sizes because our rich context and guided prompts help small models perform excellently:
-
-**Recommended (Best Balance):**
-- **qwen3:1.7b** - Excellent quality with fast performance (default priority)
-- **qwen3:0.6b** - Surprisingly good for CPU-only systems (522MB)
-
-**Still Excellent (Slower but highest quality):**
-- **qwen3:4b** - Highest quality, slower responses
-- **qwen3:4b:q8_0** - High-precision quantized version for production
-
-### Why Small Models Work Well Here
-
-Small models can produce excellent results in RAG systems because:
-
-1. **Rich Context**: Our chunking provides substantial context around each match
-2. **Guided Prompts**: Well-structured prompts give models a clear "runway" to continue
-3. **Specific Domain**: Code analysis is more predictable than general conversation
-
-Without good context, small models tend to get lost and produce erratic output. But with RAG's rich context and focused prompts, even the 0.6B model can provide meaningful analysis.
-
-### Quantization Benefits
-
-For production deployments, consider quantized models like `qwen3:1.7b:q8_0` or `qwen3:4b:q8_0`:
-- **Q8_0**: 8-bit quantization with minimal quality loss
-- **Smaller memory footprint**: ~50% reduction vs full precision
-- **Better CPU performance**: Faster inference on CPU-only systems
-- **Production ready**: Maintains analysis quality while improving efficiency
-
-This technical guide provides the deep implementation details that developers need to understand, modify, and extend the system, while keeping the main README focused on getting users started quickly.
+Uses Server-Sent Events (SSE) to stream tokens from the LLM endpoint. Tokens are rendered live in the RenderedMarkdown widget as they arrive.

@@ -1,12 +1,11 @@
 # Getting Started with FSS-Mini-RAG
 
-> **Get from zero to searching in 2 minutes**  
+> **Get from zero to searching in 2 minutes**
 > *Everything you need to know to start finding code by meaning, not just keywords*
 
-## Installation (Choose Your Adventure)
+## Installation
 
-### 🎯 **Option 1: Install from Source (Recommended)**
-*Clone the repo, set up a virtual environment, and install dependencies*
+### Option 1: Install from Source (Recommended)
 
 **Linux/macOS:**
 ```bash
@@ -37,8 +36,7 @@ pip install -e .
 
 ---
 
-### 🚀 **Option 2: Windows Interactive Installer**
-*Guided setup with prompts*
+### Option 2: Windows Interactive Installer
 
 ```cmd
 install_windows.bat
@@ -48,86 +46,67 @@ install_windows.bat
 
 ---
 
-## First Search (The Fun Part!)
+## Choose Your Interface
 
-### Step 1: Choose Your Interface
+FSS-Mini-RAG has two interfaces:
 
-**For Learning and Exploration:**
+**Desktop GUI** (recommended for beginners):
 ```bash
-# Linux/macOS
-./rag-tui
-
-# Windows  
-rag.bat
+rag-mini gui
 ```
-*Interactive menus, shows you CLI commands as you learn*
+Tkinter desktop app with dark/light theme, search, indexing, web research, and LLM synthesis — all in one window.
 
-**For Quick Commands:**
+**Command Line** (for power users):
 ```bash
-# Linux/macOS
-./rag-mini <command> <project-path>
-
-# Windows
-rag.bat <command> <project-path>
+rag-mini <command> [options]
 ```
-*Direct commands when you know what you want*
+Direct commands when you know what you want.
 
-### Step 2: Index Your First Project
+---
 
-**Interactive Way (Recommended for First Time):**
+## First Search
+
+### Step 1: Index Your Project
+
 ```bash
-# Linux/macOS
-./rag-tui
-# Then: Select Project Directory → Index Project
+# Index current directory
+rag-mini init
 
-# Windows
-rag.bat  
-# Then: Select Project Directory → Index Project
-```
+# Or index a specific path
+rag-mini init --path ~/my-project
 
-**Direct Commands:**
-```bash
-# Linux/macOS
-./rag-mini index ~/my-project
-
-# Windows  
-rag.bat index C:\my-project
+# Force a complete re-index
+rag-mini init --path ~/my-project --force
 ```
 
 **What indexing does:**
 - Finds all text files in your project
 - Breaks them into smart "chunks" (functions, classes, logical sections)
 - Creates searchable embeddings that understand meaning
-- Stores everything in a fast vector database
+- Stores everything in a fast vector database (LanceDB)
 - Creates a `.mini-rag/` directory with your search index
 
 **Time needed:** 10-60 seconds depending on project size
 
-### Step 3: Search by Meaning
+### Step 2: Search by Meaning
 
 **Natural language queries:**
 ```bash
-# Linux/macOS
-./rag-mini search ~/my-project "user authentication logic"
-./rag-mini search ~/my-project "error handling for database connections"
-./rag-mini search ~/my-project "how to validate input data"
-
-# Windows
-rag.bat search C:\my-project "user authentication logic"  
-rag.bat search C:\my-project "error handling for database connections"
-rag.bat search C:\my-project "how to validate input data"
+rag-mini search "user authentication logic"
+rag-mini search "error handling for database connections"
+rag-mini search "how to validate input data"
 ```
 
 **Code concepts:**
 ```bash
 # Finds login functions, auth middleware, session handling
-./rag-mini search ~/my-project "login functionality"
+rag-mini search "login functionality"
 
-# Finds try/catch blocks, error handlers, retry logic  
-./rag-mini search ~/my-project "exception handling"
+# Finds try/catch blocks, error handlers, retry logic
+rag-mini search "exception handling"
 
 # Finds validation functions, input sanitization, data checking
-./rag-mini search ~/my-project "data validation"
+rag-mini search "data validation"
 ```
 
 **What you get:**
@@ -136,192 +115,142 @@ rag.bat search C:\my-project "how to validate input data"
 - Context around each match so you understand what it does
 - Smart filtering to avoid noise and duplicates
 
-## Two Powerful Modes
+### Step 3: Get AI-Synthesised Answers
 
-FSS-Mini-RAG has two different ways to get answers, optimized for different needs:
+Add `--synthesize` to have an LLM read the search results and explain them:
 
-### 🚀 **Synthesis Mode** - Fast Answers
 ```bash
-# Linux/macOS
-./rag-mini search ~/project "authentication logic" --synthesize
-
-# Windows  
-rag.bat search C:\project "authentication logic" --synthesize
+rag-mini search "authentication logic" --synthesize
 ```
 
-**Perfect for:**
-- Quick code discovery
-- Finding specific functions or patterns
-- Getting fast, consistent answers
+This requires an LLM endpoint (LM Studio, vLLM, or OpenAI-compatible). Without one, search still works — you just don't get the AI summary.
 
-**What you get:**
-- Lightning-fast responses (no thinking overhead)
-- Reliable, factual information about your code
-- Clear explanations of what code does and how it works
+---
 
-### 🧠 **Exploration Mode** - Deep Understanding
-```bash  
-# Linux/macOS
-./rag-mini explore ~/project
+## Web Research
 
-# Windows
-rag.bat explore C:\project
+FSS-Mini-RAG can search the web, scrape pages, and index the content locally:
+
+```bash
+# Scrape a URL and make it searchable
+rag-mini scrape https://docs.python.org/3/library/json.html --index
+
+# Search the web and scrape results
+rag-mini search-web "quantum gravity holographic mass" --engine brave
+
+# Full pipeline: search, scrape, index (one command)
+rag-mini research "proton structure quantum chromodynamics" --engine tavily
+
+# Deep research: iterative cycles with LLM analysis and time budget
+rag-mini research "quantum vacuum fluctuations" --deep --time 1h
 ```
 
-**Perfect for:**
-- Learning new codebases
-- Debugging complex issues  
-- Understanding architectural decisions
+See the [Web Search & Research Guide](WEB_SEARCH_AND_RESEARCH.md) for full details.
 
-**What you get:**
-- Interactive conversation with AI that remembers context
-- Deep reasoning with full "thinking" process shown
-- Follow-up questions and detailed explanations
-- Memory of your previous questions in the session
-
-**Example exploration session:**
-```
-🧠 Exploration Mode - Ask anything about your project
-
-You: How does authentication work in this codebase?
-
-AI: Let me analyze the authentication system...
-
-💭 Thinking: I can see several authentication-related files. Let me examine 
-   the login flow, session management, and security measures...
-
-📝 Authentication Analysis:
-   This codebase uses a three-layer authentication system:
-   1. Login validation in auth.py handles username/password checking
-   2. Session management in sessions.py maintains user state  
-   3. Middleware in auth_middleware.py protects routes
-
-You: What security concerns should I be aware of?
-
-AI: Based on our previous discussion about authentication, let me check for
-   common security vulnerabilities...
-```
+---
 
 ## Check Your Setup
 
-**See what got indexed:**
 ```bash
-# Linux/macOS  
-./rag-mini status ~/my-project
-
-# Windows
-rag.bat status C:\my-project
+rag-mini status
 ```
 
 **What you'll see:**
 - How many files were processed
 - Total chunks created for searching
-- Embedding method being used (Ollama, ML models, or hash-based)
+- Embedding provider and model in use
 - Configuration file location
 - Index health and last update time
 
+---
+
 ## Configuration (Optional)
 
-Your project gets a `.mini-rag/config.yaml` file with helpful comments:
+Your project gets a `.mini-rag/config.yaml` file:
 
 ```yaml
-# Context window configuration (critical for AI features)
-# 💡 Sizing guide: 2K=1 question, 4K=1-2 questions, 8K=manageable, 16K=most users
-#               32K=large codebases, 64K+=power users only  
-# ⚠️  Larger contexts use exponentially more CPU/memory - only increase if needed
-context_window: 16384           # Context size in tokens
+embedding:
+  provider: openai              # openai or ml
+  base_url: http://localhost:1234/v1
+  model: auto                   # auto-detects best available
+  profile: precision            # precision or conceptual
 
-# AI model preferences (edit to change priority)
-model_rankings:
-  - "qwen3:1.7b"    # Excellent for RAG (1.4GB, recommended)
-  - "qwen3:0.6b"    # Lightweight and fast (~500MB)  
-  - "qwen3:4b"      # Higher quality but slower (~2.5GB)
+chunking:
+  max_size: 2000                # characters per chunk
+  min_size: 150
+
+search:
+  default_top_k: 10
+  enable_bm25: true
 ```
 
-**When to customize:**
-- Your searches aren't finding what you expect → adjust chunking settings
-- You want AI features → install Ollama and download models
-- System is slow → try smaller models or reduce context window
-- Getting too many/few results → adjust similarity threshold
+**When to customise:**
+- Searches aren't finding what you expect — adjust chunking settings
+- You want AI synthesis — configure an LLM endpoint (see [LLM Providers](LLM_PROVIDERS.md))
+- System is slow — try smaller embedding models or reduce chunk sizes
+- Getting too many/few results — adjust `default_top_k` or similarity threshold
+
+---
 
 ## Troubleshooting
 
-### "Project not indexed" 
-**Problem:** You're trying to search before indexing
+### "Project not indexed"
 ```bash
-# Run indexing first
-./rag-mini index ~/my-project    # Linux/macOS
-rag.bat index C:\my-project      # Windows
+rag-mini init
 ```
 
-### "No Ollama models available"
-**Problem:** AI features need models downloaded
-```bash
-# Install Ollama first
-curl -fsSL https://ollama.ai/install.sh | sh    # Linux/macOS
-# Or download from https://ollama.com            # Windows
+### "No embedding provider available"
+You need an OpenAI-compatible embedding server running. Recommended: [LM Studio](https://lmstudio.ai/) with MiniLM L6 v2 loaded. Without one, BM25 keyword search still works.
 
-# Start Ollama server
-ollama serve
+### "Virtual environment not found"
 
-# Download a model
-ollama pull qwen3:1.7b
-```
-
-### "Virtual environment not found" 
-**Problem:** Auto-setup didn't work, need manual installation
-
-**Option A: Use installer scripts**
-```bash
-./install.sh          # Linux/macOS  
-install_windows.bat            # Windows
-```
-
-**Option B: Manual method (100% reliable)**
+**Manual method (100% reliable):**
 ```bash
 # Linux/macOS
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt  # 2-8 minutes
-.venv/bin/python -m pip install .                    # ~1 minute  
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install .
 source .venv/bin/activate
 
-# Windows  
+# Windows
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt  
+.venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install .
 .venv\Scripts\activate.bat
 ```
 
-> **⏱️ Timing**: Fast internet 2-3 minutes total, slow internet 5-10 minutes due to large dependencies (LanceDB 36MB, PyArrow 43MB, PyLance 44MB).
+> **Timing**: Fast internet 2-3 minutes total, slow internet 5-10 minutes due to large dependencies (LanceDB 36MB, PyArrow 43MB, PyLance 44MB).
 
 ### Getting weird results
-**Solution:** Try different search terms or check what got indexed
 ```bash
-# See what files were processed
-./rag-mini status ~/my-project
+# Check what got indexed
+rag-mini status
 
 # Try more specific queries
-./rag-mini search ~/my-project "specific function name"
+rag-mini search "specific function name"
+
+# Force re-index if needed
+rag-mini init --force
 ```
+
+---
 
 ## Next Steps
 
 ### Learn More
-- **[Beginner's Glossary](BEGINNER_GLOSSARY.md)** - All the terms explained simply
-- **[TUI Guide](TUI_GUIDE.md)** - Master the interactive interface
-- **[Visual Diagrams](DIAGRAMS.md)** - See how everything works
+- **[Beginner's Glossary](BEGINNER_GLOSSARY.md)** — All the terms explained simply
+- **[Visual Diagrams](DIAGRAMS.md)** — See how everything works
 
 ### Advanced Features
-- **[Query Expansion](QUERY_EXPANSION.md)** - Make searches smarter with AI
-- **[LLM Providers](LLM_PROVIDERS.md)** - Use different AI models  
-- **[CPU Deployment](CPU_DEPLOYMENT.md)** - Optimize for older computers
+- **[Web Search & Research](WEB_SEARCH_AND_RESEARCH.md)** — Web scraping and deep research
+- **[Query Expansion](QUERY_EXPANSION.md)** — Make searches smarter with AI
+- **[LLM Providers](LLM_PROVIDERS.md)** — Use different AI models
+- **[CPU Deployment](CPU_DEPLOYMENT.md)** — Optimise for older computers
 
-### Customize Everything
-- **[Technical Guide](TECHNICAL_GUIDE.md)** - How the system actually works
-- **[Configuration Examples](../examples/)** - Pre-made configs for different needs
+### Go Deeper
+- **[Technical Guide](TECHNICAL_GUIDE.md)** — How the system actually works
+- **[Hybrid Search Algorithm](HYBRID_SEARCH_ALGORITHM.md)** — RRF fusion details
 
 ---
 
-**🎉 That's it!** You now have a semantic search system that understands your code by meaning, not just keywords. Start with simple searches and work your way up to the advanced AI features as you get comfortable.
-
-**💡 Pro tip:** The best way to learn is to index a project you know well and try searching for things you know are in there. You'll quickly see how much better meaning-based search is than traditional keyword search.
+The best way to learn is to index a project you know well and try searching for things you know are in there. You'll quickly see how much better meaning-based search is than traditional keyword search.
