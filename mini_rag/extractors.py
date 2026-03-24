@@ -529,11 +529,14 @@ class PDFExtractor:
     def _clean_pdf_text(self, text: str) -> str:
         """Clean up extracted PDF text.
 
-        Handles: dehyphenation, ALL-CAPS section detection, page numbers,
-        excessive whitespace.
+        Handles: paragraph reconstruction, dehyphenation, ALL-CAPS section
+        detection, page numbers, excessive whitespace.
         """
         # Dehyphenation: fix word-break hyphens at line ends
         text = re.sub(r"([a-z])-\n([a-z])", r"\1\2", text)
+
+        # Reconstruct paragraphs from line-per-block PDF output
+        text = self._join_paragraphs(text)
 
         lines = text.split("\n")
         cleaned = []
@@ -568,6 +571,76 @@ class PDFExtractor:
         text = re.sub(r"\n{3,}", "\n\n", text)
 
         return text.strip()
+
+    @staticmethod
+    def _join_paragraphs(text: str) -> str:
+        """Reconstruct paragraphs from line-per-block PDF output.
+
+        PDF extraction produces one line per text block. Consecutive body text
+        lines that belong to the same paragraph are joined with spaces.
+        Paragraph breaks are inserted when a line ends with sentence-ending
+        punctuation or when structural elements (headings, separators) appear.
+        """
+        lines = text.split("\n")
+        result = []
+        current_para: List[str] = []
+
+        def _flush_para():
+            if current_para:
+                result.append(" ".join(current_para))
+                result.append("")  # blank line = paragraph break
+                current_para.clear()
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Empty line — flush current paragraph
+            if not stripped:
+                _flush_para()
+                continue
+
+            # Headings, separators — always their own block
+            if stripped.startswith("#") or stripped == "***":
+                _flush_para()
+                result.append(line)
+                if stripped.startswith("#"):
+                    result.append("")
+                continue
+
+            # If current paragraph is empty, start a new one
+            if not current_para:
+                current_para.append(stripped)
+                continue
+
+            # Decide: join to current paragraph or start new one?
+            prev = current_para[-1]
+            prev_end = prev.rstrip()[-1] if prev.rstrip() else ""
+
+            # Previous line ends with sentence terminator → paragraph break
+            if prev_end in ".!?\"')]:":
+                # But only if this line looks like a new sentence (starts with uppercase
+                # or is a quote/list), not a continuation like "Dr. Smith continued"
+                if stripped[0].isupper() or stripped[0] in "\"'(-•–—":
+                    # Short previous line likely = real paragraph end
+                    # Long previous line ending with period could be mid-paragraph
+                    # (e.g. abbreviations, numbered references)
+                    # Heuristic: if prev line < 60 chars, definitely paragraph end
+                    if len(prev.rstrip()) < 60:
+                        _flush_para()
+                        current_para.append(stripped)
+                        continue
+
+                    # Longer line — still likely paragraph end if ends with period
+                    # followed by uppercase start
+                    _flush_para()
+                    current_para.append(stripped)
+                    continue
+
+            # Previous line ends mid-word/comma/semicolon → continuation
+            current_para.append(stripped)
+
+        _flush_para()
+        return "\n".join(result)
 
 
 class ArxivExtractor:
