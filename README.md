@@ -189,6 +189,7 @@ search:
 - **[Visual Diagrams](docs/DIAGRAMS.md)** — System flow charts
 - **[Web Search & Research](docs/WEB_SEARCH_AND_RESEARCH.md)** — Web scraping and deep research
 - **[Hybrid Search Algorithm](docs/HYBRID_SEARCH_ALGORITHM.md)** — RRF fusion details
+- **[Pruning & Organisation](docs/PRUNING_AND_ORGANISATION.md)** — How the research engine deduplicates and cross-references
 - **[LLM Providers](docs/LLM_PROVIDERS.md)** — Configure different AI providers
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — Common issues and solutions
 - **[Beginner Glossary](docs/BEGINNER_GLOSSARY.md)** — Plain-English terminology

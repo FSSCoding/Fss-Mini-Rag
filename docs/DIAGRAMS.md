@@ -219,7 +219,7 @@ flowchart TD
 
 **Search engines:** DuckDuckGo (with HTML fallback), Tavily, Brave
 **Extractors:** HTML, PDF, arXiv, GitHub
-**Pruning:** Trigram fuzzy deduplication, keyword overlap for corroboration
+**Pruning:** Vector-based cosine similarity using indexed embeddings (>=0.95 duplicate, 0.60-0.80 corroboration). Falls back to trigram Jaccard when index unavailable.
 
 ## Embedding Provider Chain
 

@@ -169,7 +169,7 @@ Final:
 | **ANALYZE** | Index the session, search the collection, LLM evaluates coverage and identifies gaps |
 | **SEARCH** | LLM generates follow-up queries from identified gaps |
 | **SCRAPE** | Fetch search results, extract content, save to `sources/` |
-| **PRUNE** | Fuzzy deduplication, cross-source consistency checking |
+| **PRUNE** | Vector-based deduplication using indexed embeddings, cross-source corroboration detection (see [Pruning & Organisation](PRUNING_AND_ORGANISATION.md)) |
 | **REPORT** | Generate session stats, confidence assessment, gap report |
 
 ### Time budgets

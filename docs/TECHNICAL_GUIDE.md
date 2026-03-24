@@ -445,7 +445,7 @@ ANALYZE → SEARCH → SCRAPE → PRUNE → REPORT → (repeat if time remains)
 1. **Analyze**: LLM reads current corpus, identifies knowledge gaps
 2. **Search**: Generates new queries from gaps, searches the web
 3. **Scrape**: Fetches and extracts content from results
-4. **Prune**: Trigram fuzzy deduplication, keyword overlap for corroboration scoring
+4. **Prune**: Vector-based deduplication using indexed embeddings, LLM borderline checks
 5. **Report**: Generates comprehensive research report
 
 Features:
@@ -453,6 +453,21 @@ Features:
 - Time budget enforcement (e.g. `--time 1h`)
 - Live progress visibility during rounds
 - Corpus pruning to keep quality high
+
+### Corpus Pruner
+
+Source: `deep_research.py` — class `CorpusPruner`
+
+Uses the existing LanceDB embeddings to compute pairwise cosine similarity between documents — no additional embedding calls needed. Each file's embedding is the average of its chunk embeddings from the index.
+
+| Cosine Similarity | Action |
+|-------------------|--------|
+| >= 0.95 | Definite duplicate — remove newer copy |
+| 0.80 - 0.95 | Borderline — confirm with LLM if available, otherwise flag as corroboration |
+| 0.60 - 0.80 | Related/corroborating content — flag for cross-reference |
+| < 0.60 | Different content — ignore |
+
+Falls back to trigram Jaccard similarity (character 3-gram overlap) when the LanceDB index isn't available. The borderline range (0.80-0.95) can use an LLM call to classify as DUPLICATE, RELATED, or UNRELATED.
 
 ### Rate Limiter
 
