@@ -241,6 +241,22 @@ class ResearchService:
                         scraper=scraper,
                         search_engine=search_eng,
                     )
+
+                    # Build fallback search engines from available API keys
+                    import os
+                    fallbacks = []
+                    all_engines = {"tavily", "brave", "duckduckgo"} - {engine_name}
+                    for fb_name in all_engines:
+                        try:
+                            fb = create_search_engine(fb_name)
+                            # Only add if it's not the same type as primary
+                            if type(fb).__name__ != type(search_eng).__name__:
+                                fallbacks.append(fb)
+                        except Exception:
+                            pass
+                    engine._fallback_engines = fallbacks
+                    if fallbacks:
+                        logger.info(f"Deep research fallback engines: {[type(f).__name__ for f in fallbacks]}")
                     report = engine.run(
                         max_time_minutes=max_time_min,
                         max_rounds=max_rounds,

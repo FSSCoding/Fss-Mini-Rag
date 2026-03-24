@@ -1202,6 +1202,7 @@ class DeepResearchEngine:
         self._call_llm = llm_call
         self.scraper = scraper
         self.search_engine = search_engine
+        self._fallback_engines = []  # Populated by caller if multiple providers available
 
         context_window = rag_config.llm.context_window if rag_config.llm else 16384
         self.ctx = ContextManager(max_tokens=context_window)
@@ -1382,6 +1383,15 @@ class DeepResearchEngine:
                         short_query = " ".join(query.replace('"', '').split()[:6])
                         console.print(f"    [dim]No results, retrying: {short_query[:50]}[/dim]")
                         results = self.search_engine.search(short_query, max_results=5)
+
+                    # If still nothing, try fallback search engines
+                    if not results and self._fallback_engines:
+                        for fb_engine in self._fallback_engines:
+                            fb_name = type(fb_engine).__name__
+                            console.print(f"    [dim]Trying fallback: {fb_name}[/dim]")
+                            results = fb_engine.search(query, max_results=5)
+                            if results:
+                                break
 
                     urls = [r.url for r in results if not self.session.has_visited(r.url)]
                     all_urls.extend(urls)
