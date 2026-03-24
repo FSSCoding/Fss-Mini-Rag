@@ -10,6 +10,7 @@ from tkinter import ttk, simpledialog
 from pathlib import Path
 
 from ..events import EventBus
+from ..tooltip import ToolTip
 from .rendered_markdown import RenderedMarkdown
 from .empty_state import EmptyState
 
@@ -91,6 +92,14 @@ class ResearchTab(ttk.Frame):
         ttk.Checkbutton(self.deep_frame, text="No stall-out",
                         variable=self.no_stall_var).pack(side=tk.LEFT, padx=(10, 0))
 
+        # Tooltips
+        ToolTip(self.search_btn, "Search the web or start deep research")
+        ToolTip(self.scrape_url_btn, "Manually enter a URL to scrape")
+        ToolTip(self.cancel_btn, "Cancel the current operation")
+        ToolTip(self.engine_combo, "Search provider (auto-detected from API keys)")
+        ToolTip(self.max_pages_spin, "Maximum pages to scrape per session")
+        ToolTip(self.deep_check, "Run automated multi-round research with analysis")
+
         # === Inline progress bar (hidden by default) ===
         self.progress_frame = ttk.Frame(self)
         self.progress_label = ttk.Label(self.progress_frame, text="", foreground="#888888")
@@ -112,6 +121,12 @@ class ResearchTab(ttk.Frame):
         # Search results section
         results_frame = ttk.LabelFrame(left, text="Search Results", padding=3)
         results_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 3))
+
+        self._results_empty = EmptyState(
+            results_frame, "No search results yet",
+            "Enter a query and click Search", lambda: self.query_entry.focus_set(),
+        )
+        self._results_empty.place(relx=0, rely=0, relwidth=1, relheight=1)
 
         self.results_tree = ttk.Treeview(
             results_frame, columns=("title", "url"), show="headings",
@@ -137,14 +152,22 @@ class ResearchTab(ttk.Frame):
         self.scrape_sel_btn = ttk.Button(btn_frame, text="Scrape Selected",
                                          command=self._on_scrape_selected)
         self.scrape_sel_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.scrape_sel_btn, "Download selected search results as source files")
 
         self.scrape_all_btn = ttk.Button(btn_frame, text="Scrape All",
                                          command=self._on_scrape_all)
         self.scrape_all_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.scrape_all_btn, "Download all search results as source files")
 
         # Sessions section
         sessions_frame = ttk.LabelFrame(left, text="Sessions", padding=3)
         sessions_frame.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
+
+        self._sessions_empty = EmptyState(
+            sessions_frame, "No research sessions",
+            "Scrape web results to create sessions", None,
+        )
+        self._sessions_empty.place(relx=0, rely=0, relwidth=1, relheight=1)
 
         self.sessions_tree = ttk.Treeview(
             sessions_frame, columns=("name", "pages", "status"),
@@ -159,16 +182,31 @@ class ResearchTab(ttk.Frame):
 
         self.sessions_tree.pack(fill=tk.BOTH, expand=True)
         self.sessions_tree.bind("<<TreeviewSelect>>", self._on_session_select)
+        self.sessions_tree.bind("<Button-3>", self._on_session_right_click)
+
+        self._session_menu = tk.Menu(self.sessions_tree, tearoff=0)
+        self._session_menu.add_command(label="View Files", command=self._view_session_files)
+        self._session_menu.add_command(label="Open Folder", command=self._open_session_folder)
+        self._session_menu.add_separator()
+        self._session_menu.add_command(label="Delete Session", command=self._on_delete_session)
 
         session_btn_frame = ttk.Frame(left)
         session_btn_frame.pack(fill=tk.X, pady=3)
 
-        ttk.Button(session_btn_frame, text="Index Session",
-                   command=self._on_index_session).pack(side=tk.LEFT, padx=2)
-        ttk.Button(session_btn_frame, text="Delete",
-                   command=self._on_delete_session).pack(side=tk.LEFT, padx=2)
-        ttk.Button(session_btn_frame, text="Refresh",
-                   command=self._on_refresh_sessions).pack(side=tk.LEFT, padx=2)
+        idx_btn = ttk.Button(session_btn_frame, text="Index Session",
+                             command=self._on_index_session)
+        idx_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(idx_btn, "Index session sources to make them searchable")
+
+        del_btn = ttk.Button(session_btn_frame, text="Delete",
+                             command=self._on_delete_session)
+        del_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(del_btn, "Delete this research session and all its files")
+
+        ref_btn = ttk.Button(session_btn_frame, text="Refresh",
+                             command=self._on_refresh_sessions)
+        ref_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(ref_btn, "Reload sessions list from disk")
 
         self.goto_search_btn = ttk.Button(
             session_btn_frame, text="Go to Search",
@@ -315,31 +353,72 @@ class ResearchTab(ttk.Frame):
 
     # === Session actions ===
 
-    def _on_session_select(self, event):
+    def _get_selected_session_dir(self) -> str:
+        """Get the session directory from the selected sessions tree item."""
         selected = self.sessions_tree.selection()
         if not selected:
-            return
+            return ""
         item = self.sessions_tree.item(selected[0])
-        session_dir = item.get("tags", [""])[0] if item.get("tags") else ""
+        return item.get("tags", [""])[0] if item.get("tags") else ""
+
+    def _on_session_select(self, event):
+        session_dir = self._get_selected_session_dir()
         if session_dir:
             self._show_session_content(session_dir)
 
-    def _on_index_session(self):
-        selected = self.sessions_tree.selection()
-        if not selected:
+    def _on_session_right_click(self, event):
+        row = self.sessions_tree.identify_row(event.y)
+        if row:
+            self.sessions_tree.selection_set(row)
+            self._session_menu.tk_popup(event.x_root, event.y_root)
+
+    def _view_session_files(self):
+        """Show individual files in the session with delete option."""
+        session_dir = self._get_selected_session_dir()
+        if not session_dir:
             return
-        item = self.sessions_tree.item(selected[0])
-        session_dir = item.get("tags", [""])[0] if item.get("tags") else ""
+        from pathlib import Path
+        sources = Path(session_dir) / "sources"
+        if not sources.exists():
+            self.content.render("*No source files in this session.*")
+            return
+
+        files = sorted(f for f in sources.iterdir() if f.is_file() and f.suffix == ".md")
+        if not files:
+            self.content.render("*No source files in this session.*")
+            return
+
+        parts = [f"## Session Files ({len(files)})\n"]
+        for f in files:
+            size_kb = f.stat().st_size / 1024
+            parts.append(f"- **{f.stem}** ({size_kb:.1f} KB)")
+        parts.append(f"\n\n*Right-click a file in the session to manage it.*")
+        self.content.render("\n".join(parts))
+
+    def _open_session_folder(self):
+        """Open the session directory in the file manager."""
+        import subprocess, sys
+        session_dir = self._get_selected_session_dir()
+        if session_dir:
+            if sys.platform == "linux":
+                subprocess.Popen(["xdg-open", session_dir])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", session_dir])
+            else:
+                import os
+                os.startfile(session_dir)
+
+    def _on_index_session(self):
+        session_dir = self._get_selected_session_dir()
         if session_dir:
             self.bus.emit("research:index_session", {"session_dir": session_dir})
 
     def _on_delete_session(self):
-        selected = self.sessions_tree.selection()
-        if not selected:
+        session_dir = self._get_selected_session_dir()
+        if not session_dir:
             return
-        item = self.sessions_tree.item(selected[0])
-        session_dir = item.get("tags", [""])[0] if item.get("tags") else ""
-        if session_dir:
+        selected = self.sessions_tree.selection()
+        if selected:
             from tkinter import messagebox
             name = self.sessions_tree.item(selected[0], "values")[0]
             if messagebox.askyesno("Delete Session", f"Delete session '{name}'?"):
@@ -368,6 +447,11 @@ class ResearchTab(ttk.Frame):
             for r in self._search_results:
                 self.results_tree.insert("", tk.END,
                                         values=(r["title"][:60], r["url"][:80]))
+            # Hide empty state if we got results
+            if self._search_results:
+                self._results_empty.place_forget()
+            else:
+                self._results_empty.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.after(0, _update)
 
     def _on_page_scraped(self, data):
@@ -519,3 +603,7 @@ class ResearchTab(ttk.Frame):
                 values=(s["name"], s["pages"], s["status"]),
                 tags=(s["dir"],),
             )
+        if sessions:
+            self._sessions_empty.place_forget()
+        else:
+            self._sessions_empty.place(relx=0, rely=0, relwidth=1, relheight=1)

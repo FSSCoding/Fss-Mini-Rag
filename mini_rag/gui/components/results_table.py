@@ -167,3 +167,4 @@ class ResultsTable(ttk.Frame):
     def clear(self):
         self.tree.delete(*self.tree.get_children())
         self._results = []
+        self._show_empty()
