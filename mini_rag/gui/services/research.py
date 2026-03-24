@@ -242,14 +242,14 @@ class ResearchService:
                         search_engine=search_eng,
                     )
 
-                    # Build fallback search engines from available API keys
-                    import os
+                    # Build ranked fallback search engines: tavily > brave > duckduckgo
+                    ranked_fallbacks = ["tavily", "brave", "duckduckgo"]
                     fallbacks = []
-                    all_engines = {"tavily", "brave", "duckduckgo"} - {engine_name}
-                    for fb_name in all_engines:
+                    for fb_name in ranked_fallbacks:
+                        if fb_name == engine_name:
+                            continue
                         try:
                             fb = create_search_engine(fb_name)
-                            # Only add if it's not the same type as primary
                             if type(fb).__name__ != type(search_eng).__name__:
                                 fallbacks.append(fb)
                         except Exception:

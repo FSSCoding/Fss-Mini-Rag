@@ -1466,6 +1466,21 @@ class DeepResearchEngine:
 
                 self.report.pages_scraped += len(pages)
                 console.print(f"    Scraped {len(pages)}/{len(unique_urls[:scrape_limit])} pages")
+
+                # Harvest links from scraped pages for next round
+                harvested = 0
+                for page in pages:
+                    if page.links:
+                        for link in page.links:
+                            if not self.session.has_visited(link) and link not in seen:
+                                domain = _urlparse(link).netloc
+                                if not self.metrics.should_skip_domain(domain):
+                                    all_urls.append(link)
+                                    seen.add(link)
+                                    harvested += 1
+                if harvested:
+                    console.print(f"    Harvested {harvested} new links from scraped pages")
+
                 phase_duration = (time.time() - phase_start) / 60.0
                 self._record_phase_time("scrape", phase_start)
                 self.metrics.record_phase_time("scrape", phase_duration)
