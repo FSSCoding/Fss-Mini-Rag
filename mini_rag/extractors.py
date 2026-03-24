@@ -578,18 +578,21 @@ class PDFExtractor:
 
         PDF extraction produces one line per text block. Consecutive body text
         lines that belong to the same paragraph are joined with spaces.
-        Paragraph breaks are inserted when a line ends with sentence-ending
-        punctuation or when structural elements (headings, separators) appear.
+        Paragraph breaks are inserted at sentence boundaries when the
+        accumulated paragraph is long enough to be a complete thought.
         """
         lines = text.split("\n")
-        result = []
+        result: List[str] = []
         current_para: List[str] = []
+        current_len = 0
 
         def _flush_para():
+            nonlocal current_len
             if current_para:
                 result.append(" ".join(current_para))
                 result.append("")  # blank line = paragraph break
                 current_para.clear()
+                current_len = 0
 
         for line in lines:
             stripped = line.strip()
@@ -599,45 +602,41 @@ class PDFExtractor:
                 _flush_para()
                 continue
 
-            # Headings, separators — always their own block
+            # Headings, separators — always their own block with surrounding breaks
             if stripped.startswith("#") or stripped == "***":
                 _flush_para()
                 result.append(line)
-                if stripped.startswith("#"):
-                    result.append("")
+                result.append("")
                 continue
 
             # If current paragraph is empty, start a new one
             if not current_para:
                 current_para.append(stripped)
+                current_len = len(stripped)
                 continue
 
             # Decide: join to current paragraph or start new one?
-            prev = current_para[-1]
-            prev_end = prev.rstrip()[-1] if prev.rstrip() else ""
+            # Look at the accumulated paragraph so far
+            joined_so_far = " ".join(current_para)
+            last_char = joined_so_far.rstrip()[-1] if joined_so_far.rstrip() else ""
 
-            # Previous line ends with sentence terminator → paragraph break
-            if prev_end in ".!?\"')]:":
-                # But only if this line looks like a new sentence (starts with uppercase
-                # or is a quote/list), not a continuation like "Dr. Smith continued"
-                if stripped[0].isupper() or stripped[0] in "\"'(-•–—":
-                    # Short previous line likely = real paragraph end
-                    # Long previous line ending with period could be mid-paragraph
-                    # (e.g. abbreviations, numbered references)
-                    # Heuristic: if prev line < 60 chars, definitely paragraph end
-                    if len(prev.rstrip()) < 60:
-                        _flush_para()
-                        current_para.append(stripped)
-                        continue
+            # Sentence-end detection: flush paragraph when ALL conditions met:
+            # 1. Current para ends with sentence-ending punctuation
+            # 2. Next line starts with uppercase (new sentence)
+            # 3. Current para is at least 80 chars (not just a short fragment)
+            is_sentence_end = last_char in '.!?"\')\u201d'
+            starts_new = stripped[0].isupper() or stripped[0] in "\"\u2018\u201c(-\u2022\u2013\u2014"
+            long_enough = current_len > 80
 
-                    # Longer line — still likely paragraph end if ends with period
-                    # followed by uppercase start
-                    _flush_para()
-                    current_para.append(stripped)
-                    continue
+            if is_sentence_end and starts_new and long_enough:
+                _flush_para()
+                current_para.append(stripped)
+                current_len = len(stripped)
+                continue
 
-            # Previous line ends mid-word/comma/semicolon → continuation
+            # Otherwise: continuation — join to current paragraph
             current_para.append(stripped)
+            current_len += len(stripped) + 1
 
         _flush_para()
         return "\n".join(result)

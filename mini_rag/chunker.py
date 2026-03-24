@@ -1335,6 +1335,144 @@ class CodeChunker:
     # Size enforcement with overlap
     # ──────────────────────────────────────────────────────────
 
+    # Sentence-ending pattern for splitting prose at clean boundaries
+    _SENTENCE_END = re.compile(r'[.!?]["\')\u201d\u2019]?\s+')
+
+    def _split_oversized(self, chunk: CodeChunk, max_size: int) -> List[CodeChunk]:
+        """Split an oversized chunk at the best available boundary.
+
+        Priority: line boundaries > sentence boundaries > hard character split.
+        Applies overlap between sub-chunks for context continuity.
+        """
+        content = chunk.content
+        sub_chunks: List[CodeChunk] = []
+
+        # First try: split at line boundaries (original approach)
+        lines = content.splitlines()
+        if len(lines) > 1:
+            current_sub: List[str] = []
+            current_chars = 0
+            sub_start = chunk.start_line
+            prev_tail = ""
+
+            for j, line in enumerate(lines):
+                line_chars = len(line) + 1
+                if current_chars + line_chars > max_size and current_sub:
+                    sub_content = "\n".join(current_sub)
+                    sub_chunks.append(CodeChunk(
+                        content=sub_content,
+                        file_path=chunk.file_path,
+                        start_line=sub_start,
+                        end_line=sub_start + len(current_sub) - 1,
+                        chunk_type=chunk.chunk_type,
+                        name=chunk.name,
+                        language=chunk.language,
+                    ))
+                    prev_tail = sub_content[-self.overlap_chars:] if self.overlap_chars > 0 else ""
+                    current_sub = []
+                    current_chars = 0
+                    sub_start = chunk.start_line + j
+                    if prev_tail:
+                        current_sub.append(prev_tail)
+                        current_chars += len(prev_tail) + 1
+
+                current_sub.append(line)
+                current_chars += line_chars
+
+            if current_sub:
+                sub_chunks.append(CodeChunk(
+                    content="\n".join(current_sub),
+                    file_path=chunk.file_path,
+                    start_line=sub_start,
+                    end_line=chunk.end_line,
+                    chunk_type=chunk.chunk_type,
+                    name=chunk.name,
+                    language=chunk.language,
+                ))
+
+            # Check if any sub-chunk is still oversized (single long line)
+            all_ok = all(len(sc.content) <= max_size * 1.1 for sc in sub_chunks)
+            if all_ok:
+                return sub_chunks
+
+        # Second try: split at sentence boundaries within long text
+        sub_chunks = []
+        parts: List[str] = []
+        parts_len = 0
+
+        # Split content into sentences
+        sentences: List[str] = []
+        last = 0
+        for m in self._SENTENCE_END.finditer(content):
+            sentences.append(content[last:m.end()])
+            last = m.end()
+        if last < len(content):
+            sentences.append(content[last:])
+
+        if len(sentences) <= 1:
+            return self._hard_split(chunk, max_size)
+
+        for sentence in sentences:
+            if parts_len + len(sentence) > max_size and parts:
+                text = "".join(parts)
+                sub_chunks.append(CodeChunk(
+                    content=text.strip(),
+                    file_path=chunk.file_path,
+                    start_line=chunk.start_line,
+                    end_line=chunk.end_line,
+                    chunk_type=chunk.chunk_type,
+                    name=chunk.name,
+                    language=chunk.language,
+                ))
+                # Overlap: keep last sentence as context
+                if self.overlap_chars > 0 and parts:
+                    overlap = parts[-1] if len(parts[-1]) <= self.overlap_chars else parts[-1][-self.overlap_chars:]
+                    parts = [overlap]
+                    parts_len = len(overlap)
+                else:
+                    parts = []
+                    parts_len = 0
+
+            parts.append(sentence)
+            parts_len += len(sentence)
+
+        if parts:
+            sub_chunks.append(CodeChunk(
+                content="".join(parts).strip(),
+                file_path=chunk.file_path,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                chunk_type=chunk.chunk_type,
+                name=chunk.name,
+                language=chunk.language,
+            ))
+
+        return sub_chunks if sub_chunks else [chunk]
+
+    def _hard_split(self, chunk: CodeChunk, max_size: int) -> List[CodeChunk]:
+        """Last resort: split at character boundary near max_size."""
+        content = chunk.content
+        sub_chunks = []
+        start = 0
+        while start < len(content):
+            end = min(start + max_size, len(content))
+            # Try to break at a space
+            if end < len(content):
+                space = content.rfind(" ", start + max_size // 2, end)
+                if space > start:
+                    end = space + 1
+            sub_chunks.append(CodeChunk(
+                content=content[start:end].strip(),
+                file_path=chunk.file_path,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                chunk_type=chunk.chunk_type,
+                name=chunk.name,
+                language=chunk.language,
+            ))
+            start = end
+        return sub_chunks
+
     def _enforce_size_constraints(
         self,
         chunks: List[CodeChunk],
@@ -1358,56 +1496,10 @@ class CodeChunker:
             char_count = len(chunk.content)
 
             if char_count > max_size:
-                # Split oversized chunk at line boundaries with overlap
-                lines = chunk.content.splitlines()
-                current_sub = []
-                current_chars = 0
-                sub_start = chunk.start_line
-                prev_sub_tail = ""  # trailing content for overlap
-
-                for j, line in enumerate(lines):
-                    line_chars = len(line) + 1
-                    if current_chars + line_chars > max_size and current_sub:
-                        sub_content = "\n".join(current_sub)
-                        result.append(
-                            CodeChunk(
-                                content=sub_content,
-                                file_path=chunk.file_path,
-                                start_line=sub_start,
-                                end_line=sub_start + len(current_sub) - 1,
-                                chunk_type=chunk.chunk_type,
-                                name=chunk.name,
-                                language=chunk.language,
-                            )
-                        )
-                        # Capture tail for overlap
-                        prev_sub_tail = sub_content[-self.overlap_chars:] if self.overlap_chars > 0 else ""
-
-                        current_sub = []
-                        current_chars = 0
-                        sub_start = chunk.start_line + j
-
-                        # Prepend overlap from previous sub-chunk
-                        if prev_sub_tail:
-                            current_sub.append(prev_sub_tail)
-                            current_chars += len(prev_sub_tail) + 1
-
-                    current_sub.append(line)
-                    current_chars += line_chars
-
-                if current_sub:
-                    sub_content = "\n".join(current_sub)
-                    result.append(
-                        CodeChunk(
-                            content=sub_content,
-                            file_path=chunk.file_path,
-                            start_line=sub_start,
-                            end_line=chunk.end_line,
-                            chunk_type=chunk.chunk_type,
-                            name=chunk.name,
-                            language=chunk.language,
-                        )
-                    )
+                # Split oversized chunk — try sentence boundaries first,
+                # fall back to line boundaries
+                sub_chunks = self._split_oversized(chunk, max_size)
+                result.extend(sub_chunks)
 
             elif char_count < min_size and result:
                 prev = result[-1]
