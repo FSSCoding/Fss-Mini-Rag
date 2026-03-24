@@ -72,9 +72,22 @@ class CollectionPanel(ttk.LabelFrame):
             info = get_collection_info(path)
             if is_research_session(path):
                 marker = "[WEB]" if info.get("indexed") else "[web]"
+                # Use session name not "sources"
+                display = self._get_session_display_name(p)
             else:
                 marker = "[ok]" if info.get("indexed") else "[--]"
-            self.listbox.insert(tk.END, f"{marker} {p.name}")
+                display = p.name
+            self.listbox.insert(tk.END, f"{marker} {display}")
+
+    @staticmethod
+    def _get_session_display_name(p: Path) -> str:
+        """Get a display name for a research session collection.
+        If path is .../session-name/sources, show 'web: session-name'."""
+        if p.name == "sources" and (p.parent / "session.json").exists():
+            return f"web: {p.parent.name}"
+        if (p / "session.json").exists():
+            return f"web: {p.name}"
+        return p.name
 
     def _show_empty(self):
         if not hasattr(self, "_empty"):

@@ -24,6 +24,8 @@ class PreferencesDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
         self._build()
+        # Auto-refresh models when dialog opens
+        self.after(200, self._refresh_models)
 
     def _build(self):
         main = ttk.Frame(self, padding=10)
@@ -98,10 +100,15 @@ class PreferencesDialog(tk.Toplevel):
             row=11, column=0, columnspan=2, sticky=tk.W, **pad
         )
 
-        # Refresh models
-        ttk.Button(tab, text="Refresh Models", command=self._refresh_models).grid(
-            row=12, column=0, columnspan=2, sticky=tk.W, **pad
-        )
+        # Action buttons row
+        action_frame = ttk.Frame(tab)
+        action_frame.grid(row=12, column=0, columnspan=2, sticky=tk.W, **pad)
+
+        ttk.Button(action_frame, text="Refresh Models", command=self._refresh_models).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(action_frame, text="Quick Test", command=self._quick_test_endpoints).pack(side=tk.LEFT, padx=(0, 5))
+
+        self.endpoint_test_label = ttk.Label(tab, text="", foreground="#888888")
+        self.endpoint_test_label.grid(row=13, column=0, columnspan=2, sticky=tk.W, **pad)
 
     # ─── Tab 2: API Keys ───
 
@@ -200,6 +207,47 @@ class PreferencesDialog(tk.Toplevel):
         ttk.Button(stats_frame, text="Reset Session", command=self._reset_session).pack(anchor=tk.W, pady=(5, 0))
 
     # ─── Handlers ───
+
+    def _quick_test_endpoints(self):
+        """Quick curl-style test of both endpoints from the Endpoints tab."""
+        self.endpoint_test_label.config(text="Testing...", foreground="#888888")
+
+        def _run():
+            import requests
+            api_key = self._key_vars.get("LLM_API_KEY", tk.StringVar()).get() or get_key("LLM_API_KEY") or get_key("OPENAI_API_KEY")
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            results = []
+
+            # Test embedding endpoint
+            emb_url = self.emb_url_var.get().rstrip("/")
+            try:
+                r = requests.get(f"{emb_url}/models" if emb_url.endswith("/v1") else emb_url,
+                                 headers=headers, timeout=5)
+                results.append(f"Embed: {'OK' if r.status_code == 200 else f'HTTP {r.status_code}'}")
+            except Exception as e:
+                results.append(f"Embed: FAIL ({e})")
+
+            # Test LLM endpoint
+            llm_url = self.llm_url_var.get().rstrip("/")
+            try:
+                r = requests.get(f"{llm_url}/models", headers=headers, timeout=5)
+                if r.status_code == 200:
+                    count = len(r.json().get("data", []))
+                    results.append(f"LLM: OK ({count} models)")
+                else:
+                    results.append(f"LLM: HTTP {r.status_code}")
+            except Exception as e:
+                results.append(f"LLM: FAIL ({e})")
+
+            self.after(0, lambda: self.endpoint_test_label.config(
+                text=" | ".join(results),
+                foreground="green" if all("OK" in r for r in results) else "red",
+            ))
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def _on_preset_changed(self, event):
         preset_name = self.preset_var.get()
