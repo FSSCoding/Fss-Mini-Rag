@@ -45,10 +45,10 @@ PRESETS = {
         "cost_per_1m_input": 0.0,
         "cost_per_1m_output": 0.0,
     },
-    "bobai-rtx3090": {
-        "name": "BobAI RTX 3090",
-        "embedding_url": "https://rtx3090.bobai.com.au/v1",
-        "llm_url": "https://rtx3090.bobai.com.au/v1",
+    "custom-remote": {
+        "name": "Custom Remote Server",
+        "embedding_url": "https://your-server.example.com/v1",
+        "llm_url": "https://your-server.example.com/v1",
         "needs_api_key": True,
         "cost_per_1m_input": 0.0,
         "cost_per_1m_output": 0.0,

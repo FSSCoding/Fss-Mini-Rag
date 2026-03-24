@@ -32,8 +32,8 @@ class AboutDialog(tk.Toplevel):
         link.pack()
         link.bind("<Button-1>", lambda e: webbrowser.open("https://foxsoftwaresolutions.com.au"))
 
-        repo_link = ttk.Label(frame, text="Gitea Repository", foreground="dodgerblue", cursor="hand2")
+        repo_link = ttk.Label(frame, text="GitHub Repository", foreground="dodgerblue", cursor="hand2")
         repo_link.pack(pady=(2, 0))
-        repo_link.bind("<Button-1>", lambda e: webbrowser.open("https://gitea.bobai.com.au/BobAi/Fss-Rag-Mini"))
+        repo_link.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/FSSCoding/Fss-Mini-Rag"))
 
         ttk.Button(frame, text="OK", command=self.destroy).pack(pady=10)

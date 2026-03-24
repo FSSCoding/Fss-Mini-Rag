@@ -1,6 +1,6 @@
 # Chunker & Indexer Evaluation Issues
 
-Tracked from hands-on evaluation session 2026-03-23, indexing `/MASTERFOLDER/Tools/fss-open` (124 files, 1683 chunks).
+Tracked from hands-on evaluation session 2026-03-23, indexing a real-world project (124 files, 1683 chunks).
 
 ---
 
@@ -12,7 +12,7 @@ The include list in `indexer.py:80-135` is missing common file types found in re
 |-----------|-------------------|------|--------|
 | `.html` | `ARCHITECTURE_OPTIONS.html` (41KB), `routing_analysis.html` (21KB), `web/static/index.html` | 62KB+ total | NOT INDEXED |
 | `.sh` | `build.sh`, `install.sh`, `uninstall.sh`, `web/fss-shell.sh` | 4 files | NOT INDEXED |
-| `.conf` | `web/terminal.bobai.com.au.nginx.conf` | 1 file | NOT INDEXED |
+| `.conf` | `web/mysite.nginx.conf` | 1 file | NOT INDEXED |
 | `.service` | `web/fss-open-web.service` | 1 file | NOT INDEXED |
 | `.css` | None in this project, but common | — | NOT INDEXED |
 | `.sql` | None in this project, but common | — | NOT INDEXED |

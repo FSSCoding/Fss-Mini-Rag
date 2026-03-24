@@ -299,12 +299,12 @@ class TestConfigStore:
         assert PRESETS["openai"]["llm_url"] == "https://api.openai.com/v1"
         assert PRESETS["openai"]["embedding_url"] == "https://api.openai.com/v1"
 
-    def test_bobai_rtx3090_preset(self):
+    def test_custom_remote_preset(self):
         from mini_rag.gui.config_store import PRESETS
-        rtx = PRESETS["bobai-rtx3090"]
-        assert "rtx3090.bobai.com.au" in rtx["llm_url"]
-        assert rtx["needs_api_key"] is True
-        assert rtx["cost_per_1m_input"] == 0.0  # self-hosted = free
+        remote = PRESETS["custom-remote"]
+        assert "example.com" in remote["llm_url"]
+        assert remote["needs_api_key"] is True
+        assert remote["cost_per_1m_input"] == 0.0  # self-hosted = free
 
 
 # ──────────────────────────────────────────────────────────
