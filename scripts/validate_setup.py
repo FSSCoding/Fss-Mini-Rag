@@ -100,12 +100,16 @@ def main():
     workflow_file = project_root / ".github" / "workflows" / "build-and-release.yml"
     if workflow_file.exists():
         content = workflow_file.read_text()
-        if "cibuildwheel" in content:
-            print("   OK: build-and-release.yml uses cibuildwheel")
-        if "pypa/gh-action-pypi-publish" in content:
-            print("   OK: build-and-release.yml publishes to PyPI")
+        if "build-wheel" in content:
+            print("   OK: build-and-release.yml has wheel build")
+        if "create-release" in content or "action-gh-release" in content:
+            print("   OK: build-and-release.yml creates GitHub releases")
+        if "build-windows-installer" in content:
+            print("   OK: build-and-release.yml has Windows installer build")
+        if "build-deb" in content or "build-appimage" in content:
+            print("   OK: build-and-release.yml has Linux package builds")
     else:
-        print("   WARNING: build-and-release.yml missing (needed for PyPI)")
+        print("   WARNING: build-and-release.yml missing")
 
     ci_file = project_root / ".github" / "workflows" / "ci.yml"
     if ci_file.exists():

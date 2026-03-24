@@ -1,6 +1,7 @@
 [Desktop Entry]
 Name=FSS-Mini-RAG
 Comment=Self-contained research and code search system
+GenericName=Semantic Search
 Exec=rag-mini-gui
 Icon=fss-mini-rag
 Terminal=false

@@ -4,250 +4,327 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
-  build-wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
-    
+  # Build universal Python wheel and source distribution
+  build-wheel:
+    name: Build wheel + sdist
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
-    - name: Install dependencies
+
+    - name: Install build tools
+      run: python -m pip install --upgrade pip build
+
+    - name: Build wheel and sdist
+      run: python -m build
+
+    - name: Verify wheel
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install build twine cibuildwheel
-    
-    - name: Build wheels
-      uses: pypa/cibuildwheel@v2.16
-      env:
-        CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
-        CIBW_SKIP: "pp* *musllinux* *i686* *win32*"
-        CIBW_ARCHS_MACOS: "x86_64 arm64"
-        CIBW_ARCHS_LINUX: "x86_64"
-        CIBW_ARCHS_WINDOWS: "AMD64"
-        CIBW_TEST_COMMAND: "rag-mini --help"
-        CIBW_TEST_SKIP: "*arm64*"  # Skip tests on arm64 due to emulation issues
-        
-    - name: Build source distribution
-      if: matrix.os == 'ubuntu-latest'
-      run: python -m build --sdist
-    
-    - name: Upload wheels
+        pip install dist/*.whl
+        rag-mini --help
+
+    - name: Upload wheel
       uses: actions/upload-artifact@v4
       with:
-        name: wheels-${{ matrix.os }}
-        path: ./wheelhouse/*.whl
-        
-    - name: Upload source distribution
-      if: matrix.os == 'ubuntu-latest'
+        name: wheel
+        path: dist/*.whl
+
+    - name: Upload sdist
       uses: actions/upload-artifact@v4
       with:
         name: sdist
-        path: ./dist/*.tar.gz
+        path: dist/*.tar.gz
 
+  # Build portable zipapp
   build-zipapp:
     name: Build zipapp (.pyz)
     runs-on: ubuntu-latest
-    
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-    
+        pip install -r requirements.txt
+
     - name: Build zipapp
       run: python scripts/build_pyz.py
-    
+
     - name: Upload zipapp
       uses: actions/upload-artifact@v4
       with:
         name: zipapp
         path: dist/rag-mini.pyz
 
-  test-installation:
-    name: Test installation methods
-    needs: [build-wheels, build-zipapp]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.8', '3.11', '3.12']
-        exclude:
-          # Reduce test matrix size
-          - os: windows-latest
-            python-version: '3.8'
-          - os: macos-latest
-            python-version: '3.8'
-    
+  # Build Linux .deb package
+  build-deb:
+    name: Build .deb package
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Download wheels
-      uses: actions/download-artifact@v4
-      with:
-        name: wheels-${{ matrix.os }}
-        path: ./wheelhouse/
-    
-    - name: Test wheel installation
-      shell: bash
-      run: |
-        # Find the appropriate wheel for this OS and Python version
-        wheel_file=$(ls wheelhouse/*.whl | head -1)
-        echo "Testing wheel: $wheel_file"
-        
-        # Install the wheel
-        python -m pip install "$wheel_file"
-        
-        # Test the command
-        rag-mini --help
-        echo "✅ Wheel installation test passed"
-    
-    - name: Download zipapp (Ubuntu only)
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/download-artifact@v4
-      with:
-        name: zipapp
-        path: ./
-    
-    - name: Test zipapp (Ubuntu only)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        python rag-mini.pyz --help
-        echo "✅ Zipapp test passed"
+        python-version: '3.11'
 
-  publish:
-    name: Publish to PyPI
-    needs: [build-wheels, test-installation]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    environment: release
-    
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-    
-    - name: Prepare distribution files
+    - name: Install build tools
       run: |
-        mkdir -p dist/
-        cp wheels-*/**.whl dist/
-        cp sdist/*.tar.gz dist/
-        ls -la dist/
-    
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        skip-existing: true
+        python -m pip install --upgrade pip build
+        sudo apt-get update
+        sudo apt-get install -y ruby ruby-dev
+        sudo gem install fpm
 
-  create-release:
-    name: Create GitHub Release
-    needs: [build-wheels, build-zipapp, test-installation]
+    - name: Extract version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        if [ "$VERSION" = "$GITHUB_REF" ]; then
+          VERSION=$(python -c "import mini_rag; print(mini_rag.__version__)")
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Build wheel
+      run: python -m build --wheel
+
+    - name: Build .deb
+      run: |
+        fpm \
+          -s python \
+          -t deb \
+          --name fss-mini-rag \
+          --version ${{ steps.version.outputs.version }} \
+          --description "Self-contained research and code search system" \
+          --url "https://github.com/FSSCoding/Fss-Mini-Rag" \
+          --maintainer "Brett Fox <brett@foxsoftwaresolutions.com.au>" \
+          --license MIT \
+          --depends python3 \
+          --depends python3-tk \
+          --depends python3-venv \
+          --depends python3-pip \
+          --category science \
+          --package dist/fss-mini-rag_${{ steps.version.outputs.version }}_amd64.deb \
+          setup.py
+
+    - name: Upload .deb
+      uses: actions/upload-artifact@v4
+      with:
+        name: deb
+        path: dist/*.deb
+
+  # Build Linux AppImage
+  build-appimage:
+    name: Build AppImage
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    
     steps:
     - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        fetch-depth: 0
-    
+        python-version: '3.11'
+
+    - name: Extract version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        if [ "$VERSION" = "$GITHUB_REF" ]; then
+          VERSION=$(python -c "import mini_rag; print(mini_rag.__version__)")
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -e .
+        sudo apt-get update
+        sudo apt-get install -y libfuse2
+
+    - name: Download appimagetool
+      run: |
+        wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+        chmod +x appimagetool
+
+    - name: Download Python AppImage base
+      run: |
+        wget -q "https://github.com/niess/python-appimage/releases/download/python3.11/python3.11.9-cp311-cp311-manylinux_2_28_x86_64.AppImage" \
+          -O python.AppImage || \
+        wget -q "https://github.com/niess/python-appimage/releases/latest/download/python3.11.9-cp311-cp311-manylinux_2_28_x86_64.AppImage" \
+          -O python.AppImage
+        chmod +x python.AppImage
+
+    - name: Build AppImage
+      run: |
+        # Extract Python base
+        ./python.AppImage --appimage-extract
+        mv squashfs-root AppDir
+
+        # Install app into AppImage
+        PYTHON_BIN=$(ls AppDir/usr/bin/python3.* | head -1)
+        "${PYTHON_BIN}" -m pip install --upgrade pip
+        "${PYTHON_BIN}" -m pip install -r requirements.txt
+        "${PYTHON_BIN}" -m pip install .
+
+        # Create AppRun
+        cat > AppDir/AppRun << 'EOF'
+        #!/bin/bash
+        SELF="$(readlink -f "$0")"
+        APPDIR="$(dirname "${SELF}")"
+        export PATH="${APPDIR}/usr/bin:${PATH}"
+        export PYTHONPATH="${APPDIR}/usr/lib/python3.11/site-packages:${PYTHONPATH}"
+        export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH}"
+        export PYTHONDONTWRITEBYTECODE=1
+        if [ $# -eq 0 ]; then
+            exec "${APPDIR}/usr/bin/python3" -m mini_rag.gui "$@"
+        else
+            exec "${APPDIR}/usr/bin/python3" -m mini_rag.cli "$@"
+        fi
+        EOF
+        chmod +x AppDir/AppRun
+
+        # Add desktop file and icon
+        cp packaging/linux/fss-mini-rag.desktop AppDir/
+        cp assets/Fss_Mini_Rag.png AppDir/fss-mini-rag.png
+        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps/
+        cp assets/Fss_Mini_Rag.png AppDir/usr/share/icons/hicolor/256x256/apps/fss-mini-rag.png
+
+        # Build
+        ARCH=x86_64 ./appimagetool AppDir dist/FSS-Mini-RAG-${{ steps.version.outputs.version }}-x86_64.AppImage
+
+    - name: Upload AppImage
+      uses: actions/upload-artifact@v4
+      with:
+        name: appimage
+        path: dist/*.AppImage
+
+  # Build Windows standalone installer
+  build-windows-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install build tools
+      run: python -m pip install --upgrade pip build
+
+    - name: Extract version
+      id: version
+      shell: bash
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        if [ "$VERSION" = "$GITHUB_REF" ]; then
+          VERSION=$(python -c "import mini_rag; print(mini_rag.__version__)")
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Install Inno Setup
+      run: |
+        choco install innosetup -y --no-progress
+      shell: cmd
+
+    - name: Build installer
+      run: |
+        $env:FSS_VERSION = "${{ steps.version.outputs.version }}"
+        powershell -ExecutionPolicy Bypass -File packaging\windows\build-installer.ps1 -Version "${{ steps.version.outputs.version }}"
+      shell: pwsh
+
+    - name: Upload Windows installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer
+        path: dist/*-setup.exe
+
+  # Create GitHub Release with all artifacts
+  create-release:
+    name: Create GitHub Release
+    needs: [build-wheel, build-zipapp, build-deb, build-appimage, build-windows-installer]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Extract version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
-    
+      with:
+        path: artifacts/
+
     - name: Prepare release assets
       run: |
-        mkdir -p release-assets/
-        
-        # Copy zipapp
-        cp rag-mini.pyz release-assets/
-        
-        # Copy a few representative wheels
-        cp wheels-ubuntu-latest/*cp311*x86_64*.whl release-assets/ || true
-        cp wheels-windows-latest/*cp311*amd64*.whl release-assets/ || true
-        cp wheels-macos-*/*cp311*x86_64*.whl release-assets/ || true
-        cp wheels-macos-*/*cp311*arm64*.whl release-assets/ || true
-        
-        # Copy source distribution
-        cp sdist/*.tar.gz release-assets/
-        
-        ls -la release-assets/
-    
+        mkdir -p release/
+        cp artifacts/wheel/*.whl release/
+        cp artifacts/sdist/*.tar.gz release/
+        cp artifacts/zipapp/*.pyz release/
+        cp artifacts/deb/*.deb release/
+        cp artifacts/appimage/*.AppImage release/
+        cp artifacts/windows-installer/*-setup.exe release/
+        ls -lh release/
+
     - name: Generate changelog
       id: changelog
       run: |
-        # Simple changelog generation - you might want to use a dedicated action
-        echo "## Changes" > CHANGELOG.md
-        git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" >> CHANGELOG.md
-        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-        cat CHANGELOG.md >> $GITHUB_OUTPUT
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          COMMITS=$(git log --oneline "$LAST_TAG"..HEAD --pretty=format:"- %s")
+        else
+          COMMITS=$(git log --oneline --pretty=format:"- %s" -20)
+        fi
+        echo "commits<<EOF" >> $GITHUB_OUTPUT
+        echo "$COMMITS" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-    
+
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
-        files: release-assets/*
+        files: release/*
         body: |
-          ## Installation Options
-          
-          ### 🚀 One-line installers (Recommended)
-          
-          **Linux/macOS:**
+          ## FSS-Mini-RAG v${{ steps.version.outputs.version }}
+
+          ### Downloads
+
+          | Platform | File | Notes |
+          |----------|------|-------|
+          | **Windows** | `fss-mini-rag-${{ steps.version.outputs.version }}-setup.exe` | Standalone installer, no Python needed |
+          | **Linux (Debian/Ubuntu)** | `fss-mini-rag_${{ steps.version.outputs.version }}_amd64.deb` | `sudo dpkg -i *.deb` |
+          | **Linux (Portable)** | `FSS-Mini-RAG-${{ steps.version.outputs.version }}-x86_64.AppImage` | Single file, `chmod +x` and run |
+          | **Any (pip)** | `fss_mini_rag-${{ steps.version.outputs.version }}-py3-none-any.whl` | `pip install *.whl` |
+          | **Any (portable)** | `rag-mini.pyz` | `python rag-mini.pyz` (needs Python) |
+
+          ### One-Line Install (Linux/macOS)
+
           ```bash
-          curl -fsSL https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/FSSCoding/Fss-Mini-Rag/main/install.sh | bash
           ```
-          
-          **Windows PowerShell:**
-          ```powershell
-          iwr https://raw.githubusercontent.com/fsscoding/fss-mini-rag/main/install.ps1 -UseBasicParsing | iex
-          ```
-          
-          ### 📦 Manual installation
-          
-          **With uv (fastest):**
-          ```bash
-          uv tool install fss-mini-rag
-          ```
-          
-          **With pipx:**
-          ```bash
-          pipx install fss-mini-rag
-          ```
-          
-          **With pip:**
-          ```bash
-          pip install --user fss-mini-rag
-          ```
-          
-          **Single file (no Python knowledge needed):**
-          Download `rag-mini.pyz` and run with `python rag-mini.pyz`
-          
-          ${{ steps.changelog.outputs.CHANGELOG }}
+
+          ### Changes
+
+          ${{ steps.changelog.outputs.commits }}
         draft: false
         prerelease: false
       env:

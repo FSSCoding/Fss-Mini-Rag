@@ -3,8 +3,19 @@
 > **A lightweight, self-contained research and code search system**
 > *Distilled from 2 years of building production RAG systems. Designed to be understood, modified, and used.*
 
-## Quick Start
+## Download & Install
 
+### Windows (no Python needed)
+Download `fss-mini-rag-setup.exe` from [GitHub Releases](https://github.com/FSSCoding/Fss-Mini-Rag/releases/latest). Double-click to install.
+
+### Linux (one-line install)
+```bash
+curl -fsSL https://raw.githubusercontent.com/FSSCoding/Fss-Mini-Rag/main/install.sh | bash
+```
+
+Or download the `.deb` (Debian/Ubuntu) or `.AppImage` (any distro) from [GitHub Releases](https://github.com/FSSCoding/Fss-Mini-Rag/releases/latest).
+
+### From Source (all platforms)
 ```bash
 git clone https://github.com/FSSCoding/Fss-Mini-Rag.git
 cd Fss-Mini-Rag
@@ -13,15 +24,15 @@ source .venv/bin/activate
 pip install -r requirements.txt && pip install -e .
 ```
 
-**Then start using it:**
+**Windows from source:** Use `.venv\Scripts\activate.bat`, or run `install_windows.bat` for guided setup.
+
+## Quick Start
+
 ```bash
 rag-mini init                          # Index current directory
 rag-mini search "authentication logic" # Search your codebase
+rag-mini gui                           # Launch desktop GUI
 ```
-
-**Windows:** Use `.venv\Scripts\activate.bat`, or run `install_windows.bat` for guided setup.
-
-> Install time: 2-5 minutes. Dependencies total ~120MB.
 
 ## Demo
 
