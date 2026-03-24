@@ -19,8 +19,9 @@ class PreferencesDialog(tk.Toplevel):
         self.title("Preferences")
         self.config_data = dict(config)
         self.bus = event_bus
-        self.geometry("560x520")
-        self.resizable(False, False)
+        self.geometry("580x640")
+        self.resizable(True, True)
+        self.minsize(560, 580)
         self.transient(parent)
         self.grab_set()
         self._build()
@@ -38,12 +39,15 @@ class PreferencesDialog(tk.Toplevel):
         self._build_keys_tab()
         self._build_connection_tab()
 
-        # Bottom buttons
+        # Bottom buttons — Save is primary action
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(btn_frame, text="Save Custom Preset", command=self._save_custom).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="Reset", command=self._reset).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="OK", command=self._on_ok, style="Accent.TButton").pack(side=tk.RIGHT, padx=3)
+        ttk.Button(btn_frame, text="Save", command=self._on_save, style="Accent.TButton").pack(side=tk.RIGHT, padx=3)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=3)
+
+        self._save_status = ttk.Label(main, text="", foreground="#888888")
+        self._save_status.pack(fill=tk.X, pady=(4, 0))
 
     # ─── Tab 1: Endpoints ───
 
@@ -205,6 +209,19 @@ class PreferencesDialog(tk.Toplevel):
         self.bus.on("cost:updated", lambda d: self.after(0, lambda: self._update_stats(d)))
 
         ttk.Button(stats_frame, text="Reset Session", command=self._reset_session).pack(anchor=tk.W, pady=(5, 0))
+
+        # Reset to defaults (danger zone)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        reset_btn = tk.Button(
+            tab, text="Reset All to Defaults", command=self._reset_to_defaults,
+            fg="white", bg="#cc3333", activebackground="#aa2222",
+            relief=tk.RAISED, padx=10, pady=4,
+        )
+        reset_btn.pack(anchor=tk.W)
+        ttk.Label(
+            tab, text="Resets endpoints, models, and removes API keys from our system",
+            foreground="#888888", font=("", 8, "italic"),
+        ).pack(anchor=tk.W, pady=(2, 0))
 
     # ─── Handlers ───
 
@@ -413,7 +430,8 @@ class PreferencesDialog(tk.Toplevel):
         self.cost_input_var.set("0.0")
         self.cost_output_var.set("0.0")
 
-    def _on_ok(self):
+    def _on_save(self):
+        """Save all settings — endpoints, models, keys, cost rates."""
         # Save endpoint config
         self.config_data["preset"] = self.preset_var.get()
         self.config_data["embedding_url"] = self.emb_url_var.get()
@@ -435,4 +453,38 @@ class PreferencesDialog(tk.Toplevel):
             save_env(keys)
 
         self.bus.emit("settings:changed", self.config_data)
-        self.destroy()
+
+        # Confirm to user
+        self._save_status.config(
+            text="Settings saved successfully",
+            foreground="green",
+        )
+        self.after(2000, lambda: self._save_status.config(text=""))
+
+    def _reset_to_defaults(self):
+        """Reset ALL settings to factory defaults. Warns about key deletion."""
+        from tkinter import messagebox
+        if not messagebox.askyesno(
+            "Reset to Defaults",
+            "This will reset all endpoints, models, and cost rates to defaults.\n\n"
+            "API keys stored in .env will be DELETED from our system.\n"
+            "(Your keys are not deleted from any other system.)\n\n"
+            "Continue?",
+            icon="warning",
+        ):
+            return
+
+        # Reset endpoints and models
+        self._reset()
+
+        # Delete managed keys from .env
+        from .env_manager import load_env
+        env = load_env()
+        if env:
+            save_env({})  # Write empty — removes all managed keys
+
+        # Clear key fields in UI
+        for var in self._key_vars.values():
+            var.set("")
+
+        self._save_status.config(text="Reset to defaults", foreground="orange")
