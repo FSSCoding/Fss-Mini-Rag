@@ -1,21 +1,37 @@
 """Custom sv_ttk style overrides for visual polish.
 
 Applied after sv_ttk.set_theme() to add:
-- Accent styling for primary action buttons
-- Padding adjustments for frames and tabs
-- Visual depth via relief, spacing, and subtle color differences
+- Softer background tones (not pure black/white)
+- Accent colors: orange (dark mode), blue (light mode)
+- Padding and depth adjustments
 """
 
 import tkinter as tk
 from tkinter import ttk
+
+# Accent palette
+DARK_ACCENT = "#e8913a"      # warm orange
+DARK_ACCENT_SOFT = "#c47a30"  # muted orange for headers
+DARK_BG = "#1e1e24"          # softer than pure black
+DARK_FG = "#d0d0d0"          # softer than pure white
+DARK_FG_DIM = "#909090"
+DARK_BORDER = "#3a3a44"
+
+LIGHT_ACCENT = "#2070b0"      # clean blue
+LIGHT_ACCENT_SOFT = "#3080c0"
+LIGHT_BG = "#f5f5f0"         # warm off-white, not pure white
+LIGHT_FG = "#2a2a2a"         # softer than pure black
+LIGHT_FG_DIM = "#606060"
+LIGHT_BORDER = "#c8c8c0"
 
 
 def apply_custom_styles(root):
     """Apply custom style overrides on top of sv_ttk theme."""
     style = ttk.Style()
 
-    # Detect current theme for color tuning
     is_dark = _is_dark_theme()
+    accent = DARK_ACCENT if is_dark else LIGHT_ACCENT
+    accent_soft = DARK_ACCENT_SOFT if is_dark else LIGHT_ACCENT_SOFT
 
     # Accent buttons — primary actions (Go, Search, Index, +Add)
     style.configure(
@@ -40,25 +56,44 @@ def apply_custom_styles(root):
     # Status bar styling
     style.configure("Status.TLabel", padding=(8, 4))
     style.configure("Error.TLabel", foreground="#ff4444", padding=(8, 4))
-    style.configure("Hint.TLabel", foreground="#888888", padding=(8, 4), font=("", 9, "italic"))
+    style.configure("Hint.TLabel", foreground=DARK_FG_DIM if is_dark else LIGHT_FG_DIM,
+                    padding=(8, 4), font=("", 9, "italic"))
 
-    # Depth: soften colors and add subtle border accents
     if is_dark:
-        # Softer foreground — pure white is harsh
-        style.configure("TLabel", foreground="#d4d4d4")
-        style.configure("TLabelframe.Label", foreground="#a0c4ff")  # subtle blue accent for section headers
-        # Treeview heading contrast
-        style.configure("Treeview.Heading", font=("", 9, "bold"), foreground="#b0b0b0")
-        # Subtle separator color
-        style.configure("TSeparator", background="#404040")
-        # LabelFrame border — slightly lighter than background for depth
-        style.configure("TLabelframe", bordercolor="#3a3a3a", relief="groove")
+        # Softer foreground — warm dark mode, not harsh black/white
+        style.configure("TLabel", foreground=DARK_FG)
+        style.configure("TLabelframe.Label", foreground=DARK_ACCENT_SOFT)
+        style.configure("Treeview.Heading", font=("", 9, "bold"), foreground="#a0a0a0")
+        style.configure("TSeparator", background="#383840")
+        style.configure("TLabelframe", bordercolor=DARK_BORDER, relief="groove")
+
+        # Soften the root background
+        try:
+            root.configure(bg=DARK_BG)
+        except tk.TclError:
+            pass
+
     else:
-        # Light mode: subtle accents
-        style.configure("TLabel", foreground="#1a1a1a")
-        style.configure("TLabelframe.Label", foreground="#2060a0")  # blue accent
-        style.configure("Treeview.Heading", font=("", 9, "bold"), foreground="#333333")
-        style.configure("TLabelframe", bordercolor="#c0c0c0", relief="groove")
+        # Light mode: warm off-white with blue accents
+        style.configure("TLabel", foreground=LIGHT_FG)
+        style.configure("TLabelframe.Label", foreground=LIGHT_ACCENT)
+        style.configure("Treeview.Heading", font=("", 9, "bold"), foreground="#404040")
+        style.configure("TLabelframe", bordercolor=LIGHT_BORDER, relief="groove")
+
+        try:
+            root.configure(bg=LIGHT_BG)
+        except tk.TclError:
+            pass
+
+
+def get_accent_color() -> str:
+    """Get the current accent color for use by other components."""
+    return DARK_ACCENT if _is_dark_theme() else LIGHT_ACCENT
+
+
+def get_accent_soft() -> str:
+    """Get the softer accent color for headers and labels."""
+    return DARK_ACCENT_SOFT if _is_dark_theme() else LIGHT_ACCENT_SOFT
 
 
 def _is_dark_theme() -> bool:

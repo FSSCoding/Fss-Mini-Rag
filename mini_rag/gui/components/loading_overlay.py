@@ -96,7 +96,7 @@ class LoadingOverlay(tk.Frame):
 
         # Overlay widgets on the canvas
         self.spinner_label = tk.Label(
-            self._canvas, text="⠋", font=("", 24), fg="#4a9eff", bg="#1e1e2e",
+            self._canvas, text="⠋", font=("", 24), fg="#e8913a", bg="#1e1e2e",
         )
         self._canvas.create_window(190, 35, window=self.spinner_label)
 

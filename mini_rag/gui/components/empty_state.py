@@ -47,12 +47,17 @@ class EmptyState(ttk.Frame):
         )
         msg_label.pack(pady=(0, 4))
 
-        # Action link (blue, underlined, clickable)
+        # Action link (accent colored, underlined, clickable)
         if self._action_text and self._action_callback:
+            try:
+                from ..theme import get_accent_color
+                link_color = get_accent_color()
+            except Exception:
+                link_color = "#e8913a"
             action = tk.Label(
                 container,
                 text=self._action_text,
-                fg="#4a9eff",
+                fg=link_color,
                 cursor="hand2",
                 font=("", 10, "underline"),
             )

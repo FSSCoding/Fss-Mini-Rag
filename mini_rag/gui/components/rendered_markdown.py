@@ -110,18 +110,21 @@ class RenderedMarkdown(tk.Text):
         self.configure(font=prose_font())
 
     def _setup_tags(self):
-        # Headers
-        self.tag_configure("h1", font=prose_font(18, "bold"), foreground="#61afef",
+        # Headers — use theme accent color
+        from ..theme import get_accent_color, get_accent_soft
+        h_color = get_accent_color()
+        h_color_soft = get_accent_soft()
+        self.tag_configure("h1", font=prose_font(18, "bold"), foreground=h_color,
                           spacing1=12, spacing3=6)
-        self.tag_configure("h2", font=prose_font(15, "bold"), foreground="#61afef",
+        self.tag_configure("h2", font=prose_font(15, "bold"), foreground=h_color,
                           spacing1=10, spacing3=4)
-        self.tag_configure("h3", font=prose_font(12, "bold"), foreground="#61afef",
+        self.tag_configure("h3", font=prose_font(12, "bold"), foreground=h_color,
                           spacing1=8, spacing3=3)
-        self.tag_configure("h4", font=prose_font(11, "bold"), foreground="#7fb5d6",
+        self.tag_configure("h4", font=prose_font(11, "bold"), foreground=h_color_soft,
                           spacing1=6, spacing3=2)
-        self.tag_configure("h5", font=prose_font(10, "bold"), foreground="#7fb5d6",
+        self.tag_configure("h5", font=prose_font(10, "bold"), foreground=h_color_soft,
                           spacing1=4, spacing3=2)
-        self.tag_configure("h6", font=prose_font(10, "bold italic"), foreground="#7fb5d6",
+        self.tag_configure("h6", font=prose_font(10, "bold italic"), foreground=h_color_soft,
                           spacing1=4, spacing3=2)
 
         # Inline formatting
@@ -135,7 +138,7 @@ class RenderedMarkdown(tk.Text):
                           foreground="#98c379", lmargin1=20, lmargin2=20,
                           spacing1=4, spacing3=4)
         self.tag_configure("list_item", lmargin1=15, lmargin2=30)
-        self.tag_configure("link", foreground="#61afef", underline=True)
+        self.tag_configure("link", foreground=h_color, underline=True)
 
         # Metadata header
         self.tag_configure("meta_header", font=prose_font(9), foreground="#6a9fb5")
@@ -362,7 +365,8 @@ class RenderedMarkdown(tk.Text):
                     self.insert(tk.END, link_text)
                     end = self.index(tk.END + "-1c")
                     tag_name = f"link_{id(link_url)}"
-                    self.tag_configure(tag_name, foreground="#61afef", underline=True)
+                    from ..theme import get_accent_color as _get_accent
+                    self.tag_configure(tag_name, foreground=_get_accent(), underline=True)
                     self.tag_add(tag_name, start, end)
                     self.tag_bind(tag_name, "<Button-1>",
                                  lambda e, url=link_url: webbrowser.open(url))
