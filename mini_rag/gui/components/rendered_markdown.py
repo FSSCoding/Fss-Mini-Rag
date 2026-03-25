@@ -251,8 +251,9 @@ class RenderedMarkdown(tk.Text):
 
     def end_stream(self):
         """Final render pass after streaming completes."""
-        full_text = self.get("1.0", tk.END)
-        self.render(full_text.strip(), strip_markers=True)
+        full_text = self.get("1.0", tk.END).strip()
+        if full_text:
+            self.render(full_text, strip_markers=True)
 
     # === Internal rendering ===
 
