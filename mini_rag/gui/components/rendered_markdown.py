@@ -141,7 +141,7 @@ class RenderedMarkdown(tk.Text):
         self.tag_configure("link", foreground=h_color, underline=True)
 
         # Metadata header
-        self.tag_configure("meta_header", font=prose_font(9), foreground="#6a9fb5")
+        self.tag_configure("meta_header", font=prose_font(9), foreground="#c47a30")
         self.tag_configure("meta_separator", foreground="#555555")
 
         # Thinking/reasoning
@@ -153,7 +153,7 @@ class RenderedMarkdown(tk.Text):
         self.tag_configure("str", foreground="#98c379", font=code_font())
         self.tag_configure("comment", foreground="#5c6370", font=(_CODE_FAMILY, 10, "italic"))
         self.tag_configure("num", foreground="#d19a66", font=code_font())
-        self.tag_configure("func_name", foreground="#61afef", font=code_font(10, "bold"))
+        self.tag_configure("func_name", foreground="#e8913a", font=code_font(10, "bold"))
         self.tag_configure("decorator", foreground="#e5c07b", font=code_font())
 
     # === Public API ===
@@ -443,7 +443,7 @@ class RenderedMarkdown(tk.Text):
         widget.tag_configure("comment", foreground="#5c6370",
                             font=(_CODE_FAMILY, 10, "italic"))
         widget.tag_configure("num", foreground="#d19a66")
-        widget.tag_configure("func_name", foreground="#61afef",
+        widget.tag_configure("func_name", foreground="#e8913a",
                             font=code_font(10, "bold"))
         widget.tag_configure("decorator", foreground="#e5c07b")
 

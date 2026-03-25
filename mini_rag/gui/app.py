@@ -304,14 +304,17 @@ class MiniRAGApp(tk.Tk):
     def _on_search_requested(self, data):
         if not self.state.active_collection:
             self.state.set_operation("idle")
-            self.state.error = "Select a collection first"
-            # Explicitly re-enable search bar (belt-and-suspenders)
+            self.state.hint = "Select a collection from the right panel to search"
+            self.content_panel._empty.update_message("No collection selected")
+            self.content_panel._empty.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.after(0, lambda: self.search_bar.set_searching(False))
             return
 
         if not (Path(self.state.active_collection) / ".mini-rag").exists():
             self.state.set_operation("idle")
-            self.state.error = "Collection not indexed. Click Index first."
+            self.state.hint = "Click Index on the selected collection first"
+            self.content_panel._empty.update_message("Collection not indexed yet")
+            self.content_panel._empty.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.after(0, lambda: self.search_bar.set_searching(False))
             return
 

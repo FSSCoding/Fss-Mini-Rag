@@ -83,7 +83,11 @@ class LoadingOverlay(tk.Frame):
         self._messages = []
         self._msg_after_id = None
 
-        bg = "#252535"
+        from ..theme import get_bg, get_bg_alt, get_accent_color, DARK_BORDER
+
+        bg = get_bg()
+        bg_inner = get_bg_alt()
+        accent = get_accent_color()
 
         # Outer canvas for rounded border effect
         self._canvas = tk.Canvas(self, bg=bg, highlightthickness=0,
@@ -92,22 +96,22 @@ class LoadingOverlay(tk.Frame):
 
         # Draw rounded rectangle
         self._draw_rounded_rect(self._canvas, 2, 2, 378, 128, radius=16,
-                                fill="#1e1e2e", outline="#4a4a6a", width=1)
+                                fill=bg_inner, outline=DARK_BORDER, width=1)
 
         # Overlay widgets on the canvas
         self.spinner_label = tk.Label(
-            self._canvas, text="⠋", font=("", 24), fg="#e8913a", bg="#1e1e2e",
+            self._canvas, text="⠋", font=("", 24), fg=accent, bg=bg_inner,
         )
         self._canvas.create_window(190, 35, window=self.spinner_label)
 
         self.message_label = tk.Label(
-            self._canvas, text="", font=("", 10), fg="#a0a0a0", bg="#1e1e2e",
+            self._canvas, text="", font=("", 10), fg="#a0a0a0", bg=bg_inner,
             wraplength=320,
         )
         self._canvas.create_window(190, 72, window=self.message_label)
 
         self.detail_label = tk.Label(
-            self._canvas, text="", font=("", 9), fg="#666666", bg="#1e1e2e",
+            self._canvas, text="", font=("", 9), fg="#666666", bg=bg_inner,
         )
         self._canvas.create_window(190, 100, window=self.detail_label)
 

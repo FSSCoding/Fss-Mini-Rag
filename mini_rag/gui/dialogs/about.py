@@ -28,11 +28,11 @@ class AboutDialog(tk.Toplevel):
         ttk.Label(frame, text="Add folders. Index. Search or Ask.").pack()
         ttk.Label(frame, text="").pack()
 
-        link = ttk.Label(frame, text="foxsoftwaresolutions.com.au", foreground="dodgerblue", cursor="hand2")
+        link = ttk.Label(frame, text="foxsoftwaresolutions.com.au", foreground="#e8913a", cursor="hand2")
         link.pack()
         link.bind("<Button-1>", lambda e: webbrowser.open("https://foxsoftwaresolutions.com.au"))
 
-        repo_link = ttk.Label(frame, text="GitHub Repository", foreground="dodgerblue", cursor="hand2")
+        repo_link = ttk.Label(frame, text="GitHub Repository", foreground="#e8913a", cursor="hand2")
         repo_link.pack(pady=(2, 0))
         repo_link.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/FSSCoding/Fss-Mini-Rag"))
 
