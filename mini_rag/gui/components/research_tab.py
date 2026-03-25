@@ -23,6 +23,10 @@ class ResearchTab(ttk.Frame):
         self.bus = event_bus
         self.config = config or {}
         self._search_results = []  # List of {title, url, snippet}
+        self._progress_doc = []  # Accumulated markdown for live progress
+        self._report_md = ""  # Final report markdown
+        self._showing_progress = True  # Toggle state
+        self._deep_session_dir = ""  # Session dir during deep research
         self._build()
         self._bind_events()
 
@@ -216,11 +220,23 @@ class ResearchTab(ttk.Frame):
         # Hidden by default — shown after Index Session completes
 
         # Right panel: content viewer
-        right = ttk.LabelFrame(self.main_paned, text="Content", padding=3)
+        right = ttk.Frame(self.main_paned)
         self.main_paned.add(right, weight=2)
 
-        self.content = RenderedMarkdown(right)
-        content_scroll = ttk.Scrollbar(right, orient=tk.VERTICAL,
+        # Toggle bar (hidden until deep research completes)
+        self._toggle_frame = ttk.Frame(right)
+        self._toggle_btn = ttk.Button(
+            self._toggle_frame, text="Show Final Report",
+            command=self._toggle_progress_report,
+        )
+        self._toggle_btn.pack(side=tk.RIGHT, padx=5, pady=2)
+        # Don't pack _toggle_frame yet — shown on completion
+
+        content_lf = ttk.LabelFrame(right, text="Content", padding=3)
+        content_lf.pack(fill=tk.BOTH, expand=True)
+
+        self.content = RenderedMarkdown(content_lf)
+        content_scroll = ttk.Scrollbar(content_lf, orient=tk.VERTICAL,
                                        command=self.content.yview)
         self.content.configure(yscrollcommand=content_scroll.set)
         self.content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -231,6 +247,7 @@ class ResearchTab(ttk.Frame):
         self.bus.on("research:page_scraped", self._on_page_scraped)
         self.bus.on("research:scrape_progress", self._on_scrape_progress)
         self.bus.on("research:scrape_completed", self._on_scrape_completed)
+        self.bus.on("research:deep_started", self._on_deep_started)
         self.bus.on("research:deep_progress", self._on_deep_progress)
         self.bus.on("research:deep_completed", self._on_deep_completed)
         self.bus.on("research:error", self._on_error)
@@ -523,26 +540,221 @@ class ResearchTab(ttk.Frame):
             self._on_refresh_sessions()
         self.after(0, _update)
 
+    def _on_deep_started(self, data):
+        def _update():
+            query = data.get("query", "")
+            self._deep_session_dir = data.get("session_dir", "")
+            self._progress_doc = [
+                f"# Deep Research: {query}\n",
+                "---\n",
+            ]
+            self._report_md = ""
+            self._showing_progress = True
+            self._toggle_frame.pack_forget()
+            # Clear and prepare results tree for live source tracking
+            self.results_tree.delete(*self.results_tree.get_children())
+            self._results_empty.place_forget()
+            self._search_results.clear()
+            # Configure tag for failed items
+            self.results_tree.tag_configure("failed", foreground="#888888")
+            self.results_tree.tag_configure("success", foreground="")
+            self._render_progress()
+        self.after(0, _update)
+
     def _on_deep_progress(self, data):
-        detail = data.get("detail", "")
-        self.after(0, lambda: self._show_progress(f"Deep Research: {detail}", 50))
+        event_type = data.get("type", "")
+        if not event_type:
+            # Legacy fallback
+            detail = data.get("detail", "")
+            self.after(0, lambda: self._show_progress(f"Deep Research: {detail}", 50))
+            return
+
+        self.after(0, lambda: self._handle_progress_event(data))
+
+    def _handle_progress_event(self, data):
+        """Dispatch structured progress events to markdown builders."""
+        t = data["type"]
+        doc = self._progress_doc
+
+        if t == "round_start":
+            rn, tr = data["round_num"], data["total_rounds"]
+            elapsed = data.get("elapsed_min", 0)
+            remaining = data.get("remaining_min", 0)
+            tokens = data.get("corpus_tokens", 0)
+            files = data.get("corpus_files", 0)
+            doc.append(f"\n## Round {rn} / {tr}\n")
+            doc.append(
+                f"| Metric | Value |\n|---|---|\n"
+                f"| Elapsed | {elapsed:.1f} min |\n"
+                f"| Remaining | {remaining:.1f} min |\n"
+                f"| Corpus | {files} files, ~{tokens:,} tokens |\n\n"
+            )
+            pct = (rn / tr * 100) if tr else 50
+            self._show_progress(f"Round {rn}/{tr}", pct)
+
+        elif t == "phase_start":
+            phase = data.get("phase", "")
+            label = phase.upper()
+            doc.append(f"### {label}\n")
+            self._show_progress(f"Round — {label}", self.progress_bar["value"])
+
+        elif t == "analyze_done":
+            conf = data.get("confidence", "?")
+            covered = data.get("covered_count", 0)
+            gaps = data.get("gap_count", 0)
+            gap_topics = data.get("gap_topics", [])
+            queries = data.get("follow_up_queries", [])
+            doc.append(f"**Confidence:** {conf}  |  **Covered:** {covered}  |  **Gaps:** {gaps}\n\n")
+            if gap_topics:
+                doc.append("Gaps: " + ", ".join(gap_topics[:6]))
+                if len(gap_topics) > 6:
+                    doc.append(f" (+{len(gap_topics) - 6} more)")
+                doc.append("\n\n")
+            if queries:
+                doc.append("Queries:\n")
+                for q in queries[:5]:
+                    doc.append(f"- {q}\n")
+                if len(queries) > 5:
+                    doc.append(f"- *...and {len(queries) - 5} more*\n")
+                doc.append("\n")
+
+        elif t == "search_done":
+            urls = data.get("urls_found", 0)
+            skipped = data.get("skipped_domains", 0)
+            doc.append(f"Found **{urls}** new URLs")
+            if skipped:
+                doc.append(f" (skipped {skipped} from failing domains)")
+            doc.append("\n\n")
+
+        elif t == "page_scraped":
+            title = data.get("title", "?")
+            words = data.get("word_count", 0)
+            url = data.get("url", "")
+            src = data.get("source_type", "")
+            doc.append(f"- [{src}] **{title}** — {words:,} words\n")
+            # Add to results tree
+            display = f"[{src}] {title} ({words:,}w)"
+            self.results_tree.insert("", tk.END, values=(display, url), tags=("success",))
+            self.results_tree.yview_moveto(1.0)  # auto-scroll
+
+        elif t == "page_failed":
+            url = data.get("url", "")
+            reason = data.get("reason", "failed")
+            doc.append(f"- ~~{url[:60]}~~ *({reason})*\n")
+            # Add to results tree in grey
+            from urllib.parse import urlparse as _up
+            short = _up(url).netloc + _up(url).path[:40]
+            self.results_tree.insert("", tk.END, values=(f"FAILED: {short}", url), tags=("failed",))
+            self.results_tree.yview_moveto(1.0)
+
+        elif t == "scrape_done":
+            scraped = data.get("pages_scraped", 0)
+            attempted = data.get("pages_attempted", 0)
+            doc.append(f"\nScraped **{scraped}/{attempted}** pages\n\n")
+
+        elif t == "links_harvested":
+            count = data.get("count", 0)
+            doc.append(f"Harvested **{count}** new links for next round\n\n")
+
+        elif t == "prune_done":
+            removed = data.get("removed_count", 0)
+            corr = data.get("corroborations_count", 0)
+            parts = []
+            if removed:
+                parts.append(f"removed {removed} duplicates")
+            if corr:
+                parts.append(f"found {corr} corroborations")
+            if parts:
+                doc.append(f"Pruning: {', '.join(parts)}\n\n")
+            else:
+                doc.append("Pruning: no duplicates found\n\n")
+
+        elif t == "briefing":
+            text = data.get("briefing_text", "")
+            if text:
+                doc.append(f"> **Progress Briefing:** {text}\n\n")
+
+        elif t == "round_end":
+            rn = data.get("round_num", 0)
+            dur = data.get("duration_min", 0)
+            tok = data.get("tokens_added", 0)
+            sc = data.get("scrape_successes", 0)
+            sa = data.get("scrape_attempts", 0)
+            llm = data.get("llm_calls", 0)
+            doc.append(
+                f"**Round {rn} complete:** {dur:.1f}min, "
+                f"+{tok:,} tokens, {sc}/{sa} scraped, {llm} LLM calls\n\n"
+                "---\n"
+            )
+
+        elif t == "stall_detected":
+            override = data.get("override_active", False)
+            if override:
+                doc.append("**Stall detected** — override active, continuing\n\n")
+            else:
+                doc.append("**Stall detected** — triggering final roundup\n\n")
+
+        elif t == "time_budget":
+            remaining = data.get("remaining_min", 0)
+            doc.append(f"**Time budget:** {remaining:.0f}min remaining — starting final roundup\n\n")
+
+        elif t == "report_start":
+            doc.append("\n## Generating Final Report...\n\n")
+            self._show_progress("Generating report...", 95)
+
+        elif t == "complete":
+            conf = data.get("confidence", "?")
+            rounds = data.get("total_rounds", 0)
+            total_time = data.get("total_time", 0)
+            doc.append(
+                f"## Complete\n\n"
+                f"**{rounds} rounds** in **{total_time:.1f} min** — "
+                f"Confidence: **{conf}**\n"
+            )
+
+        self._render_progress()
+
+    def _render_progress(self):
+        """Re-render the accumulated progress document."""
+        if self._showing_progress:
+            self.content.render("".join(self._progress_doc))
+            # Auto-scroll to bottom
+            self.content.see(tk.END)
+
+    def _toggle_progress_report(self):
+        """Toggle between progress log and final report."""
+        if self._showing_progress:
+            self._showing_progress = False
+            self._toggle_btn.config(text="Show Progress Log")
+            if self._report_md:
+                self.content.render(self._report_md)
+        else:
+            self._showing_progress = True
+            self._toggle_btn.config(text="Show Final Report")
+            self._render_progress()
 
     def _on_deep_completed(self, data):
         def _update():
             self._hide_progress()
             self.search_btn.config(state=tk.NORMAL, text="Search")
             self.cancel_btn.config(state=tk.DISABLED)
-            report_md = data.get("report_md", "")
-            if report_md:
-                self.content.render(report_md)
-            else:
-                self.content.render(
+            self._report_md = data.get("report_md", "")
+
+            # Show toggle button
+            self._toggle_frame.pack(fill=tk.X, before=self.content.master)
+            self._toggle_btn.config(text="Show Final Report")
+            self._showing_progress = True  # Keep showing progress log initially
+
+            # If no report, generate a basic one
+            if not self._report_md:
+                self._report_md = (
                     f"# Deep Research Complete\n\n"
                     f"**Rounds:** {data.get('rounds', 0)}\n"
                     f"**Time:** {data.get('time_minutes', 0):.1f} min\n"
                     f"**Pages:** {data.get('pages_scraped', 0)}\n"
                     f"**Confidence:** {data.get('confidence', 'unknown')}"
                 )
+
             self._on_refresh_sessions()
         self.after(0, _update)
 

@@ -1194,12 +1194,14 @@ class DeepResearchEngine:
         scraper: MiniWebScraper,
         search_engine,
         project_path: Path = None,
+        progress_callback=None,
     ):
         self.session = session
         self.config = config
         self.rag_config = rag_config
         self.project_path = project_path
         self._call_llm = llm_call
+        self._progress_callback = progress_callback
         self.scraper = scraper
         self.search_engine = search_engine
         self._fallback_engines = []  # Populated by caller if multiple providers available
@@ -1244,6 +1246,14 @@ class DeepResearchEngine:
             tokens_in=tokens_in, tokens_out=tokens_out, success=response is not None,
         )
         return response
+
+    def _emit(self, event_type: str, **kwargs):
+        """Fire a progress callback if one is registered."""
+        if self._progress_callback:
+            try:
+                self._progress_callback({"type": event_type, **kwargs})
+            except Exception:
+                pass  # Never let callback errors break the research loop
 
     def run(
         self,
@@ -1292,6 +1302,7 @@ class DeepResearchEngine:
                         f"\n[yellow]Time budget: {budget.remaining_minutes():.0f}min remaining "
                         f"— starting final roundup[/yellow]"
                     )
+                    self._emit("time_budget", remaining_min=round(budget.remaining_minutes(), 1))
                     break
 
                 # Round header with time and corpus stats
@@ -1310,6 +1321,12 @@ class DeepResearchEngine:
                               f"[dim]({time_str} | {corpus_str})[/dim]")
                 self.session.metadata["rounds"] = round_num
                 self.metrics.begin_round(round_num)
+                self._emit("round_start",
+                           round_num=round_num, total_rounds=rounds,
+                           elapsed_min=round(elapsed, 1),
+                           remaining_min=round(remaining, 1),
+                           corpus_tokens=corpus_summary["total_tokens"],
+                           corpus_files=corpus_summary["active_files"])
 
                 # Check if research is stalling (only this run's rounds)
                 if not disable_stall_detection and self.metrics.corpus_is_stalling(current_run_start=run_start_idx):
@@ -1317,16 +1334,19 @@ class DeepResearchEngine:
                         "  [yellow]Research is stalling (minimal new content) "
                         "— triggering final roundup[/yellow]"
                     )
+                    self._emit("stall_detected", override_active=False)
                     break
                 elif disable_stall_detection and self.metrics.corpus_is_stalling(current_run_start=run_start_idx):
                     console.print(
                         "  [yellow]Stall detected but override active — continuing[/yellow]"
                     )
+                    self._emit("stall_detected", override_active=True)
 
                 # ── ANALYZE ──
                 phase_start = time.time()
                 self.session.set_phase(ResearchPhase.ANALYZE.value)
                 src_count = len(self.session.get_all_source_files())
+                self._emit("phase_start", phase="analyze")
                 console.print(f"  [cyan]ANALYZE:[/cyan] Evaluating corpus ({src_count} sources)...")
 
                 analysis = self.analyzer.analyze(self.session, topic)
@@ -1334,6 +1354,12 @@ class DeepResearchEngine:
                 console.print(f"    Covered: {len(analysis.covered_topics)} topics")
                 console.print(f"    Gaps: {len(analysis.gap_topics)} identified")
                 console.print(f"    Confidence: {analysis.confidence}")
+                self._emit("analyze_done",
+                           covered_count=len(analysis.covered_topics),
+                           gap_count=len(analysis.gap_topics),
+                           confidence=analysis.confidence,
+                           gap_topics=analysis.gap_topics[:10],
+                           follow_up_queries=analysis.follow_up_queries[:10])
 
                 self.report.topics_covered = analysis.covered_topics
                 self.report.gaps_remaining = analysis.gap_topics
@@ -1365,6 +1391,7 @@ class DeepResearchEngine:
                 # ── SEARCH ──
                 phase_start = time.time()
                 self.session.set_phase(ResearchPhase.SEARCH.value)
+                self._emit("phase_start", phase="search")
 
                 queries = analysis.follow_up_queries
                 if not queries:
@@ -1420,6 +1447,10 @@ class DeepResearchEngine:
                 if skipped_domains:
                     console.print(f"    Skipped {skipped_domains} URLs from failing domains")
                 console.print(f"    Found {len(unique_urls)} new URLs")
+                self._emit("search_done",
+                           queries_used=[q[:80] for q in queries],
+                           urls_found=len(unique_urls),
+                           skipped_domains=skipped_domains)
                 phase_duration = (time.time() - phase_start) / 60.0
                 self._record_phase_time("search", phase_start)
                 self.metrics.record_phase_time("search", phase_duration)
@@ -1427,6 +1458,7 @@ class DeepResearchEngine:
                 # ── SCRAPE ──
                 phase_start = time.time()
                 self.session.set_phase(ResearchPhase.SCRAPE.value)
+                self._emit("phase_start", phase="scrape")
                 console.print(f"  [cyan]SCRAPE:[/cyan] Fetching content...")
 
                 scrape_limit = min(
@@ -1438,18 +1470,25 @@ class DeepResearchEngine:
                 )
 
                 # Register scraped files and track attempts
+                scraped_urls = {p.url for p in pages}
                 for url in unique_urls[:scrape_limit]:
-                    scraped = any(p.url == url for p in pages)
+                    scraped = url in scraped_urls
                     self.metrics.record_scrape_attempt(
                         url, success=scraped,
                         failure_reason="" if scraped else "extraction_failed",
                     )
+                    if not scraped:
+                        self._emit("page_failed", url=url, reason="extraction_failed")
 
                 for page in pages:
                     console.print(
                         f"    [green]+[/green] [{page.source_type}] "
                         f"{page.title[:55]} — {page.word_count:,} words"
                     )
+                    self._emit("page_scraped",
+                               title=page.title[:80], url=page.url,
+                               word_count=page.word_count,
+                               source_type=page.source_type)
                     # Register in metrics
                     for f in self.session.sources_dir.iterdir():
                         if f.is_file() and f.suffix == ".md":
@@ -1466,6 +1505,9 @@ class DeepResearchEngine:
 
                 self.report.pages_scraped += len(pages)
                 console.print(f"    Scraped {len(pages)}/{len(unique_urls[:scrape_limit])} pages")
+                self._emit("scrape_done",
+                           pages_scraped=len(pages),
+                           pages_attempted=len(unique_urls[:scrape_limit]))
 
                 # Harvest links from scraped pages for next round
                 harvested = 0
@@ -1480,6 +1522,7 @@ class DeepResearchEngine:
                                     harvested += 1
                 if harvested:
                     console.print(f"    Harvested {harvested} new links from scraped pages")
+                    self._emit("links_harvested", count=harvested)
 
                 phase_duration = (time.time() - phase_start) / 60.0
                 self._record_phase_time("scrape", phase_start)
@@ -1489,6 +1532,7 @@ class DeepResearchEngine:
                 if round_num % 2 == 0 or round_num == rounds:
                     phase_start = time.time()
                     self.session.set_phase(ResearchPhase.PRUNE.value)
+                    self._emit("phase_start", phase="prune")
                     console.print(f"  [cyan]PRUNE:[/cyan] Checking for duplicates...")
 
                     prune_result = self.pruner.prune(self.session)
@@ -1508,13 +1552,44 @@ class DeepResearchEngine:
                         f"{a} ↔ {b}" for a, b in prune_result.get("corroborations", [])
                     ]
 
-                    if prune_result.get("removed"):
-                        console.print(f"    Removed {len(prune_result['removed'])} duplicates")
-                    if prune_result.get("corroborations"):
-                        console.print(f"    Found {len(prune_result['corroborations'])} corroborations")
+                    removed_count = len(prune_result.get("removed", []))
+                    corr_count = len(prune_result.get("corroborations", []))
+                    if removed_count:
+                        console.print(f"    Removed {removed_count} duplicates")
+                    if corr_count:
+                        console.print(f"    Found {corr_count} corroborations")
+                    self._emit("prune_done",
+                               removed_count=removed_count,
+                               corroborations_count=corr_count)
                     phase_duration = (time.time() - phase_start) / 60.0
                     self._record_phase_time("prune", phase_start)
                     self.metrics.record_phase_time("prune", phase_duration)
+
+                    # Generate LLM progress briefing after prune
+                    if self._call_llm:
+                        summary_snap = self.metrics.get_summary()
+                        rsnap = self.metrics.current_round
+                        briefing_prompt = (
+                            f'Given this research progress on "{topic}":\n'
+                            f"- Round {round_num}/{rounds}, "
+                            f"{budget.elapsed_minutes():.0f}min elapsed, "
+                            f"{budget.remaining_minutes():.0f}min remaining\n"
+                            f"- Corpus: {summary_snap['active_files']} files, "
+                            f"~{summary_snap['total_tokens']:,} tokens\n"
+                            f"- This round: +{rsnap.tokens_added if rsnap else 0:,} tokens, "
+                            f"{rsnap.scrape_successes if rsnap else 0}/"
+                            f"{rsnap.scrape_attempts if rsnap else 0} pages scraped\n"
+                            f"- Confidence: {analysis.confidence}, "
+                            f"Gaps: {', '.join(analysis.gap_topics[:5])}\n"
+                            f"- Pruned: {removed_count} duplicates, "
+                            f"{corr_count} corroborations\n\n"
+                            "Write a 2-3 sentence progress briefing for the user. "
+                            "Be specific about what was found and what gaps remain."
+                        )
+                        briefing = self._tracked_llm_call(briefing_prompt, temperature=0.3)
+                        if briefing:
+                            console.print(f"  [dim italic]Briefing: {briefing.strip()}[/dim italic]")
+                            self._emit("briefing", briefing_text=briefing.strip())
 
                 # Record round duration and show summary
                 round_duration = (time.time() - round_start) / 60.0
@@ -1530,8 +1605,20 @@ class DeepResearchEngine:
                         f"{rsnap.scrape_successes}/{rsnap.scrape_attempts} scraped, "
                         f"{rsnap.llm_calls} LLM calls[/dim]\n"
                     )
+                    self._emit("round_end",
+                               round_num=round_num,
+                               duration_min=round(round_duration, 1),
+                               tokens_added=rsnap.tokens_added,
+                               scrape_successes=rsnap.scrape_successes,
+                               scrape_attempts=rsnap.scrape_attempts,
+                               llm_calls=rsnap.llm_calls)
                 else:
                     console.print(f"  Round {round_num} complete ({round_duration:.1f} min)\n")
+                    self._emit("round_end",
+                               round_num=round_num,
+                               duration_min=round(round_duration, 1),
+                               tokens_added=0, scrape_successes=0,
+                               scrape_attempts=0, llm_calls=0)
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Research interrupted — generating report...[/yellow]")
@@ -1541,6 +1628,7 @@ class DeepResearchEngine:
 
         # ── FINAL REPORT ──
         self.session.set_phase(ResearchPhase.REPORT.value)
+        self._emit("report_start")
         console.print(f"[bold]━━━ Final Report ━━━[/bold]")
 
         # Ensure any incomplete round is ended
@@ -1597,6 +1685,11 @@ class DeepResearchEngine:
             console.print(f"  Trend: {' → '.join(trend)}")
         console.print(f"\n  Report: [blue]{self.session.agent_notes_dir / 'research-report.md'}[/blue]")
         console.print(f"  Metrics: [blue]{self.metrics._path}[/blue]")
+
+        self._emit("complete",
+                    total_rounds=self.report.rounds_completed,
+                    total_time=round(self.report.total_time_minutes, 1),
+                    confidence=self.report.confidence)
 
         return self.report
 

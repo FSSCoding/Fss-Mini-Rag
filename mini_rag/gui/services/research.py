@@ -7,7 +7,6 @@ with event emission for UI updates.
 import json
 import logging
 import threading
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -59,6 +58,13 @@ class ResearchService:
         self._thread = None
         self.llm_url: str = "http://localhost:1234/v1"
         self.llm_model: str = "auto"
+        self.scraper_user_agent: str = "FSS-Mini-RAG-Research/2.2"
+        self.scraper_respect_robots: bool = True
+
+    def _apply_scraper_settings(self, ws_config) -> None:
+        """Apply GUI scraper settings to a WebScraperConfig instance."""
+        ws_config.user_agent = self.scraper_user_agent
+        ws_config.respect_robots = self.scraper_respect_robots
 
     @property
     def is_running(self) -> bool:
@@ -105,7 +111,9 @@ class ResearchService:
                 session = ResearchSession.create(
                     Path(project_path), query=query,
                 )
-                scraper = MiniWebScraper(WebScraperConfig())
+                ws_config = WebScraperConfig()
+                self._apply_scraper_settings(ws_config)
+                scraper = MiniWebScraper(ws_config)
 
                 total = len(urls)
                 failed_urls = []
@@ -194,6 +202,7 @@ class ResearchService:
                     rag_config = RAGConfig()
 
                 # Override with GUI settings
+                self._apply_scraper_settings(ws_config)
                 dr_config.max_time_minutes = max_time_min
                 dr_config.max_rounds = max_rounds
 
@@ -216,64 +225,40 @@ class ResearchService:
                     "session_dir": str(session.session_dir),
                 })
 
-                # Monitor progress in a separate thread
-                stop_monitor = threading.Event()
+                # Direct progress callback — replaces polling monitor
+                def _on_progress(data):
+                    self.bus.emit("research:deep_progress", data)
 
-                def _monitor():
-                    last_phase = ""
-                    while not stop_monitor.is_set():
-                        try:
-                            meta = dict(session.metadata)  # Snapshot to avoid race
-                            phase = meta.get("phase", "idle")
-                            round_num = meta.get("rounds", 0)
-                        except (RuntimeError, KeyError):
-                            stop_monitor.wait(2.0)
-                            continue
-                        if phase != last_phase:
-                            last_phase = phase
-                            self.bus.emit("research:deep_progress", {
-                                "phase": phase,
-                                "round": round_num,
-                                "detail": f"Round {round_num} — {phase.upper()}",
-                            })
-                        stop_monitor.wait(2.0)
+                engine = DeepResearchEngine(
+                    session=session,
+                    config=dr_config,
+                    rag_config=rag_config,
+                    llm_call=llm._call_llm,
+                    scraper=scraper,
+                    search_engine=search_eng,
+                    progress_callback=_on_progress,
+                )
 
-                monitor = threading.Thread(target=_monitor, daemon=True)
-                monitor.start()
-
-                try:
-                    engine = DeepResearchEngine(
-                        session=session,
-                        config=dr_config,
-                        rag_config=rag_config,
-                        llm_call=llm._call_llm,
-                        scraper=scraper,
-                        search_engine=search_eng,
-                    )
-
-                    # Build ranked fallback search engines: tavily > brave > duckduckgo
-                    ranked_fallbacks = ["tavily", "serper", "brave", "duckduckgo"]
-                    fallbacks = []
-                    for fb_name in ranked_fallbacks:
-                        if fb_name == engine_name:
-                            continue
-                        try:
-                            fb = create_search_engine(fb_name)
-                            if type(fb).__name__ != type(search_eng).__name__:
-                                fallbacks.append(fb)
-                        except Exception:
-                            pass
-                    engine._fallback_engines = fallbacks
-                    if fallbacks:
-                        logger.info(f"Deep research fallback engines: {[type(f).__name__ for f in fallbacks]}")
-                    report = engine.run(
-                        max_time_minutes=max_time_min,
-                        max_rounds=max_rounds,
-                        disable_stall_detection=disable_stall_detection,
-                    )
-                finally:
-                    stop_monitor.set()
-                    monitor.join(timeout=3)
+                # Build ranked fallback search engines: tavily > brave > duckduckgo
+                ranked_fallbacks = ["tavily", "serper", "brave", "duckduckgo"]
+                fallbacks = []
+                for fb_name in ranked_fallbacks:
+                    if fb_name == engine_name:
+                        continue
+                    try:
+                        fb = create_search_engine(fb_name)
+                        if type(fb).__name__ != type(search_eng).__name__:
+                            fallbacks.append(fb)
+                    except Exception:
+                        pass
+                engine._fallback_engines = fallbacks
+                if fallbacks:
+                    logger.info(f"Deep research fallback engines: {[type(f).__name__ for f in fallbacks]}")
+                report = engine.run(
+                    max_time_minutes=max_time_min,
+                    max_rounds=max_rounds,
+                    disable_stall_detection=disable_stall_detection,
+                )
 
                 # Read the report file
                 report_path = session.agent_notes_dir / "research-report.md"

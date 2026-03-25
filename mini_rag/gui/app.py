@@ -636,7 +636,19 @@ class MiniRAGApp(tk.Tk):
         self.after(0, _update)
 
     def _on_research_deep_progress(self, data):
-        detail = data.get("detail", "")
+        t = data.get("type", "")
+        if t == "round_start":
+            rn = data.get("round_num", 0)
+            tr = data.get("total_rounds", 0)
+            detail = f"Round {rn}/{tr}"
+        elif t == "phase_start":
+            detail = data.get("phase", "").upper()
+        elif t == "report_start":
+            detail = "Generating report..."
+        elif t == "complete":
+            detail = f"Complete — {data.get('confidence', '?')} confidence"
+        else:
+            detail = data.get("detail", t)
         self.after(0, lambda: self.status_bar.set_text(f"Deep Research: {detail}"))
 
     def _on_research_error(self, data):

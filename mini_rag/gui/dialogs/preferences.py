@@ -9,6 +9,7 @@ from ..config_store import PRESETS
 from ..events import EventBus
 from ..services.model_discovery import discover_models
 from ..env_manager import load_env, save_env, mask_key, get_key
+from ..tooltip import ToolTip
 
 
 class PreferencesDialog(tk.Toplevel):
@@ -55,9 +56,15 @@ class PreferencesDialog(tk.Toplevel):
         # Bottom buttons — Save is primary action
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(btn_frame, text="Save Custom Preset", command=self._save_custom).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="Save", command=self._on_save, style="Accent.TButton").pack(side=tk.RIGHT, padx=3)
-        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=3)
+        save_custom_btn = ttk.Button(btn_frame, text="Save Custom Preset", command=self._save_custom)
+        save_custom_btn.pack(side=tk.LEFT, padx=3)
+        ToolTip(save_custom_btn, "Save current endpoint URLs and cost rates as a reusable preset")
+        save_btn = ttk.Button(btn_frame, text="Save", command=self._on_save, style="Accent.TButton")
+        save_btn.pack(side=tk.RIGHT, padx=3)
+        ToolTip(save_btn, "Apply all changes and close")
+        cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self.destroy)
+        cancel_btn.pack(side=tk.RIGHT, padx=3)
+        ToolTip(cancel_btn, "Discard changes and close")
 
         self._save_status = ttk.Label(main, text="", foreground="#888888")
         self._save_status.pack(fill=tk.X, pady=(4, 0))
@@ -76,56 +83,77 @@ class PreferencesDialog(tk.Toplevel):
         preset_combo = ttk.Combobox(tab, textvariable=self.preset_var, values=preset_names, width=22)
         preset_combo.grid(row=0, column=1, sticky=tk.W, **pad)
         preset_combo.bind("<<ComboboxSelected>>", self._on_preset_changed)
+        ToolTip(preset_combo, "Quick-fill endpoints from a known provider (LM Studio, vLLM, OpenAI, etc.)")
 
         # Embedding section
-        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=8)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=8)
         ttk.Label(tab, text="Embedding", font=("", 10, "bold")).grid(row=2, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="Converts text into vectors for semantic search",
+                  foreground="#888888", font=("", 8, "italic")).grid(row=2, column=1, columnspan=2, sticky=tk.W, **pad)
 
         ttk.Label(tab, text="URL:").grid(row=3, column=0, sticky=tk.W, **pad)
         self.emb_url_var = tk.StringVar(value=self.config_data.get("embedding_url", ""))
-        ttk.Entry(tab, textvariable=self.emb_url_var, width=38).grid(row=3, column=1, **pad)
+        emb_url_entry = ttk.Entry(tab, textvariable=self.emb_url_var, width=38)
+        emb_url_entry.grid(row=3, column=1, **pad)
+        ToolTip(emb_url_entry, "OpenAI-compatible embedding endpoint (e.g. http://localhost:1234/v1)")
 
         ttk.Label(tab, text="Model:").grid(row=4, column=0, sticky=tk.W, **pad)
         self.emb_model_var = tk.StringVar(value=self.config_data.get("embedding_model", "auto"))
         self.emb_model_combo = ttk.Combobox(tab, textvariable=self.emb_model_var, width=36)
         self.emb_model_combo.grid(row=4, column=1, **pad)
+        ToolTip(self.emb_model_combo, "'auto' picks the first available embedding model from the server")
 
         ttk.Label(tab, text="Profile:").grid(row=5, column=0, sticky=tk.W, **pad)
         profile_frame = ttk.Frame(tab)
         profile_frame.grid(row=5, column=1, sticky=tk.W, **pad)
         self.profile_var = tk.StringVar(value=self.config_data.get("embedding_profile", "precision"))
-        ttk.Radiobutton(profile_frame, text="Precision", variable=self.profile_var, value="precision").pack(side=tk.LEFT)
-        ttk.Radiobutton(profile_frame, text="Conceptual", variable=self.profile_var, value="conceptual").pack(side=tk.LEFT, padx=10)
+        rb_precision = ttk.Radiobutton(profile_frame, text="Precision", variable=self.profile_var, value="precision")
+        rb_precision.pack(side=tk.LEFT)
+        rb_conceptual = ttk.Radiobutton(profile_frame, text="Conceptual", variable=self.profile_var, value="conceptual")
+        rb_conceptual.pack(side=tk.LEFT, padx=10)
+        ToolTip(rb_precision, "Exact keyword and code matching — best for technical/code search")
+        ToolTip(rb_conceptual, "Broader semantic matching — best for natural language and research queries")
 
         # LLM section
-        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=8)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=6, column=0, columnspan=3, sticky=tk.EW, pady=8)
         ttk.Label(tab, text="LLM (Synthesis)", font=("", 10, "bold")).grid(row=7, column=0, sticky=tk.W, **pad)
+        ttk.Label(tab, text="Generates answers, analysis, and research briefings",
+                  foreground="#888888", font=("", 8, "italic")).grid(row=7, column=1, columnspan=2, sticky=tk.W, **pad)
 
         ttk.Label(tab, text="URL:").grid(row=8, column=0, sticky=tk.W, **pad)
         self.llm_url_var = tk.StringVar(value=self.config_data.get("llm_url", ""))
-        ttk.Entry(tab, textvariable=self.llm_url_var, width=38).grid(row=8, column=1, **pad)
+        llm_url_entry = ttk.Entry(tab, textvariable=self.llm_url_var, width=38)
+        llm_url_entry.grid(row=8, column=1, **pad)
+        ToolTip(llm_url_entry, "OpenAI-compatible chat completions endpoint")
 
         ttk.Label(tab, text="Model:").grid(row=9, column=0, sticky=tk.W, **pad)
         self.llm_model_var = tk.StringVar(value=self.config_data.get("llm_model", "auto"))
         self.llm_model_combo = ttk.Combobox(tab, textvariable=self.llm_model_var, width=36)
         self.llm_model_combo.grid(row=9, column=1, **pad)
+        ToolTip(self.llm_model_combo, "'auto' picks the first available chat model from the server")
 
         # Query expansion
-        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=10, column=0, columnspan=2, sticky=tk.EW, pady=8)
+        ttk.Separator(tab, orient=tk.HORIZONTAL).grid(row=10, column=0, columnspan=3, sticky=tk.EW, pady=8)
         self.expand_var = tk.BooleanVar(value=self.config_data.get("expand_queries", False))
-        ttk.Checkbutton(tab, text="Enable query expansion (LLM)", variable=self.expand_var).grid(
-            row=11, column=0, columnspan=2, sticky=tk.W, **pad
-        )
+        expand_check = ttk.Checkbutton(tab, text="Enable query expansion (LLM)", variable=self.expand_var)
+        expand_check.grid(row=11, column=0, columnspan=2, sticky=tk.W, **pad)
+        ToolTip(expand_check, "Rewrites your search query using the LLM to find more relevant results (adds latency)")
+        ttk.Label(tab, text="Uses an LLM call to rephrase queries before search — improves recall at the cost of speed",
+                  foreground="#888888", font=("", 8, "italic")).grid(row=12, column=0, columnspan=3, sticky=tk.W, padx=28, pady=(0, 4))
 
         # Action buttons row
         action_frame = ttk.Frame(tab)
-        action_frame.grid(row=12, column=0, columnspan=2, sticky=tk.W, **pad)
+        action_frame.grid(row=13, column=0, columnspan=3, sticky=tk.W, **pad)
 
-        ttk.Button(action_frame, text="Refresh Models", command=self._refresh_models).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(action_frame, text="Quick Test", command=self._quick_test_endpoints).pack(side=tk.LEFT, padx=(0, 5))
+        refresh_btn = ttk.Button(action_frame, text="Refresh Models", command=self._refresh_models)
+        refresh_btn.pack(side=tk.LEFT, padx=(0, 5))
+        ToolTip(refresh_btn, "Query both endpoints for available models")
+        test_btn = ttk.Button(action_frame, text="Quick Test", command=self._quick_test_endpoints)
+        test_btn.pack(side=tk.LEFT, padx=(0, 5))
+        ToolTip(test_btn, "Ping both endpoints to check connectivity")
 
         self.endpoint_test_label = ttk.Label(tab, text="", foreground="#888888")
-        self.endpoint_test_label.grid(row=13, column=0, columnspan=2, sticky=tk.W, **pad)
+        self.endpoint_test_label.grid(row=14, column=0, columnspan=3, sticky=tk.W, **pad)
 
     # ─── Tab 2: API Keys ───
 
@@ -134,7 +162,7 @@ class PreferencesDialog(tk.Toplevel):
         self.notebook.add(tab, text="API Keys")
 
         ttk.Label(
-            tab, text="Keys are stored securely in ~/.config/fss-mini-rag/.env",
+            tab, text="Keys are stored in ~/.config/fss-mini-rag/.env — never in project files",
             foreground="#888888", font=("", 9, "italic"),
         ).pack(anchor=tk.W, pady=(0, 10))
 
@@ -143,15 +171,21 @@ class PreferencesDialog(tk.Toplevel):
         self._key_entries = {}
 
         keys = [
-            ("LLM_API_KEY", "LLM / OpenAI API Key"),
-            ("EMBEDDING_API_KEY", "Embedding API Key"),
-            ("OPENAI_API_KEY", "OpenAI API Key (fallback)"),
-            ("TAVILY_API_KEY", "Tavily Search API Key"),
-            ("BRAVE_API_KEY", "Brave Search API Key"),
-            ("SERPER_API_KEY", "Serper (Google) API Key"),
+            ("LLM_API_KEY", "LLM / OpenAI API Key",
+             "Used for chat completions and synthesis — required for cloud LLM providers"),
+            ("EMBEDDING_API_KEY", "Embedding API Key",
+             "Separate key for embedding endpoint — leave blank to use the LLM key"),
+            ("OPENAI_API_KEY", "OpenAI API Key (fallback)",
+             "Fallback if LLM_API_KEY is not set — used by some SDKs automatically"),
+            ("TAVILY_API_KEY", "Tavily Search API Key",
+             "Enables Tavily as a web search engine for deep research (tavily.com)"),
+            ("BRAVE_API_KEY", "Brave Search API Key",
+             "Enables Brave Search for web research (brave.com/search/api)"),
+            ("SERPER_API_KEY", "Serper (Google) API Key",
+             "Enables Serper (Google search) for web research (serper.dev)"),
         ]
 
-        for key_name, label in keys:
+        for key_name, label, description in keys:
             frame = ttk.LabelFrame(tab, text=label, padding=5)
             frame.pack(fill=tk.X, pady=3)
 
@@ -162,6 +196,7 @@ class PreferencesDialog(tk.Toplevel):
             entry = ttk.Entry(frame, textvariable=var, show="*", width=45)
             entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
             self._key_entries[key_name] = entry
+            ToolTip(entry, description)
 
             # Show/Hide toggle
             show_var = tk.BooleanVar(value=False)
@@ -183,10 +218,18 @@ class PreferencesDialog(tk.Toplevel):
         test_frame = ttk.LabelFrame(tab, text="Connection Test", padding=8)
         test_frame.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Button(
+        ttk.Label(
+            test_frame,
+            text="Runs a 3-step round-trip test: list models, generate an embedding, and call the LLM.",
+            foreground="#888888", font=("", 8, "italic"),
+        ).pack(anchor=tk.W, pady=(0, 6))
+
+        test_conn_btn = ttk.Button(
             test_frame, text="Test Connection", command=self._test_connections,
             style="Accent.TButton",
-        ).pack(anchor=tk.W, pady=(0, 8))
+        )
+        test_conn_btn.pack(anchor=tk.W, pady=(0, 8))
+        ToolTip(test_conn_btn, "Runs all 3 tests sequentially — takes ~10 seconds")
 
         self.test_step1 = ttk.Label(test_frame, text="1. Models: not tested", foreground="#888888")
         self.test_step1.pack(anchor=tk.W, padx=10)
@@ -196,20 +239,30 @@ class PreferencesDialog(tk.Toplevel):
         self.test_step3.pack(anchor=tk.W, padx=10)
 
         # Cost rates section
-        cost_frame = ttk.LabelFrame(tab, text="Cost Rates (per 1M tokens)", padding=8)
+        cost_frame = ttk.LabelFrame(tab, text="Cost Tracking", padding=8)
         cost_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(
+            cost_frame,
+            text="Token pricing for estimating API costs. Set both to 0 for local/free endpoints.",
+            foreground="#888888", font=("", 8, "italic"),
+        ).pack(anchor=tk.W, pady=(0, 6))
 
         row = ttk.Frame(cost_frame)
         row.pack(fill=tk.X, pady=2)
         ttk.Label(row, text="Input:  $").pack(side=tk.LEFT)
         self.cost_input_var = tk.StringVar(value=str(self.config_data.get("cost_per_1m_input", 0.0)))
-        ttk.Entry(row, textvariable=self.cost_input_var, width=10).pack(side=tk.LEFT, padx=(0, 20))
+        cost_in = ttk.Entry(row, textvariable=self.cost_input_var, width=10)
+        cost_in.pack(side=tk.LEFT, padx=(0, 20))
+        ToolTip(cost_in, "Cost per 1 million input tokens (prompt tokens sent to the API)")
         ttk.Label(row, text="Output: $").pack(side=tk.LEFT)
         self.cost_output_var = tk.StringVar(value=str(self.config_data.get("cost_per_1m_output", 0.0)))
-        ttk.Entry(row, textvariable=self.cost_output_var, width=10).pack(side=tk.LEFT)
+        cost_out = ttk.Entry(row, textvariable=self.cost_output_var, width=10)
+        cost_out.pack(side=tk.LEFT)
+        ToolTip(cost_out, "Cost per 1 million output tokens (completion tokens from the API)")
 
         ttk.Label(
-            cost_frame, text="Set to 0 for local/free endpoints. Updated automatically when switching presets.",
+            cost_frame, text="Rates update automatically when you switch presets.",
             foreground="#888888", font=("", 8, "italic"),
         ).pack(anchor=tk.W, pady=(4, 0))
 
@@ -217,23 +270,33 @@ class PreferencesDialog(tk.Toplevel):
         stats_frame = ttk.LabelFrame(tab, text="Session Statistics", padding=8)
         stats_frame.pack(fill=tk.X)
 
+        ttk.Label(
+            stats_frame,
+            text="Tracks all API calls made during this session.",
+            foreground="#888888", font=("", 8, "italic"),
+        ).pack(anchor=tk.W, pady=(0, 4))
+
         self.stats_label = ttk.Label(stats_frame, text="No API calls this session", foreground="#888888")
         self.stats_label.pack(anchor=tk.W)
 
         self.bus.on("cost:updated", lambda d: self.after(0, lambda: self._update_stats(d)))
 
-        ttk.Button(stats_frame, text="Reset Session", command=self._reset_session).pack(anchor=tk.W, pady=(5, 0))
+        reset_session_btn = ttk.Button(stats_frame, text="Reset Session", command=self._reset_session)
+        reset_session_btn.pack(anchor=tk.W, pady=(5, 0))
+        ToolTip(reset_session_btn, "Clear session token counts and cost — does not affect API keys or settings")
 
         # Reset to defaults (danger zone)
         ttk.Separator(tab, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        ttk.Label(tab, text="Danger Zone", font=("", 9, "bold"), foreground="#cc3333").pack(anchor=tk.W, pady=(0, 4))
         reset_btn = tk.Button(
             tab, text="Reset All to Defaults", command=self._reset_to_defaults,
             fg="white", bg="#cc3333", activebackground="#aa2222",
             relief=tk.RAISED, padx=10, pady=4,
         )
         reset_btn.pack(anchor=tk.W)
+        ToolTip(reset_btn, "Clears all endpoints, models, cost rates, and deletes stored API keys")
         ttk.Label(
-            tab, text="Resets endpoints, models, and removes API keys from our system",
+            tab, text="Resets endpoints, models, cost rates, and removes all API keys from the local keystore.",
             foreground="#888888", font=("", 8, "italic"),
         ).pack(anchor=tk.W, pady=(2, 0))
 
