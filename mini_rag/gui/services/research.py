@@ -252,7 +252,7 @@ class ResearchService:
                     )
 
                     # Build ranked fallback search engines: tavily > brave > duckduckgo
-                    ranked_fallbacks = ["tavily", "brave", "duckduckgo"]
+                    ranked_fallbacks = ["tavily", "serper", "brave", "duckduckgo"]
                     fallbacks = []
                     for fb_name in ranked_fallbacks:
                         if fb_name == engine_name:

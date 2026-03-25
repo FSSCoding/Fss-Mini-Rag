@@ -276,7 +276,7 @@ class SerperSearch:
 
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self._limiter = get_limiter("serper", requests_per_second=1.0)
+        self._limiter = get_limiter("serper")
         self._retry_config = get_retry_config("serper")
 
     def search(self, query: str, max_results: int = 10) -> List[WebSearchResult]:
