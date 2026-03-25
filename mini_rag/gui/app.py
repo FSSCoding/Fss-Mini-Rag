@@ -186,6 +186,10 @@ class MiniRAGApp(tk.Tk):
         self.research_tab = ResearchTab(self.notebook, self.bus, self.config_data)
         self.notebook.add(self.research_tab, text="Web Research")
 
+        # Loading overlay (covers notebook area during operations)
+        from .components.loading_overlay import LoadingOverlay
+        self.loading_overlay = LoadingOverlay(self.notebook)
+
         # Status bar (shared, outside notebook)
         self.status_bar = StatusBar(self, self.bus)
         self.status_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=2)
@@ -249,14 +253,16 @@ class MiniRAGApp(tk.Tk):
     # === State-Driven UI ===
 
     def _on_operation_changed(self, data):
-        """React to operation state changes — busy cursor + tab indicators."""
+        """React to operation state changes — busy cursor, tab indicators, loading overlay."""
         op = data.get("new", "idle")
 
         # Busy cursor
         if op != "idle":
             self.configure(cursor="watch")
+            self.loading_overlay.show(op)
         else:
             self.configure(cursor="")
+            self.loading_overlay.hide()
 
         # Tab activity indicators
         search_ops = {"searching", "indexing", "streaming"}
@@ -403,7 +409,9 @@ class MiniRAGApp(tk.Tk):
 
     def _update_indexing_progress(self, done, total, chunks, pct, elapsed=0, eta=""):
         self.status_bar.set_progress(pct)
-        self.status_bar.set_text(f"Indexing: {done}/{total} files | {chunks} chunks | {elapsed:.0f}s elapsed{eta}")
+        detail = f"{done}/{total} files | {chunks} chunks | {elapsed:.0f}s{eta}"
+        self.status_bar.set_text(f"Indexing: {detail}")
+        self.loading_overlay.set_detail(detail)
 
     def _on_indexing_completed(self, data):
         stats = data["stats"]
@@ -580,7 +588,9 @@ class MiniRAGApp(tk.Tk):
         pct = (done / total * 100) if total > 0 else 0
         def _update():
             self.status_bar.set_progress(pct)
-            self.status_bar.set_text(f"Scraping: {done}/{total} — {url}")
+            detail = f"{done}/{total} — {url}"
+            self.status_bar.set_text(f"Scraping: {detail}")
+            self.loading_overlay.set_detail(detail)
         self.after(0, _update)
 
     def _on_research_deep_progress(self, data):
