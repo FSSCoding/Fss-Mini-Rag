@@ -104,6 +104,9 @@ class MiniRAGApp(tk.Tk):
         # Load research sessions on startup
         self.after(300, self._refresh_research_sessions)
 
+        # Ensure cursor is default after startup (some desktops show loading during init)
+        self.after(100, lambda: self.configure(cursor=""))
+
     def _create_menu(self):
         menubar = tk.Menu(self)
 
@@ -124,6 +127,8 @@ class MiniRAGApp(tk.Tk):
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="How to Use", command=self._show_help, accelerator="F1")
+        help_menu.add_separator()
+        help_menu.add_command(label="Scrape Tracker...", command=self._show_scrape_tracker)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self._show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
@@ -705,6 +710,10 @@ class MiniRAGApp(tk.Tk):
     def _open_preferences(self):
         from .dialogs.preferences import PreferencesDialog
         PreferencesDialog(self, self.config_data, self.bus)
+
+    def _show_scrape_tracker(self):
+        from .dialogs.scrape_tracker import ScrapeTrackerDialog
+        ScrapeTrackerDialog(self)
 
     def _show_about(self):
         from .dialogs.about import AboutDialog
