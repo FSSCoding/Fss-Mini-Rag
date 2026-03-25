@@ -83,7 +83,41 @@ start "" "%~dp0python\pythonw.exe" -m mini_rag.gui %*
 '@
 Set-Content -Path "$BuildDir\launchers\rag-mini-gui.bat" -Value $GuiLauncher
 
-# Step 6: Verify the embedded installation works
+# Step 6: Install tkinter support for embedded Python
+# The embeddable distribution doesn't include tkinter by default.
+# We need to copy it from the full Python installation.
+Write-Host "Adding tkinter support..." -ForegroundColor Yellow
+$FullPythonPath = (Get-Command python).Source | Split-Path
+$TkSource = "$FullPythonPath\tcl"
+$TkDest = "$BuildDir\python\tcl"
+$TkInterLibs = @("tkinter", "_tkinter.pyd", "tcl86t.dll", "tk86t.dll")
+
+if (Test-Path $TkSource) {
+    Copy-Item -Recurse -Force $TkSource $TkDest
+}
+# Copy tkinter package from full Python's Lib
+$FullLib = "$FullPythonPath\Lib\tkinter"
+if (Test-Path $FullLib) {
+    Copy-Item -Recurse -Force $FullLib "$BuildDir\python\Lib\tkinter"
+}
+# Copy _tkinter.pyd from DLLs
+$TkDll = "$FullPythonPath\DLLs\_tkinter.pyd"
+if (Test-Path $TkDll) {
+    Copy-Item -Force $TkDll "$BuildDir\python\DLLs\_tkinter.pyd"
+}
+# Copy tcl/tk DLLs
+foreach ($dll in @("tcl86t.dll", "tk86t.dll")) {
+    $dllPath = "$FullPythonPath\$dll"
+    if (Test-Path $dllPath) {
+        Copy-Item -Force $dllPath "$BuildDir\python\"
+    }
+    $dllPath2 = "$FullPythonPath\DLLs\$dll"
+    if (Test-Path $dllPath2) {
+        Copy-Item -Force $dllPath2 "$BuildDir\python\"
+    }
+}
+
+# Step 7: Verify the embedded installation works
 Write-Host "Verifying installation..." -ForegroundColor Yellow
 $TestResult = & "$BuildDir\python\python.exe" -c "import mini_rag; print(mini_rag.__version__)" 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -93,7 +127,17 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "Verified: mini_rag v$TestResult" -ForegroundColor Green
 
-# Step 7: Build the installer with Inno Setup
+# Verify tkinter works
+$TkTest = & "$BuildDir\python\python.exe" -c "import tkinter; print('tkinter OK')" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARNING: tkinter not available in embedded Python" -ForegroundColor Yellow
+    Write-Host "The GUI may not work. CLI will still function." -ForegroundColor Yellow
+    Write-Host $TkTest
+} else {
+    Write-Host "Verified: $TkTest" -ForegroundColor Green
+}
+
+# Step 8: Build the installer with Inno Setup
 Write-Host "Building installer with Inno Setup..." -ForegroundColor Yellow
 $env:FSS_VERSION = $Version
 

@@ -42,11 +42,8 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Name: "addtopath"; Description: "Add rag-mini to system PATH"; GroupDescription: "System integration:"; Flags: checkedonce
 
 [Files]
-; Embedded Python distribution
+; Embedded Python distribution (already has all packages installed by build script)
 Source: "build\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs
-
-; Application wheel and requirements
-Source: "build\wheel\*"; DestDir: "{app}\packages"; Flags: ignoreversion
 
 ; Launcher scripts
 Source: "build\launchers\rag-mini.bat"; DestDir: "{app}"; Flags: ignoreversion
@@ -64,10 +61,10 @@ Name: "{group}\Uninstall FSS-Mini-RAG"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\FSS-Mini-RAG"; Filename: "{app}\rag-mini-gui.bat"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
 
 [Run]
-; Install packages after files are copied
-Filename: "{app}\python\python.exe"; Parameters: "-m pip install --no-warn-script-location --prefix ""{app}\python"" {app}\packages\*.whl"; StatusMsg: "Installing FSS-Mini-RAG packages..."; Flags: runhidden waituntilterminated
-; Verify installation
+; Verify installation (packages are pre-installed by the build script)
 Filename: "{app}\python\python.exe"; Parameters: "-c ""import mini_rag; print('OK')"""; StatusMsg: "Verifying installation..."; Flags: runhidden waituntilterminated
+; Offer to launch after install
+Filename: "{app}\rag-mini-gui.bat"; Description: "Launch FSS-Mini-RAG"; Flags: postinstall nowait skipifsilent
 
 [Registry]
 ; Add to PATH if requested
