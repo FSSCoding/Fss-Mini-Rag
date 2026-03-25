@@ -375,7 +375,11 @@ class MiniRAGApp(tk.Tk):
 
     def _on_stream_token(self, data):
         text = data["text"]
-        self.after(0, lambda: self.content_panel.renderer.append_stream(text))
+        # Hide overlay once tokens start arriving so user sees the response
+        self.after(0, lambda: (
+            self.loading_overlay.hide(),
+            self.content_panel.renderer.append_stream(text),
+        ))
 
     def _on_stream_complete(self, data):
         timing = data["timing_ms"]
