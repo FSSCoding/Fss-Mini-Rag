@@ -435,13 +435,21 @@ def debug_schema(path: str):
             )
             return
 
-        db = lancedb.connect(rag_dir)
-
-        if "code_vectors" not in db.table_names():
-            console.print("[red]No code_vectors table found.[/red]")
+        try:
+            db = lancedb.connect(rag_dir)
+        except Exception as e:
+            console.print(f"[red]Failed to connect to database: {e}[/red]")
             return
 
-        table = db.open_table("code_vectors")
+        try:
+            if "code_vectors" not in db.table_names():
+                console.print("[red]No code_vectors table found.[/red]")
+                return
+            table = db.open_table("code_vectors")
+        except Exception as e:
+            console.print(f"[red]Database corrupted: {e}[/red]")
+            console.print(f"[yellow]Fix: rm -rf {rag_dir} and re-index[/yellow]")
+            return
 
         # Print schema
         console.print("\n[bold cyan] Table Schema:[/bold cyan]")

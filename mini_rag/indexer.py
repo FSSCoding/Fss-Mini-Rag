@@ -837,13 +837,25 @@ class ProjectIndexer:
                 try:
                     self.table = self.db.create_table("code_vectors", schema=schema)
                 except Exception as create_err:
-                    # LanceDB corruption: table not listed but create says it exists
+                    # LanceDB ghost table: not listed but create says it exists
+                    # Recovery: drop, reconnect (clear stale cache), create
                     logger.warning(f"Table create conflict: {create_err}. Attempting recovery...")
                     try:
                         self.db.drop_table("code_vectors")
-                    except Exception:
-                        pass
-                    self.table = self.db.create_table("code_vectors", schema=schema)
+                        logger.info("Dropped ghost table successfully")
+                    except Exception as drop_err:
+                        logger.warning(f"Drop also failed: {drop_err}")
+                    # Reconnect to clear any stale connection cache
+                    self.db = lancedb.connect(str(self.rag_dir / "lancedb"))
+                    try:
+                        self.table = self.db.create_table("code_vectors", schema=schema)
+                        logger.info("Recovery succeeded: table created after reconnect")
+                    except Exception as retry_err:
+                        logger.error(
+                            f"DB recovery failed. Manual fix: rm -rf {self.rag_dir / 'lancedb'} "
+                            f"and re-index. Error: {retry_err}"
+                        )
+                        raise
                 logger.info(
                     f"Created new code_vectors table with embedding dimension {embedding_dim}"
                 )
@@ -903,12 +915,13 @@ class ProjectIndexer:
                 "chunk_count": 0,
                 "files": {},
             }
-            # Clear existing table
+            # Clear existing table and reconnect to avoid stale cache
             if "code_vectors" in self.db.table_names():
                 self.db.drop_table("code_vectors")
                 self.table = None
-                # Reinitialize the database to recreate the table
-                self._init_database()
+            # Reconnect to clear stale connection state after drop
+            self.db = lancedb.connect(str(self.rag_dir / "lancedb"))
+            self._init_database()
 
         # Get files to index
         files_to_index = self._get_files_to_index()

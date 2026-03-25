@@ -243,8 +243,8 @@ class FastRAGServer:
             table = db.open_table("code_vectors")
             count = table.count_rows()
             return count == 0
-        except (OSError, IOError, ValueError, AttributeError):
-            return True
+        except Exception:
+            return True  # Any DB error = needs indexing
 
     def _fast_index(self) -> bool:
         """Fast indexing with enhanced progress reporting"""
