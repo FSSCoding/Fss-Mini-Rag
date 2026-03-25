@@ -130,8 +130,11 @@ class RenderedMarkdown(tk.Text):
         # Inline formatting
         self.tag_configure("bold", font=prose_font(11, "bold"))
         self.tag_configure("italic", font=(_PROSE_FAMILY, 11, "italic"))
-        self.tag_configure("inline_code", font=code_font(), background="#2c313a",
-                          foreground="#e06c75")
+        from ..theme import get_bg_alt, _is_dark_theme
+        inline_bg = "#2c313a" if _is_dark_theme() else "#ddd8d0"
+        inline_fg = "#e06c75" if _is_dark_theme() else "#c0392b"
+        self.tag_configure("inline_code", font=code_font(), background=inline_bg,
+                          foreground=inline_fg)
 
         # Block elements
         self.tag_configure("blockquote", font=(_PROSE_FAMILY, 11, "italic"),

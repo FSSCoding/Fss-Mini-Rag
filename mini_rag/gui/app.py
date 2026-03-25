@@ -137,17 +137,20 @@ class MiniRAGApp(tk.Tk):
         top_bar = ttk.Frame(self)
         top_bar.pack(fill=tk.X, padx=8, pady=(4, 0))
 
+        from .theme import DARK_FG_DIM, LIGHT_FG_DIM, _is_dark_theme
+        dim = DARK_FG_DIM if _is_dark_theme() else LIGHT_FG_DIM
+
         self._workdir_var = tk.StringVar()
         self._update_workdir_display()
         workdir_label = ttk.Label(
             top_bar, textvariable=self._workdir_var,
-            foreground="#888888", font=("", 8), anchor=tk.E,
+            foreground=dim, font=("", 8), anchor=tk.E,
             cursor="hand2",
         )
         workdir_label.pack(side=tk.RIGHT)
         workdir_label.bind("<Button-1>", lambda e: self._change_working_dir())
 
-        ttk.Label(top_bar, text="Working Dir:", foreground="#666666", font=("", 8)).pack(side=tk.RIGHT, padx=(0, 4))
+        ttk.Label(top_bar, text="Working Dir:", foreground=dim, font=("", 8)).pack(side=tk.RIGHT, padx=(0, 4))
 
         # Notebook wraps everything except status bar
         self.notebook = ttk.Notebook(self)
@@ -664,13 +667,14 @@ class MiniRAGApp(tk.Tk):
         accent = DARK_ACCENT if is_dark else LIGHT_ACCENT
 
         def _update_widget(w):
-            cls = type(w).__name__
             try:
-                if cls in ("Listbox", "Text"):
+                if isinstance(w, tk.Listbox):
+                    w.configure(bg=tree_bg, fg=fg, selectbackground=accent)
+                elif isinstance(w, tk.Text):
                     w.configure(bg=tree_bg, fg=fg)
-                elif cls in ("Label", "Frame", "Canvas") and not isinstance(w, ttk.Widget):
+                elif isinstance(w, (tk.Label, tk.Frame, tk.Canvas)) and not isinstance(w, ttk.Widget):
                     w.configure(bg=bg)
-                    if cls == "Label":
+                    if isinstance(w, tk.Label):
                         w.configure(fg=fg)
             except (tk.TclError, AttributeError):
                 pass
