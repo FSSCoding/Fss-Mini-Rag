@@ -49,10 +49,10 @@ class TestSearchServiceEndpointRouting:
             )
 
     def test_llm_url_not_hardcoded_to_lmstudio(self):
-        """LLM must NOT default to LM Studio when BobAI is configured."""
+        """LLM must use configured URL, not fall back to LM Studio default."""
         bus = EventBus()
         service = SearchService(bus)
-        service.llm_url = "http://bobai-server:11433/v1"
+        service.llm_url = "http://custom-server:8080/v1"
         service.llm_model = "custom-model"
 
         with patch("mini_rag.llm_synthesizer.LLMSynthesizer") as MockSynth:
@@ -69,7 +69,7 @@ class TestSearchServiceEndpointRouting:
                 "LLMSynthesizer is hitting LM Studio (port 1234) instead of "
                 f"configured endpoint: {call_kwargs['base_url']}"
             )
-            assert call_kwargs["base_url"] == "http://bobai-server:11433/v1"
+            assert call_kwargs["base_url"] == "http://custom-server:8080/v1"
 
     def test_llm_model_flows_to_synthesizer(self):
         """Configured model name must reach the synthesizer."""
@@ -185,14 +185,6 @@ class TestEmbeddingEndpointFormat:
         url = "http://localhost:1234/v1"
         assert url.rstrip("/").endswith("/v1")
 
-    def test_bobai_embedding_uses_custom_format(self):
-        """BobAI embedding endpoint must be detected as custom."""
-        from mini_rag.gui.config_store import PRESETS
-        bobai_url = PRESETS["bobai-local"]["embedding_url"]
-        assert not bobai_url.rstrip("/").endswith("/v1"), (
-            f"BobAI embedding URL {bobai_url} should NOT be OpenAI format"
-        )
-
     def test_lmstudio_embedding_uses_openai_format(self):
         """LM Studio endpoint must be detected as OpenAI."""
         from mini_rag.gui.config_store import PRESETS
@@ -201,13 +193,9 @@ class TestEmbeddingEndpointFormat:
             f"LM Studio URL {lm_url} should be OpenAI format"
         )
 
-    def test_bobai_llm_endpoint_correct(self):
-        """BobAI LLM must point to vLLM, not LM Studio."""
-        from mini_rag.gui.config_store import PRESETS
-        llm_url = PRESETS["bobai-local"]["llm_url"]
-        assert "11433" in llm_url, (
-            f"BobAI LLM URL {llm_url} should point to :11433 (vLLM)"
-        )
-        assert "1234" not in llm_url, (
-            f"BobAI LLM URL {llm_url} should NOT point to :1234 (LM Studio)"
-        )
+    def test_default_preset_is_lmstudio(self):
+        """Factory default preset must be LM Studio."""
+        from mini_rag.gui.config_store import DEFAULTS
+        assert DEFAULTS["preset"] == "lmstudio"
+        assert "1234" in DEFAULTS["embedding_url"]
+        assert "1234" in DEFAULTS["llm_url"]

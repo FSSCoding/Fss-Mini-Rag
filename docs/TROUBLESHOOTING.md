@@ -222,7 +222,7 @@ pip install sv-ttk
 1. Open Preferences dialog
 2. Set correct embedding and LLM endpoint URLs
 3. Click "Test Connection" to verify
-4. Use a preset (LM Studio, BobAI) if available
+4. Use a preset (LM Studio, OpenAI) if available
 
 ---
 
