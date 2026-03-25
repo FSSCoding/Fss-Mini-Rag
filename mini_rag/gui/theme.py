@@ -53,6 +53,12 @@ def apply_custom_styles(root):
     style.configure("TNotebook.Tab", padding=(14, 6))
     style.configure("TPanedwindow", background=bg)
     style.configure("TSeparator", background=border)
+    style.configure("TRadiobutton", background=bg, foreground=fg, indicatorbackground=bg_alt)
+    style.configure("TCheckbutton", background=bg, foreground=fg, indicatorbackground=bg_alt)
+    style.map("TRadiobutton", background=[("active", bg_alt)])
+    style.map("TCheckbutton", background=[("active", bg_alt)])
+    style.configure("TCombobox", fieldbackground=bg_alt, foreground=fg)
+    style.configure("TSpinbox", fieldbackground=bg_alt, foreground=fg)
 
     # Treeview — softer background
     style.configure("Treeview", background=tree_bg, fieldbackground=tree_bg,
