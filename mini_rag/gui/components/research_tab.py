@@ -617,6 +617,13 @@ class ResearchTab(ttk.Frame):
                 if len(queries) > 5:
                     doc.append(f"- *...and {len(queries) - 5} more*\n")
                 doc.append("\n")
+            # Show LLM's raw reasoning
+            raw = data.get("raw_response", "")
+            if raw:
+                doc.append("> **LLM Analysis:**\n>\n")
+                for line in raw.strip().split("\n"):
+                    doc.append(f"> {line}\n")
+                doc.append("\n")
 
         elif t == "search_done":
             urls = data.get("urls_found", 0)
@@ -697,6 +704,11 @@ class ResearchTab(ttk.Frame):
         elif t == "time_budget":
             remaining = data.get("remaining_min", 0)
             doc.append(f"**Time budget:** {remaining:.0f}min remaining — starting final roundup\n\n")
+
+        elif t == "completion_summary":
+            text = data.get("summary", "")
+            if text:
+                doc.append(f"\n## Executive Summary\n\n{text}\n\n")
 
         elif t == "report_start":
             doc.append("\n## Generating Final Report...\n\n")

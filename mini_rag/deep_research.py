@@ -482,6 +482,17 @@ Write a brief research assessment (3-5 paragraphs) covering:
 Be specific and cite document titles where relevant.\
 """
 
+PROMPT_COMPLETION_SUMMARY = """\
+Research on "{topic}" is complete after {rounds} rounds ({time:.1f} minutes).
+Corpus: {files} files, ~{tokens:,} estimated tokens. Final confidence: {confidence}.
+Topics covered: {covered}
+Gaps remaining: {gaps}
+Confidence trend across rounds: {trend}
+
+Write a concise executive summary (3-4 sentences) of what this research accomplished, \
+the strengths of the corpus, and what remains to investigate.\
+"""
+
 
 # ──────────────────────────────────────────────────────────
 # Research Phase State Machine
@@ -589,9 +600,13 @@ class ResearchReport:
     failing_domains: List[str] = field(default_factory=list)
     corpus_growth: List[Dict[str, Any]] = field(default_factory=list)
     confidence_trend: List[str] = field(default_factory=list)
+    # LLM prose sections
+    completion_summary: str = ""
+    corpus_assessment: str = ""
+    round_briefings: List[Dict[str, str]] = field(default_factory=list)
 
     def to_markdown(self, query: str) -> str:
-        """Generate a markdown research report."""
+        """Generate a markdown research report with LLM prose sections."""
         lines = [
             f"# Research Report: {query}",
             f"",
@@ -600,10 +615,20 @@ class ResearchReport:
             f"**Duration:** {self.total_time_minutes:.1f} minutes",
             f"**Confidence:** {self.confidence}",
             f"",
-            f"## Statistics",
-            f"",
-            f"| Metric | Value |",
-            f"|--------|-------|",
+        ]
+
+        # Executive Summary (LLM-generated)
+        if self.completion_summary:
+            lines.append("## Executive Summary\n")
+            lines.append(self.completion_summary)
+            lines.append("")
+
+        # Statistics
+        lines.extend([
+            "## Statistics",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
             f"| Searches performed | {self.searches_performed} |",
             f"| Pages found | {self.pages_found} |",
             f"| Pages scraped | {self.pages_scraped} |",
@@ -613,11 +638,17 @@ class ResearchReport:
             f"| LLM calls | {self.llm_calls} ({self.llm_failures} failed) |",
             f"| LLM tokens used | {self.llm_total_tokens:,} |",
             f"| Scrape success rate | {self.scrape_success_rate:.0%} |",
-            f"",
-        ]
+            "",
+        ])
 
         if self.confidence_trend and len(self.confidence_trend) > 1:
             lines.append(f"**Confidence trend:** {' → '.join(self.confidence_trend)}\n")
+
+        # Corpus Assessment (LLM-generated)
+        if self.corpus_assessment:
+            lines.append("## Corpus Assessment\n")
+            lines.append(self.corpus_assessment)
+            lines.append("")
 
         if self.corpus_growth:
             lines.append("## Corpus Growth\n")
@@ -633,12 +664,6 @@ class ResearchReport:
             lines.append("## Time per Phase\n")
             for phase, mins in self.time_per_phase.items():
                 lines.append(f"- **{phase}:** {mins:.1f} min")
-            lines.append("")
-
-        if self.search_queries_used:
-            lines.append("## Search Queries Used\n")
-            for q in self.search_queries_used:
-                lines.append(f"- {q}")
             lines.append("")
 
         if self.topics_covered:
@@ -665,6 +690,20 @@ class ResearchReport:
             lines.append("*Contradictions between sources (needs resolution):*\n")
             for i in self.inconsistencies:
                 lines.append(f"- {i}")
+            lines.append("")
+
+        if self.search_queries_used:
+            lines.append("## Search Queries Used\n")
+            for q in self.search_queries_used:
+                lines.append(f"- {q}")
+            lines.append("")
+
+        # Research Log — per-round LLM briefings
+        if self.round_briefings:
+            lines.append("## Research Log\n")
+            for entry in self.round_briefings:
+                lines.append(f"### Round {entry.get('round', '?')}\n")
+                lines.append(f"> {entry.get('briefing', '')}\n")
             lines.append("")
 
         return "\n".join(lines)
@@ -1215,6 +1254,7 @@ class DeepResearchEngine:
             project_path=project_path,
         )
         self.report = ResearchReport()
+        self._session_log = []  # Accumulated markdown session log
 
         # Rate limiters
         from .rate_limiter import get_limiter, get_retry_config, retry_with_backoff
@@ -1248,12 +1288,130 @@ class DeepResearchEngine:
         return response
 
     def _emit(self, event_type: str, **kwargs):
-        """Fire a progress callback if one is registered."""
+        """Fire a progress callback and append to session log."""
+        data = {"type": event_type, **kwargs}
+        # Append to persistent session log
+        self._append_log(data)
+        # Fire callback
         if self._progress_callback:
             try:
-                self._progress_callback({"type": event_type, **kwargs})
+                self._progress_callback(data)
             except Exception:
                 pass  # Never let callback errors break the research loop
+
+    def _append_log(self, data: dict):
+        """Append a progress event to the session log as markdown."""
+        t = data.get("type", "")
+        log = self._session_log
+
+        if t == "round_start":
+            rn, tr = data.get("round_num", 0), data.get("total_rounds", 0)
+            elapsed = data.get("elapsed_min", 0)
+            remaining = data.get("remaining_min", 0)
+            tokens = data.get("corpus_tokens", 0)
+            files = data.get("corpus_files", 0)
+            log.append(f"\n## Round {rn} / {tr}\n\n")
+            log.append(
+                f"| Metric | Value |\n|---|---|\n"
+                f"| Elapsed | {elapsed:.1f} min |\n"
+                f"| Remaining | {remaining:.1f} min |\n"
+                f"| Corpus | {files} files, ~{tokens:,} tokens |\n\n"
+            )
+        elif t == "phase_start":
+            log.append(f"### {data.get('phase', '').upper()}\n\n")
+        elif t == "analyze_done":
+            conf = data.get("confidence", "?")
+            covered = data.get("covered_count", 0)
+            gaps = data.get("gap_count", 0)
+            gap_topics = data.get("gap_topics", [])
+            queries = data.get("follow_up_queries", [])
+            log.append(f"**Confidence:** {conf}  |  **Covered:** {covered}  |  **Gaps:** {gaps}\n\n")
+            if gap_topics:
+                log.append(f"Gaps: {', '.join(gap_topics[:8])}\n\n")
+            if queries:
+                log.append("Queries:\n")
+                for q in queries[:6]:
+                    log.append(f"- {q}\n")
+                log.append("\n")
+            raw = data.get("raw_response", "")
+            if raw:
+                log.append(f"> **LLM Analysis:**\n>\n")
+                for line in raw.strip().split("\n"):
+                    log.append(f"> {line}\n")
+                log.append("\n")
+        elif t == "search_done":
+            urls = data.get("urls_found", 0)
+            skipped = data.get("skipped_domains", 0)
+            log.append(f"Found **{urls}** new URLs")
+            if skipped:
+                log.append(f" (skipped {skipped} from failing domains)")
+            log.append("\n\n")
+        elif t == "page_scraped":
+            title = data.get("title", "?")
+            words = data.get("word_count", 0)
+            src = data.get("source_type", "")
+            log.append(f"- [{src}] **{title}** — {words:,} words\n")
+        elif t == "page_failed":
+            url = data.get("url", "")[:60]
+            reason = data.get("reason", "failed")
+            log.append(f"- ~~{url}~~ *({reason})*\n")
+        elif t == "scrape_done":
+            scraped = data.get("pages_scraped", 0)
+            attempted = data.get("pages_attempted", 0)
+            log.append(f"\nScraped **{scraped}/{attempted}** pages\n\n")
+        elif t == "links_harvested":
+            log.append(f"Harvested **{data.get('count', 0)}** new links\n\n")
+        elif t == "prune_done":
+            removed = data.get("removed_count", 0)
+            corr = data.get("corroborations_count", 0)
+            parts = []
+            if removed:
+                parts.append(f"removed {removed} duplicates")
+            if corr:
+                parts.append(f"found {corr} corroborations")
+            log.append(f"Pruning: {', '.join(parts) if parts else 'no duplicates found'}\n\n")
+        elif t == "briefing":
+            text = data.get("briefing_text", "")
+            if text:
+                log.append(f"> **Progress Briefing:** {text}\n\n")
+        elif t == "round_end":
+            rn = data.get("round_num", 0)
+            dur = data.get("duration_min", 0)
+            tok = data.get("tokens_added", 0)
+            sc = data.get("scrape_successes", 0)
+            sa = data.get("scrape_attempts", 0)
+            llm = data.get("llm_calls", 0)
+            log.append(
+                f"**Round {rn} complete:** {dur:.1f}min, "
+                f"+{tok:,} tokens, {sc}/{sa} scraped, {llm} LLM calls\n\n---\n\n"
+            )
+        elif t == "stall_detected":
+            if data.get("override_active"):
+                log.append("**Stall detected** — override active, continuing\n\n")
+            else:
+                log.append("**Stall detected** — triggering final roundup\n\n")
+        elif t == "time_budget":
+            log.append(f"**Time budget:** {data.get('remaining_min', 0):.0f}min remaining — final roundup\n\n")
+        elif t == "completion_summary":
+            text = data.get("summary", "")
+            if text:
+                log.append(f"\n## Executive Summary\n\n{text}\n\n")
+        elif t == "report_start":
+            log.append("\n## Generating Final Report...\n\n")
+        elif t == "complete":
+            log.append(
+                f"## Complete\n\n**{data.get('total_rounds', 0)} rounds** in "
+                f"**{data.get('total_time', 0):.1f} min** — "
+                f"Confidence: **{data.get('confidence', '?')}**\n"
+            )
+
+    def _save_session_log(self):
+        """Write accumulated session log to agent-notes/session-log.md."""
+        if self._session_log:
+            header = f"# Session Log: {self.session.query}\n\n"
+            self.session.add_agent_note(
+                "session-log.md", header + "".join(self._session_log)
+            )
 
     def run(
         self,
@@ -1359,7 +1517,8 @@ class DeepResearchEngine:
                            gap_count=len(analysis.gap_topics),
                            confidence=analysis.confidence,
                            gap_topics=analysis.gap_topics[:10],
-                           follow_up_queries=analysis.follow_up_queries[:10])
+                           follow_up_queries=analysis.follow_up_queries[:10],
+                           raw_response=analysis.raw_response)
 
                 self.report.topics_covered = analysis.covered_topics
                 self.report.gaps_remaining = analysis.gap_topics
@@ -1590,6 +1749,10 @@ class DeepResearchEngine:
                         if briefing:
                             console.print(f"  [dim italic]Briefing: {briefing.strip()}[/dim italic]")
                             self._emit("briefing", briefing_text=briefing.strip())
+                            self.report.round_briefings.append({
+                                "round": round_num,
+                                "briefing": briefing.strip(),
+                            })
 
                 # Record round duration and show summary
                 round_duration = (time.time() - round_start) / 60.0
@@ -1619,6 +1782,9 @@ class DeepResearchEngine:
                                duration_min=round(round_duration, 1),
                                tokens_added=0, scrape_successes=0,
                                scrape_attempts=0, llm_calls=0)
+
+                # Persist session log after each round
+                self._save_session_log()
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Research interrupted — generating report...[/yellow]")
@@ -1650,18 +1816,39 @@ class DeepResearchEngine:
         self.report.corpus_growth = summary["corpus_growth"]
         self.report.confidence_trend = summary["confidence_trend"]
 
-        # Generate assessment if we have sources
+        # Generate completion summary (new LLM call)
+        if self._call_llm and self.report.rounds_completed > 0:
+            console.print("  Generating executive summary...")
+            comp_prompt = PROMPT_COMPLETION_SUMMARY.format(
+                topic=topic,
+                rounds=self.report.rounds_completed,
+                time=self.report.total_time_minutes,
+                files=summary["active_files"],
+                tokens=summary["total_tokens"],
+                confidence=self.report.confidence,
+                covered=", ".join(self.report.topics_covered[:8]) or "none yet",
+                gaps=", ".join(self.report.gaps_remaining[:8]) or "none identified",
+                trend=" → ".join(summary.get("confidence_trend", [])) or "n/a",
+            )
+            comp_summary = self._tracked_llm_call(comp_prompt, temperature=0.3)
+            if comp_summary:
+                self.report.completion_summary = comp_summary.strip()
+                self._emit("completion_summary", summary=self.report.completion_summary)
+
+        # Generate corpus assessment if we have sources
         if summary["active_files"] > 0 and self._call_llm:
             console.print("  Generating corpus assessment...")
             assessment = self.analyzer.assess_corpus(self.session, topic)
             self.session.add_agent_note("corpus-assessment.md", assessment)
+            self.report.corpus_assessment = assessment
 
         # Write report
         report_md = self.report.to_markdown(topic)
         self.session.add_agent_note("research-report.md", report_md)
 
-        # Save final metrics
+        # Save final metrics and session log
         self.metrics.save()
+        self._save_session_log()
 
         # Complete
         self.session.metadata["time_elapsed_minutes"] = round(self.report.total_time_minutes, 1)
