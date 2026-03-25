@@ -101,6 +101,9 @@ class MiniRAGApp(tk.Tk):
         if not self.config_data.get("collections"):
             self.state.hint = "Get started: click + Add to index a folder, or try Web Research"
 
+        # Load research sessions on startup
+        self.after(300, self._refresh_research_sessions)
+
     def _create_menu(self):
         menubar = tk.Menu(self)
 
@@ -186,9 +189,9 @@ class MiniRAGApp(tk.Tk):
         self.research_tab = ResearchTab(self.notebook, self.bus, self.config_data)
         self.notebook.add(self.research_tab, text="Web Research")
 
-        # Loading overlay (covers notebook area during operations)
+        # Loading overlay (compact panel, floats over notebook)
         from .components.loading_overlay import LoadingOverlay
-        self.loading_overlay = LoadingOverlay(self.notebook)
+        self.loading_overlay = LoadingOverlay(self)
 
         # Status bar (shared, outside notebook)
         self.status_bar = StatusBar(self, self.bus)
