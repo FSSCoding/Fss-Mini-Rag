@@ -74,6 +74,8 @@ class MiniRAGApp(tk.Tk):
         self.search_service.embedding_url = self.config_data.get("embedding_url", "http://localhost:1234/v1")
         self.research_service.llm_url = self.config_data.get("llm_url", "http://localhost:1234/v1")
         self.research_service.llm_model = self.config_data.get("llm_model", "auto")
+        self.research_service.scraper_user_agent = self.config_data.get("scraper_user_agent", "FSS-Mini-RAG-Research/2.2")
+        self.research_service.scraper_respect_robots = self.config_data.get("scraper_respect_robots", True)
         logger.info(f"GUI started: LLM={self.search_service.llm_url} Embedding={self.search_service.embedding_url}")
 
         # Build UI
@@ -662,8 +664,8 @@ class MiniRAGApp(tk.Tk):
     def _apply_theme_to_existing_widgets(self):
         """Force-update colors on all existing tk (non-ttk) widgets after theme switch."""
         from .theme import get_bg, get_bg_alt, _is_dark_theme
-        from .theme import DARK_BG, DARK_FG, DARK_TREEVIEW_BG, DARK_ACCENT
-        from .theme import LIGHT_BG, LIGHT_FG, LIGHT_TREEVIEW_BG, LIGHT_ACCENT
+        from .theme import DARK_BG, DARK_BG_ALT, DARK_FG, DARK_TREEVIEW_BG, DARK_ACCENT, DARK_BORDER
+        from .theme import LIGHT_BG, LIGHT_BG_ALT, LIGHT_FG, LIGHT_TREEVIEW_BG, LIGHT_ACCENT, LIGHT_BORDER
 
         is_dark = _is_dark_theme()
         bg = DARK_BG if is_dark else LIGHT_BG
@@ -671,22 +673,42 @@ class MiniRAGApp(tk.Tk):
         tree_bg = DARK_TREEVIEW_BG if is_dark else LIGHT_TREEVIEW_BG
         accent = DARK_ACCENT if is_dark else LIGHT_ACCENT
 
+        bg_alt = DARK_BG_ALT if is_dark else LIGHT_BG_ALT
+
         def _update_widget(w):
             try:
                 if isinstance(w, tk.Listbox):
                     w.configure(bg=tree_bg, fg=fg, selectbackground=accent)
                 elif isinstance(w, tk.Text):
-                    w.configure(bg=tree_bg, fg=fg)
+                    # Don't override code block Text widgets (they have dark bg for syntax)
+                    current_bg = str(w.cget("bg"))
+                    if current_bg not in ("#1e1e2e", "#2c313a"):
+                        w.configure(bg=tree_bg, fg=fg)
+                elif isinstance(w, tk.Entry):
+                    w.configure(bg=bg_alt, fg=fg)
+                elif isinstance(w, tk.Button):
+                    w.configure(bg=bg_alt, fg=fg)
                 elif isinstance(w, (tk.Label, tk.Frame, tk.Canvas)) and not isinstance(w, ttk.Widget):
                     w.configure(bg=bg)
                     if isinstance(w, tk.Label):
-                        w.configure(fg=fg)
+                        # Don't override accent-colored labels (badges, links)
+                        current_fg = str(w.cget("fg"))
+                        if current_fg not in (DARK_ACCENT, LIGHT_ACCENT, "#ffffff", "#e8913a", "#2070b0"):
+                            w.configure(fg=fg)
             except (tk.TclError, AttributeError):
                 pass
             for child in w.winfo_children():
                 _update_widget(child)
 
         _update_widget(self)
+
+        # Also force-update the content panel header if it exists
+        if hasattr(self, 'content_panel') and hasattr(self.content_panel, '_get_colors'):
+            try:
+                self.content_panel._header_frame.configure(
+                    bg=bg_alt, highlightbackground=DARK_BORDER if is_dark else LIGHT_BORDER)
+            except (tk.TclError, AttributeError):
+                pass
 
     def _on_escape(self):
         """Handle Escape key - cancel indexing if running, else clear search."""
@@ -713,7 +735,7 @@ class MiniRAGApp(tk.Tk):
 
     def _show_scrape_tracker(self):
         from .dialogs.scrape_tracker import ScrapeTrackerDialog
-        ScrapeTrackerDialog(self)
+        ScrapeTrackerDialog(self, self.config_data)
 
     def _show_about(self):
         from .dialogs.about import AboutDialog
