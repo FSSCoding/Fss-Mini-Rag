@@ -273,7 +273,9 @@ class MiniRAGApp(tk.Tk):
         # Busy cursor
         if op != "idle":
             self.configure(cursor="watch")
-            self.loading_overlay.show(op)
+            # Deep research has its own live progress — don't cover it with overlay
+            if op != "deep_research":
+                self.loading_overlay.show(op)
         else:
             self.configure(cursor="")
             self.loading_overlay.hide()
