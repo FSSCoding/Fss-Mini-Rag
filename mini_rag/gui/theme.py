@@ -11,22 +11,22 @@ from tkinter import ttk
 # ─── Dark mode palette ───
 DARK_ACCENT = "#e8913a"        # warm orange — headings, links, actions
 DARK_ACCENT_SOFT = "#c47a30"   # muted orange — secondary headings
-DARK_BG = "#222228"            # warm charcoal (NOT pure black)
-DARK_BG_ALT = "#2a2a30"       # slightly lighter for panels
-DARK_FG = "#cccccc"            # soft grey text (NOT pure white)
+DARK_BG = "#252530"            # warm charcoal (NOT pure black)
+DARK_BG_ALT = "#2c2c36"       # slightly lighter for input fields
+DARK_FG = "#c8c8c8"            # soft grey text (NOT pure white)
 DARK_FG_DIM = "#808080"
 DARK_BORDER = "#3a3a44"
-DARK_TREEVIEW_BG = "#26262c"
+DARK_TREEVIEW_BG = "#252530"   # SAME as bg — unified, not patchy
 
 # ─── Light mode palette ───
 LIGHT_ACCENT = "#2070b0"       # clean blue
 LIGHT_ACCENT_SOFT = "#3080c0"
-LIGHT_BG = "#f0ece4"           # warm cream (NOT pure white)
-LIGHT_BG_ALT = "#e8e4dc"      # slightly darker cream for panels
+LIGHT_BG = "#ede8e0"           # warm cream (NOT pure white)
+LIGHT_BG_ALT = "#e5e0d8"      # slightly darker for input fields
 LIGHT_FG = "#2a2a2a"          # soft dark (NOT pure black)
 LIGHT_FG_DIM = "#606060"
 LIGHT_BORDER = "#c8c0b4"
-LIGHT_TREEVIEW_BG = "#ece8e0"
+LIGHT_TREEVIEW_BG = "#ede8e0"  # SAME as bg — unified, not patchy
 
 
 def apply_custom_styles(root):
@@ -107,6 +107,16 @@ def apply_custom_styles(root):
     # LabelFrame (tk native, not ttk)
     root.option_add("*Labelframe.background", bg)
     root.option_add("*Label.background", bg)
+
+    # Scrollbar
+    root.option_add("*Scrollbar.background", bg_alt)
+    root.option_add("*Scrollbar.troughColor", bg)
+
+    # Frame
+    root.option_add("*Frame.background", bg)
+
+    # Toplevel dialogs
+    root.option_add("*Toplevel.background", bg)
 
 
 def get_accent_color() -> str:
