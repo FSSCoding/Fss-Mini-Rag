@@ -88,7 +88,7 @@ jobs:
           source .venv/bin/activate
         fi
         rag-mini --help
-        rag-mini info --no-code
+        rag-mini info
       shell: bash
 
   security-scan:

@@ -1,0 +1,12 @@
+#!/bin/bash
+SELF="$(readlink -f "$0")"
+APPDIR="$(dirname "${SELF}")"
+export PATH="${APPDIR}/usr/bin:${PATH}"
+export PYTHONPATH="${APPDIR}/usr/lib/python3.11/site-packages:${PYTHONPATH}"
+export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH}"
+export PYTHONDONTWRITEBYTECODE=1
+if [ $# -eq 0 ]; then
+    exec "${APPDIR}/usr/bin/python3" -m mini_rag.gui "$@"
+else
+    exec "${APPDIR}/usr/bin/python3" -m mini_rag.cli "$@"
+fi

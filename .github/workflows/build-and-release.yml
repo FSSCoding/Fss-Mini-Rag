@@ -96,11 +96,11 @@ jobs:
         fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Build wheel
-      run: python -m build --wheel
-
     - name: Build .deb
       run: |
+        pip install -r requirements.txt
+        pip install -e .
+        mkdir -p dist
         fpm \
           -s python \
           -t deb \
@@ -115,8 +115,11 @@ jobs:
           --depends python3-venv \
           --depends python3-pip \
           --category science \
+          --python-bin python3 \
+          --python-install-lib /opt/fss-mini-rag/lib/python3/site-packages \
+          --python-install-bin /usr/local/bin \
           --package dist/fss-mini-rag_${{ steps.version.outputs.version }}_amd64.deb \
-          setup.py
+          .
 
     - name: Upload .deb
       uses: actions/upload-artifact@v4
@@ -178,21 +181,8 @@ jobs:
         "${PYTHON_BIN}" -m pip install -r requirements.txt
         "${PYTHON_BIN}" -m pip install .
 
-        # Create AppRun
-        cat > AppDir/AppRun << 'EOF'
-        #!/bin/bash
-        SELF="$(readlink -f "$0")"
-        APPDIR="$(dirname "${SELF}")"
-        export PATH="${APPDIR}/usr/bin:${PATH}"
-        export PYTHONPATH="${APPDIR}/usr/lib/python3.11/site-packages:${PYTHONPATH}"
-        export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH}"
-        export PYTHONDONTWRITEBYTECODE=1
-        if [ $# -eq 0 ]; then
-            exec "${APPDIR}/usr/bin/python3" -m mini_rag.gui "$@"
-        else
-            exec "${APPDIR}/usr/bin/python3" -m mini_rag.cli "$@"
-        fi
-        EOF
+        # Copy AppRun entry point from repo
+        cp packaging/linux/AppRun AppDir/AppRun
         chmod +x AppDir/AppRun
 
         # Add desktop file and icon
