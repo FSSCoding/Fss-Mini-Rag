@@ -79,12 +79,16 @@ $WheelFile = Get-ChildItem "$BuildDir\wheel\*.whl" | Select-Object -First 1
 # Step 5: Create launcher batch files
 $CliLauncher = @'
 @echo off
+set "TCL_LIBRARY=%~dp0python\tcl\tcl8.6"
+set "TK_LIBRARY=%~dp0python\tcl\tk8.6"
 "%~dp0python\python.exe" -m mini_rag.cli %*
 '@
 Set-Content -Path "$BuildDir\launchers\rag-mini.bat" -Value $CliLauncher
 
 $GuiLauncher = @'
 @echo off
+set "TCL_LIBRARY=%~dp0python\tcl\tcl8.6"
+set "TK_LIBRARY=%~dp0python\tcl\tk8.6"
 start "" "%~dp0python\pythonw.exe" -m mini_rag.gui %*
 '@
 Set-Content -Path "$BuildDir\launchers\rag-mini-gui.bat" -Value $GuiLauncher
@@ -167,13 +171,17 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Verified: mini_rag v$TestResult" -ForegroundColor Green
 
 # Verify tkinter works
-$TkTest = & "$BuildDir\python\python.exe" -c "import tkinter; print('tkinter OK')" 2>&1
+# Set TCL/TK environment vars so _tkinter.pyd can find the tcl library files
+$env:TCL_LIBRARY = "$BuildDir\python\tcl\tcl8.6"
+$env:TK_LIBRARY = "$BuildDir\python\tcl\tk8.6"
+# Use 2>&1 and check exit code manually (don't let $ErrorActionPreference kill the script)
+$TkOutput = & "$BuildDir\python\python.exe" -c "import tkinter; print('tkinter OK')" 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
     Write-Host "WARNING: tkinter not available in embedded Python" -ForegroundColor Yellow
     Write-Host "The GUI may not work. CLI will still function." -ForegroundColor Yellow
-    Write-Host $TkTest
+    Write-Host $TkOutput
 } else {
-    Write-Host "Verified: $TkTest" -ForegroundColor Green
+    Write-Host "Verified: tkinter OK" -ForegroundColor Green
 }
 
 # Step 8: Build the installer with Inno Setup
