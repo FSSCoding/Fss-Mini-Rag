@@ -193,6 +193,7 @@ jobs:
         rm -f AppDir/usr/share/metainfo/*.appdata.xml
 
         # Build (--no-appstream skips strict AppStream metadata validation)
+        mkdir -p dist
         ARCH=x86_64 ./appimagetool --no-appstream AppDir dist/FSS-Mini-RAG-${{ steps.version.outputs.version }}-x86_64.AppImage
 
     - name: Upload AppImage
