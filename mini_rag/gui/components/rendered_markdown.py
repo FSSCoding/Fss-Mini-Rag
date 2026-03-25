@@ -117,6 +117,12 @@ class RenderedMarkdown(tk.Text):
                           spacing1=10, spacing3=4)
         self.tag_configure("h3", font=prose_font(12, "bold"), foreground="#61afef",
                           spacing1=8, spacing3=3)
+        self.tag_configure("h4", font=prose_font(11, "bold"), foreground="#7fb5d6",
+                          spacing1=6, spacing3=2)
+        self.tag_configure("h5", font=prose_font(10, "bold"), foreground="#7fb5d6",
+                          spacing1=4, spacing3=2)
+        self.tag_configure("h6", font=prose_font(10, "bold italic"), foreground="#7fb5d6",
+                          spacing1=4, spacing3=2)
 
         # Inline formatting
         self.tag_configure("bold", font=prose_font(11, "bold"))
@@ -292,7 +298,7 @@ class RenderedMarkdown(tk.Text):
                 continue
 
             # Headers
-            h_match = re.match(r'^(#{1,3})\s+(.+)$', line)
+            h_match = re.match(r'^(#{1,6})\s+(.+)$', line)
             if h_match:
                 level = len(h_match.group(1))
                 self._insert_formatted_line(h_match.group(2), f"h{level}")

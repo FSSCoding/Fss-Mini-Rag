@@ -33,6 +33,7 @@ class ContentPanel(ttk.LabelFrame):
         self.bus = event_bus
         self._build()
         self.bus.on("result:selected", self._on_result_selected)
+        self.bus.on("stream:started", lambda d: self.after(0, lambda: self._empty.place_forget()))
 
     def _build(self):
         self.renderer = RenderedMarkdown(self)
@@ -89,6 +90,7 @@ class ContentPanel(ttk.LabelFrame):
 
     def show_synthesis(self, text: str):
         """Show LLM synthesis output with rendered markdown."""
+        self._empty.place_forget()
         self.renderer.render_synthesis(text)
 
     def clear(self):

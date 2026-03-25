@@ -72,7 +72,9 @@ class LoadingOverlay(tk.Frame):
     """
 
     def __init__(self, parent):
-        super().__init__(parent)
+        # Use Canvas as base for rounded-corner look
+        super().__init__(parent, bg="#252535", highlightthickness=0,
+                         bd=0, padx=0, pady=0)
         self._message_idx = 0
         self._spin_idx = 0
         self._spin_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -81,25 +83,49 @@ class LoadingOverlay(tk.Frame):
         self._messages = []
         self._msg_after_id = None
 
-        # Compact centered panel with border
-        self.configure(bg="#1e1e2e", highlightbackground="#3a3a4a",
-                       highlightthickness=1, padx=30, pady=20)
+        bg = "#252535"
 
+        # Outer canvas for rounded border effect
+        self._canvas = tk.Canvas(self, bg=bg, highlightthickness=0,
+                                 width=380, height=130)
+        self._canvas.pack(fill=tk.BOTH, expand=True)
+
+        # Draw rounded rectangle
+        self._draw_rounded_rect(self._canvas, 2, 2, 378, 128, radius=16,
+                                fill="#1e1e2e", outline="#4a4a6a", width=1)
+
+        # Overlay widgets on the canvas
         self.spinner_label = tk.Label(
-            self, text="⠋", font=("", 28), fg="#4a9eff", bg="#1e1e2e",
+            self._canvas, text="⠋", font=("", 24), fg="#4a9eff", bg="#1e1e2e",
         )
-        self.spinner_label.pack(pady=(0, 8))
+        self._canvas.create_window(190, 35, window=self.spinner_label)
 
         self.message_label = tk.Label(
-            self, text="", font=("", 10), fg="#a0a0a0", bg="#1e1e2e",
-            wraplength=350,
+            self._canvas, text="", font=("", 10), fg="#a0a0a0", bg="#1e1e2e",
+            wraplength=320,
         )
-        self.message_label.pack()
+        self._canvas.create_window(190, 72, window=self.message_label)
 
         self.detail_label = tk.Label(
-            self, text="", font=("", 9), fg="#666666", bg="#1e1e2e",
+            self._canvas, text="", font=("", 9), fg="#666666", bg="#1e1e2e",
         )
-        self.detail_label.pack(pady=(6, 0))
+        self._canvas.create_window(190, 100, window=self.detail_label)
+
+    @staticmethod
+    def _draw_rounded_rect(canvas, x1, y1, x2, y2, radius=15, **kwargs):
+        """Draw a rounded rectangle on a canvas."""
+        points = [
+            x1 + radius, y1,
+            x2 - radius, y1,
+            x2, y1, x2, y1 + radius,
+            x2, y2 - radius,
+            x2, y2, x2 - radius, y2,
+            x1 + radius, y2,
+            x1, y2, x1, y2 - radius,
+            x1, y1 + radius,
+            x1, y1, x1 + radius, y1,
+        ]
+        return canvas.create_polygon(points, smooth=True, **kwargs)
 
     def show(self, operation: str = "searching", detail: str = ""):
         """Show the overlay centered in the parent widget."""
