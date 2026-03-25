@@ -77,14 +77,7 @@ jobs:
         fi
 
         # Test config system
-        python -c "
-from mini_rag.config import ConfigManager
-import tempfile
-with tempfile.TemporaryDirectory() as tmpdir:
-    config_manager = ConfigManager(tmpdir)
-    config = config_manager.load_config()
-    print('Config system OK')
-"
+        python -c "from mini_rag.config import ConfigManager; import tempfile; d=tempfile.mkdtemp(); c=ConfigManager(d); c.load_config(); print('Config system OK')"
       shell: bash
 
     - name: Test CLI entry point
