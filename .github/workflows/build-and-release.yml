@@ -189,8 +189,11 @@ jobs:
         mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps/
         cp assets/Fss_Mini_Rag.png AppDir/usr/share/icons/hicolor/256x256/apps/fss-mini-rag.png
 
-        # Build
-        ARCH=x86_64 ./appimagetool AppDir dist/FSS-Mini-RAG-${{ steps.version.outputs.version }}-x86_64.AppImage
+        # Remove Python's default appdata that fails validation
+        rm -f AppDir/usr/share/metainfo/*.appdata.xml
+
+        # Build (--no-appstream skips strict AppStream metadata validation)
+        ARCH=x86_64 ./appimagetool --no-appstream AppDir dist/FSS-Mini-RAG-${{ steps.version.outputs.version }}-x86_64.AppImage
 
     - name: Upload AppImage
       uses: actions/upload-artifact@v4

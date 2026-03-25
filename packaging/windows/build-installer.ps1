@@ -38,14 +38,20 @@ Invoke-WebRequest -Uri $PythonUrl -OutFile "$BuildDir\$PythonZip"
 Expand-Archive -Path "$BuildDir\$PythonZip" -DestinationPath "$BuildDir\python" -Force
 Remove-Item "$BuildDir\$PythonZip"
 
-# Step 2: Enable pip in embedded Python
-# The embedded Python has a ._pth file that restricts imports. We need to modify it.
+# Step 2: Enable pip and full imports in embedded Python
+# The embedded Python has a ._pth file that restricts imports. We need to:
+# 1. Uncomment 'import site' to enable pip
+# 2. Add Lib and DLLs directories for tkinter and other stdlib modules
 $PthFile = Get-ChildItem "$BuildDir\python\python*._pth" | Select-Object -First 1
 if ($PthFile) {
     $content = Get-Content $PthFile.FullName
     # Uncomment 'import site' line
     $content = $content -replace '^#\s*import site', 'import site'
     Set-Content -Path $PthFile.FullName -Value $content
+    # Add Lib and DLLs paths for tkinter and other stdlib modules
+    Add-Content -Path $PthFile.FullName -Value "Lib"
+    Add-Content -Path $PthFile.FullName -Value "DLLs"
+    Write-Host "  Updated $($PthFile.Name) with Lib and DLLs paths"
 }
 
 # Download and install pip
