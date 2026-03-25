@@ -163,9 +163,7 @@ jobs:
 
     - name: Download Python AppImage base
       run: |
-        wget -q "https://github.com/niess/python-appimage/releases/download/python3.11/python3.11.9-cp311-cp311-manylinux_2_28_x86_64.AppImage" \
-          -O python.AppImage || \
-        wget -q "https://github.com/niess/python-appimage/releases/latest/download/python3.11.9-cp311-cp311-manylinux_2_28_x86_64.AppImage" \
+        wget -q "https://github.com/niess/python-appimage/releases/download/python3.11/python3.11.14-cp311-cp311-manylinux_2_28_x86_64.AppImage" \
           -O python.AppImage
         chmod +x python.AppImage
 

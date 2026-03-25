@@ -85,36 +85,69 @@ Set-Content -Path "$BuildDir\launchers\rag-mini-gui.bat" -Value $GuiLauncher
 
 # Step 6: Install tkinter support for embedded Python
 # The embeddable distribution doesn't include tkinter by default.
-# We need to copy it from the full Python installation.
+# We copy tkinter files from the full Python installation on this machine.
 Write-Host "Adding tkinter support..." -ForegroundColor Yellow
-$FullPythonPath = (Get-Command python).Source | Split-Path
-$TkSource = "$FullPythonPath\tcl"
-$TkDest = "$BuildDir\python\tcl"
-$TkInterLibs = @("tkinter", "_tkinter.pyd", "tcl86t.dll", "tk86t.dll")
 
-if (Test-Path $TkSource) {
-    Copy-Item -Recurse -Force $TkSource $TkDest
-}
-# Copy tkinter package from full Python's Lib
-$FullLib = "$FullPythonPath\Lib\tkinter"
-if (Test-Path $FullLib) {
-    Copy-Item -Recurse -Force $FullLib "$BuildDir\python\Lib\tkinter"
-}
-# Copy _tkinter.pyd from DLLs
-$TkDll = "$FullPythonPath\DLLs\_tkinter.pyd"
-if (Test-Path $TkDll) {
-    Copy-Item -Force $TkDll "$BuildDir\python\DLLs\_tkinter.pyd"
-}
-# Copy tcl/tk DLLs
-foreach ($dll in @("tcl86t.dll", "tk86t.dll")) {
-    $dllPath = "$FullPythonPath\$dll"
-    if (Test-Path $dllPath) {
-        Copy-Item -Force $dllPath "$BuildDir\python\"
+# Find the full Python installation root
+$FullPythonExe = (Get-Command python).Source
+$FullPythonPath = Split-Path $FullPythonExe
+
+# Ensure target directories exist in embedded Python
+New-Item -ItemType Directory -Path "$BuildDir\python\Lib" -Force | Out-Null
+New-Item -ItemType Directory -Path "$BuildDir\python\DLLs" -Force | Out-Null
+
+# Search common locations for tkinter files
+# actions/setup-python on Windows uses: C:\hostedtoolcache\windows\Python\3.11.x\x64\
+$SearchRoots = @($FullPythonPath, (Split-Path $FullPythonPath))
+
+$TkFound = $false
+foreach ($root in $SearchRoots) {
+    # Copy tcl/ directory (contains tcl8.6/ and tk8.6/ subdirs)
+    foreach ($tclDir in @("$root\tcl", "$root\Lib\tcl", "$root\lib\tcl8.6\..")) {
+        if (Test-Path "$tclDir\tcl8.6") {
+            Write-Host "  Found tcl at: $tclDir"
+            Copy-Item -Recurse -Force $tclDir "$BuildDir\python\tcl"
+            break
+        }
     }
-    $dllPath2 = "$FullPythonPath\DLLs\$dll"
-    if (Test-Path $dllPath2) {
-        Copy-Item -Force $dllPath2 "$BuildDir\python\"
+
+    # Copy tkinter package
+    foreach ($tkLib in @("$root\Lib\tkinter", "$root\lib\tkinter")) {
+        if (Test-Path $tkLib) {
+            Write-Host "  Found tkinter package at: $tkLib"
+            Copy-Item -Recurse -Force $tkLib "$BuildDir\python\Lib\tkinter"
+            $TkFound = $true
+            break
+        }
     }
+
+    # Copy _tkinter.pyd
+    foreach ($tkPyd in @("$root\DLLs\_tkinter.pyd", "$root\_tkinter.pyd")) {
+        if (Test-Path $tkPyd) {
+            Write-Host "  Found _tkinter.pyd at: $tkPyd"
+            Copy-Item -Force $tkPyd "$BuildDir\python\_tkinter.pyd"
+            break
+        }
+    }
+
+    # Copy tcl/tk DLLs
+    foreach ($dll in @("tcl86t.dll", "tk86t.dll")) {
+        foreach ($dllDir in @("$root", "$root\DLLs", "$root\Library\bin")) {
+            if (Test-Path "$dllDir\$dll") {
+                Write-Host "  Found $dll at: $dllDir"
+                Copy-Item -Force "$dllDir\$dll" "$BuildDir\python\"
+                break
+            }
+        }
+    }
+
+    if ($TkFound) { break }
+}
+
+if (-not $TkFound) {
+    Write-Host "WARNING: Could not find tkinter in full Python installation" -ForegroundColor Yellow
+    Write-Host "  Searched: $($SearchRoots -join ', ')" -ForegroundColor Yellow
+    Write-Host "  GUI may not work, CLI will still function" -ForegroundColor Yellow
 }
 
 # Step 7: Verify the embedded installation works

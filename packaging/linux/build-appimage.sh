@@ -36,13 +36,8 @@ fi
 
 # Download Python AppImage base
 echo "Downloading Python ${PYTHON_VERSION} base..."
-PYTHON_APPIMAGE="python${PYTHON_VERSION}-cp311-cp311-manylinux_2_28_${ARCH}.AppImage"
-wget -q "https://github.com/niess/python-appimage/releases/download/python3.11/${PYTHON_APPIMAGE}" \
-    -O python.AppImage || {
-    # Fallback: try alternative URL format
-    wget -q "https://github.com/niess/python-appimage/releases/latest/download/${PYTHON_APPIMAGE}" \
-        -O python.AppImage
-}
+wget -q "https://github.com/niess/python-appimage/releases/download/python3.11/python3.11.14-cp311-cp311-manylinux_2_28_${ARCH}.AppImage" \
+    -O python.AppImage
 chmod +x python.AppImage
 
 # Extract the Python AppImage
