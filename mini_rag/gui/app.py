@@ -635,7 +635,7 @@ class MiniRAGApp(tk.Tk):
     # === Theme & Keyboard ===
 
     def _toggle_theme(self):
-        """Toggle between dark and light theme."""
+        """Toggle between dark and light theme, updating all existing widgets."""
         try:
             import sv_ttk
             current = sv_ttk.get_theme()
@@ -643,11 +643,41 @@ class MiniRAGApp(tk.Tk):
             sv_ttk.set_theme(new_theme)
             self.config_data["theme"] = new_theme
             save_config(self.config_data)
-            # Re-apply custom styles
-            from .theme import apply_custom_styles
+            # Re-apply custom styles (sets option_add for new widgets)
+            from .theme import apply_custom_styles, get_bg, get_bg_alt, get_accent_color
             apply_custom_styles(self)
+            # Walk ALL existing tk widgets and update their colors
+            self._apply_theme_to_existing_widgets()
         except ImportError:
             pass
+
+    def _apply_theme_to_existing_widgets(self):
+        """Force-update colors on all existing tk (non-ttk) widgets after theme switch."""
+        from .theme import get_bg, get_bg_alt, _is_dark_theme
+        from .theme import DARK_BG, DARK_FG, DARK_TREEVIEW_BG, DARK_ACCENT
+        from .theme import LIGHT_BG, LIGHT_FG, LIGHT_TREEVIEW_BG, LIGHT_ACCENT
+
+        is_dark = _is_dark_theme()
+        bg = DARK_BG if is_dark else LIGHT_BG
+        fg = DARK_FG if is_dark else LIGHT_FG
+        tree_bg = DARK_TREEVIEW_BG if is_dark else LIGHT_TREEVIEW_BG
+        accent = DARK_ACCENT if is_dark else LIGHT_ACCENT
+
+        def _update_widget(w):
+            cls = type(w).__name__
+            try:
+                if cls in ("Listbox", "Text"):
+                    w.configure(bg=tree_bg, fg=fg)
+                elif cls in ("Label", "Frame", "Canvas") and not isinstance(w, ttk.Widget):
+                    w.configure(bg=bg)
+                    if cls == "Label":
+                        w.configure(fg=fg)
+            except (tk.TclError, AttributeError):
+                pass
+            for child in w.winfo_children():
+                _update_widget(child)
+
+        _update_widget(self)
 
     def _on_escape(self):
         """Handle Escape key - cancel indexing if running, else clear search."""
