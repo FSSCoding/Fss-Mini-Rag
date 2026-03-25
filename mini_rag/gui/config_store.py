@@ -92,6 +92,9 @@ DEFAULTS = {
     "cost_per_1m_input": 0.0,
     "cost_per_1m_output": 0.0,
     "needs_api_key": False,
+    "scraper_user_agent": "FSS-Mini-RAG-Research/2.2",
+    "scraper_contact": "",
+    "scraper_respect_robots": True,
 }
 
 
@@ -110,13 +113,19 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(config: Dict[str, Any]):
-    """Save GUI config to disk."""
+    """Save GUI config to disk using atomic write to prevent corruption."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_path = CONFIG_FILE.with_suffix(".tmp")
     try:
-        with open(CONFIG_FILE, "w") as f:
+        with open(tmp_path, "w") as f:
             json.dump(config, f, indent=2)
+            f.flush()
+            import os
+            os.fsync(f.fileno())
+        tmp_path.replace(CONFIG_FILE)
     except Exception as e:
         logger.error(f"Failed to save GUI config: {e}")
+        tmp_path.unlink(missing_ok=True)
 
 
 def apply_preset(config: Dict[str, Any], preset_name: str) -> Dict[str, Any]:

@@ -18,7 +18,7 @@ from urllib.robotparser import RobotFileParser
 import requests
 
 from .config import WebScraperConfig
-from .extractors import ScrapedPage, extract_content, save_scraped_page
+from .extractors import ScrapedPage, extract_content, get_direct_fetcher, save_scraped_page
 
 logger = logging.getLogger(__name__)
 
@@ -300,10 +300,47 @@ class MiniWebScraper:
         or has insufficient content.
         """
         from .rate_limiter import retry_with_backoff
+        from .scrape_registry import check_domain, log_scrape, auto_blacklist_check
+
+        # API-based direct fetchers bypass robots.txt and HTML extraction
+        direct_fetcher = get_direct_fetcher(url)
+        if direct_fetcher:
+            fetcher_name = type(direct_fetcher).__name__
+            try:
+                page = direct_fetcher.fetch_and_extract(url, timeout=self.config.timeout)
+                if page:
+                    log_scrape(
+                        url=url, extractor_name=fetcher_name, success=True,
+                        word_count=page.word_count, title=page.title,
+                        source_type=page.source_type, has_main_content=page.word_count > 100,
+                    )
+                    return page
+                log_scrape(
+                    url=url, extractor_name=fetcher_name, success=False,
+                    error="Direct fetcher returned None",
+                )
+            except Exception as e:
+                log_scrape(
+                    url=url, extractor_name=fetcher_name, success=False,
+                    error=str(e)[:200],
+                )
+                logger.warning(f"Direct fetcher {fetcher_name} failed for {url}: {e}")
+            # Fall through to normal pipeline if direct fetch fails
+            return None
+
+        # Domain blacklist check
+        status, reason = check_domain(url)
+        if status == "blocked":
+            logger.info(f"Blacklisted domain, skipping: {url} ({reason})")
+            log_scrape(url=url, extractor_name="fetch", success=False, error=f"Blacklisted: {reason}")
+            return None
 
         # Robots check
         if not self._check_robots(url):
             logger.info(f"Blocked by robots.txt: {url}")
+            log_scrape(url=url, extractor_name="fetch", success=False, error="Blocked by robots.txt")
+            from urllib.parse import urlparse as _urlparse
+            auto_blacklist_check(_urlparse(url).netloc)
             return None
 
         def _do_fetch():
@@ -329,19 +366,29 @@ class MiniWebScraper:
 
             if page and page.word_count < (self.config.min_content_length // 5):
                 logger.debug(f"Skipping thin page ({page.word_count} words): {url}")
+                log_scrape(
+                    url=url, extractor_name="fetch", success=False,
+                    word_count=page.word_count, error="Thin page filtered",
+                )
                 return None
 
             return page
 
         except requests.exceptions.Timeout:
             logger.warning(f"Timeout fetching {url}")
+            log_scrape(url=url, extractor_name="fetch", success=False, error="Timeout")
             return None
         except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if hasattr(e, "response") and e.response else "?"
+            status = e.response.status_code if hasattr(e, "response") and e.response else None
             logger.warning(f"HTTP error {status} for {url}")
+            log_scrape(
+                url=url, extractor_name="fetch", success=False,
+                http_status=status, error=f"HTTP {status}",
+            )
             return None
         except Exception as e:
             logger.error(f"Failed to fetch {url}: {e}")
+            log_scrape(url=url, extractor_name="fetch", success=False, error=str(e)[:200])
             return None
 
     def scrape_urls(
