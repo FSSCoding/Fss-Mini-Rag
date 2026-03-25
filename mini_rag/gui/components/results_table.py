@@ -32,8 +32,10 @@ class ResultsTable(ttk.Frame):
         super().__init__(parent)
         self.bus = event_bus
         self._results = []
+        self._collection_path = None
         self._build()
         self._show_empty()
+        self.bus.on("state:active_collection", lambda d: self._set_collection(d.get("new")))
 
     def _build(self):
         columns = ("score", "file", "type", "name")
@@ -103,10 +105,29 @@ class ResultsTable(ttk.Frame):
                 f"{result.score:.3f} {label}", file_name, result.chunk_type, name,
             ))
 
+    def add_llm_response(self, timing_ms: float = 0):
+        """Add an LLM Response row at the top of the results list."""
+        # Remove existing LLM row if present
+        if self.tree.exists("llm"):
+            self.tree.delete("llm")
+        timing_str = f"{timing_ms:.0f}ms" if timing_ms else ""
+        self.tree.insert("", 0, iid="llm", values=(
+            "LLM", "— response —", "synthesis", timing_str,
+        ))
+        # Auto-select it
+        self.tree.selection_set("llm")
+
     def _on_select(self, event):
         sel = self.tree.selection()
         if sel:
-            idx = int(sel[0])
+            iid = sel[0]
+            if iid == "llm":
+                self.bus.emit("llm:response_selected", {})
+                return
+            try:
+                idx = int(iid)
+            except ValueError:
+                return
             if idx < len(self._results):
                 self.bus.emit("result:selected", {
                     "index": idx,
@@ -116,7 +137,13 @@ class ResultsTable(ttk.Frame):
     def _get_selected_result(self):
         sel = self.tree.selection()
         if sel:
-            idx = int(sel[0])
+            iid = sel[0]
+            if iid == "llm":
+                return None
+            try:
+                idx = int(iid)
+            except ValueError:
+                return None
             if idx < len(self._results):
                 return self._results[idx]
         return None
@@ -132,6 +159,20 @@ class ResultsTable(ttk.Frame):
             self.tree.selection_set(row)
             self._context_menu.tk_popup(event.x_root, event.y_root)
 
+    def _set_collection(self, path):
+        self._collection_path = path
+
+    def _resolve_path(self, file_path: str) -> str:
+        """Resolve a potentially relative file path against the active collection."""
+        p = Path(file_path)
+        if p.is_absolute() and p.exists():
+            return str(p)
+        if self._collection_path:
+            resolved = Path(self._collection_path) / file_path
+            if resolved.exists():
+                return str(resolved)
+        return file_path
+
     def _ctx_open_editor(self):
         result = self._get_selected_result()
         if result:
@@ -140,7 +181,8 @@ class ResultsTable(ttk.Frame):
     def _ctx_open_folder(self):
         result = self._get_selected_result()
         if result:
-            folder = str(Path(result.file_path).parent)
+            resolved = self._resolve_path(result.file_path)
+            folder = str(Path(resolved).parent)
             if sys.platform == "linux":
                 subprocess.Popen(["xdg-open", folder])
             elif sys.platform == "darwin":
@@ -151,18 +193,37 @@ class ResultsTable(ttk.Frame):
     def _ctx_copy_path(self):
         result = self._get_selected_result()
         if result:
+            resolved = self._resolve_path(result.file_path)
             self.tree.clipboard_clear()
-            self.tree.clipboard_append(result.file_path)
+            self.tree.clipboard_append(resolved)
 
     def _open_in_editor(self, result):
-        file_path = result.file_path
+        resolved = self._resolve_path(result.file_path)
         line = getattr(result, "start_line", 1) or 1
+        # Try code/text editors that support line numbers
+        for editor_cmd in [
+            ["code", "--goto", f"{resolved}:{line}"],
+            ["subl", f"{resolved}:{line}"],
+            ["gedit", f"+{line}", resolved],
+        ]:
+            if self._try_open(editor_cmd):
+                return
+        # Fallback to xdg-open
         if sys.platform == "linux":
-            subprocess.Popen(["xdg-open", file_path])
+            subprocess.Popen(["xdg-open", resolved])
         elif sys.platform == "darwin":
-            subprocess.Popen(["open", file_path])
+            subprocess.Popen(["open", resolved])
         else:
-            os.startfile(file_path)
+            os.startfile(resolved)
+
+    @staticmethod
+    def _try_open(cmd: list) -> bool:
+        """Try to run a command, return True if the executable exists."""
+        import shutil
+        if shutil.which(cmd[0]):
+            subprocess.Popen(cmd)
+            return True
+        return False
 
     def clear(self):
         self.tree.delete(*self.tree.get_children())

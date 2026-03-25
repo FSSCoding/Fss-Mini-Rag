@@ -222,6 +222,7 @@ class MiniRAGApp(tk.Tk):
         self.bus.on("search:error", self._on_search_error)
 
         self.bus.on("synthesis:completed", self._on_synthesis_completed)
+        self.bus.on("llm:response_selected", self._on_llm_response_selected)
 
         self.bus.on("stream:started", lambda d: self.after(0, lambda: self.content_panel.renderer.begin_stream()))
         self.bus.on("stream:token", self._on_stream_token)
@@ -392,6 +393,18 @@ class MiniRAGApp(tk.Tk):
     def _display_synthesis(self, text, timing):
         self.content_panel.show_synthesis(f"LLM Synthesis ({timing:.0f}ms):\n\n{text}")
         self.state.set_operation("idle", f"Synthesis complete ({timing:.0f}ms)")
+        self._last_llm_response = text
+        self._last_llm_timing = timing
+        self.results_table.add_llm_response(timing)
+
+    def _on_llm_response_selected(self, data):
+        """Re-display the stored LLM response when user clicks the LLM row."""
+        response = getattr(self, "_last_llm_response", "")
+        timing = getattr(self, "_last_llm_timing", 0.0)
+        if response:
+            self.after(0, lambda: self.content_panel.show_synthesis(
+                f"LLM Synthesis ({timing:.0f}ms):\n\n{response}"
+            ))
 
     def _on_stream_token(self, data):
         text = data["text"]
@@ -403,9 +416,14 @@ class MiniRAGApp(tk.Tk):
 
     def _on_stream_complete(self, data):
         timing = data["timing_ms"]
+        full_text = data.get("text", "")
         def _finish():
             self.content_panel.renderer.end_stream()
             self.state.set_operation("idle", f"Synthesis complete ({timing:.0f}ms)")
+            # Store and add LLM response as first row in results table
+            self._last_llm_response = full_text
+            self._last_llm_timing = timing
+            self.results_table.add_llm_response(timing)
         self.after(0, _finish)
 
     def _on_indexing_started(self, data):
