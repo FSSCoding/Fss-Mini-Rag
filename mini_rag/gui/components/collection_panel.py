@@ -25,23 +25,14 @@ class CollectionPanel(ttk.LabelFrame):
         self._refresh_list()
 
     def _build(self):
-        # Collection listbox
-        self.listbox = tk.Listbox(self, selectmode=tk.SINGLE, width=20)
-        self.listbox.pack(fill=tk.BOTH, expand=True)
-        self.listbox.bind("<<ListboxSelect>>", self._on_select)
-        self._listbox_tooltip = ToolTip(self.listbox, delay=400)
-        self.listbox.bind("<Motion>", self._on_listbox_motion, add="+")
-        self.listbox.bind("<Button-3>", self._on_right_click)
+        # Pack bottom elements FIRST so they're guaranteed space
+        # Info label (bottom-most)
+        self.info_label = ttk.Label(self, text="", wraplength=200, font=("", 8))
+        self.info_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(2, 0))
 
-        self._context_menu = tk.Menu(self.listbox, tearoff=0)
-        self._context_menu.add_command(label="Open in File Manager", command=self._ctx_open_folder)
-        self._context_menu.add_command(label="Copy Path", command=self._ctx_copy_path)
-        self._context_menu.add_separator()
-        self._context_menu.add_command(label="Re-index", command=self._on_index)
-
-        # Buttons
+        # Buttons (above info)
         btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=(5, 0))
+        btn_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 0))
 
         add_btn = ttk.Button(btn_frame, text="+ Add", command=self._on_add, width=6)
         add_btn.pack(side=tk.LEFT, padx=1)
@@ -55,9 +46,19 @@ class CollectionPanel(ttk.LabelFrame):
         del_btn.pack(side=tk.LEFT, padx=1)
         ToolTip(del_btn, "Remove collection (files are not deleted)")
 
-        # Info label
-        self.info_label = ttk.Label(self, text="", wraplength=180)
-        self.info_label.pack(fill=tk.X, pady=(5, 0))
+        # Collection listbox (fills remaining space)
+        self.listbox = tk.Listbox(self, selectmode=tk.SINGLE, width=20)
+        self.listbox.pack(fill=tk.BOTH, expand=True)
+        self.listbox.bind("<<ListboxSelect>>", self._on_select)
+        self._listbox_tooltip = ToolTip(self.listbox, delay=400)
+        self.listbox.bind("<Motion>", self._on_listbox_motion, add="+")
+        self.listbox.bind("<Button-3>", self._on_right_click)
+
+        self._context_menu = tk.Menu(self.listbox, tearoff=0)
+        self._context_menu.add_command(label="Open in File Manager", command=self._ctx_open_folder)
+        self._context_menu.add_command(label="Copy Path", command=self._ctx_copy_path)
+        self._context_menu.add_separator()
+        self._context_menu.add_command(label="Re-index", command=self._on_index)
 
     def _refresh_list(self):
         self.listbox.delete(0, tk.END)
@@ -112,8 +113,11 @@ class CollectionPanel(ttk.LabelFrame):
         if path:
             info = get_collection_info(path)
             if info.get("indexed"):
+                model = info['model']
+                if len(model) > 25:
+                    model = model[:22] + "..."
                 self.info_label.config(
-                    text=f"{info['chunks']} chunks | {info['files']} files\n{info['model']}"
+                    text=f"{info['chunks']} chunks | {info['files']} files | {model}"
                 )
             else:
                 self.info_label.config(text="Not indexed")
