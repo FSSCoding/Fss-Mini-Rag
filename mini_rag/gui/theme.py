@@ -75,21 +75,38 @@ def apply_custom_styles(root):
     except tk.TclError:
         root.configure(padx=4, pady=4)
 
-    # Listbox (tk, not ttk — needs direct config)
+    # Force tk-level defaults with highest priority (*) for all widgets
+    # This overrides sv_ttk's image-based theme for widget interiors
+    root.option_add("*background", bg, "userDefault")
+    root.option_add("*foreground", fg, "userDefault")
+    root.option_add("*highlightBackground", bg, "userDefault")
+
+    # Listbox
     root.option_add("*Listbox.background", tree_bg)
     root.option_add("*Listbox.foreground", fg)
     root.option_add("*Listbox.selectBackground", accent)
     root.option_add("*Listbox.selectForeground", "#ffffff")
 
+    # Text widgets (rendered markdown content area)
+    root.option_add("*Text.background", tree_bg)
+    root.option_add("*Text.foreground", fg)
+
     # Entry fields
     root.option_add("*Entry.background", bg_alt)
     root.option_add("*Entry.foreground", fg)
+
+    # Canvas
+    root.option_add("*Canvas.background", bg)
 
     # Menu
     root.option_add("*Menu.background", bg_alt)
     root.option_add("*Menu.foreground", fg)
     root.option_add("*Menu.activeBackground", accent)
     root.option_add("*Menu.activeForeground", "#ffffff")
+
+    # LabelFrame (tk native, not ttk)
+    root.option_add("*Labelframe.background", bg)
+    root.option_add("*Label.background", bg)
 
 
 def get_accent_color() -> str:
