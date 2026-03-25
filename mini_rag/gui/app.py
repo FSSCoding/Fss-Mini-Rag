@@ -305,11 +305,14 @@ class MiniRAGApp(tk.Tk):
         if not self.state.active_collection:
             self.state.set_operation("idle")
             self.state.error = "Select a collection first"
+            # Explicitly re-enable search bar (belt-and-suspenders)
+            self.after(0, lambda: self.search_bar.set_searching(False))
             return
 
         if not (Path(self.state.active_collection) / ".mini-rag").exists():
             self.state.set_operation("idle")
             self.state.error = "Collection not indexed. Click Index first."
+            self.after(0, lambda: self.search_bar.set_searching(False))
             return
 
         query = data["query"]
@@ -366,6 +369,7 @@ class MiniRAGApp(tk.Tk):
     def _show_search_error(self, error):
         self.state.set_operation("idle")
         self.state.error = f"Search error: {error}"
+        self.search_bar.set_searching(False)
 
     def _on_synthesis_completed(self, data):
         text = data["text"]
