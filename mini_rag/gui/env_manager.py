@@ -25,6 +25,7 @@ MANAGED_KEYS = {
     "OPENAI_API_KEY",
     "TAVILY_API_KEY",
     "BRAVE_API_KEY",
+    "SERPER_API_KEY",
 }
 
 

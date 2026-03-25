@@ -17,17 +17,21 @@ from .rate_limiter import get_limiter, get_retry_config, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
-# Optional: duckduckgo-search package (renamed to 'ddgs', suppress deprecation warning)
+# DuckDuckGo search — try new 'ddgs' package first, fall back to old 'duckduckgo_search'
 import warnings
+DDGS = None
+DDGS_AVAILABLE = False
 try:
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=".*renamed.*ddgs.*", category=RuntimeWarning)
-        from duckduckgo_search import DDGS
-
+    from ddgs import DDGS
     DDGS_AVAILABLE = True
 except ImportError:
-    DDGS = None
-    DDGS_AVAILABLE = False
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*renamed.*ddgs.*", category=RuntimeWarning)
+            from duckduckgo_search import DDGS
+        DDGS_AVAILABLE = True
+    except ImportError:
+        pass
 
 
 @dataclass
@@ -77,12 +81,10 @@ class DuckDuckGoSearch:
         return self._search_html_fallback(query, max_results)
 
     def _search_with_package(self, query: str, max_results: int) -> List[WebSearchResult]:
-        """Search using the duckduckgo-search package."""
+        """Search using the ddgs (or legacy duckduckgo-search) package."""
         try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message=".*renamed.*ddgs.*", category=RuntimeWarning)
-                with DDGS() as ddgs:
-                    raw_results = list(ddgs.text(query, max_results=max_results))
+            ddgs = DDGS()
+            raw_results = list(ddgs.text(query, max_results=max_results))
 
             results = []
             for r in raw_results:
@@ -269,23 +271,61 @@ class BraveSearch:
             return []
 
 
+class SerperSearch:
+    """Google search via Serper.dev API (2500 free queries/month)."""
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._limiter = get_limiter("serper", requests_per_second=1.0)
+        self._retry_config = get_retry_config("serper")
+
+    def search(self, query: str, max_results: int = 10) -> List[WebSearchResult]:
+        def _do_search():
+            resp = requests.post(
+                "https://google.serper.dev/search",
+                headers={"X-API-KEY": self.api_key, "Content-Type": "application/json"},
+                json={"q": query, "num": max_results},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        try:
+            data = retry_with_backoff(
+                _do_search, config=self._retry_config, rate_limiter=self._limiter,
+            )
+            results = []
+            for r in data.get("organic", []):
+                results.append(WebSearchResult(
+                    title=r.get("title", ""),
+                    url=r.get("link", ""),
+                    snippet=r.get("snippet", ""),
+                ))
+            return results
+
+        except Exception as e:
+            logger.error(f"Serper search failed: {e}")
+            return []
+
+
 def create_search_engine(
     engine: str = "auto",
     tavily_api_key: Optional[str] = None,
     brave_api_key: Optional[str] = None,
+    serper_api_key: Optional[str] = None,
 ) -> SearchEngine:
     """Factory: create a search engine from config.
 
     When engine="auto", uses the best available engine:
-    Tavily (if key available) > Brave (if key available) > DuckDuckGo (fallback).
+    Tavily > Serper > Brave > DuckDuckGo (fallback).
 
-    Falls back to environment variables (TAVILY_API_KEY, BRAVE_API_KEY)
-    when keys are not passed explicitly.
+    Falls back to environment variables when keys are not passed explicitly.
     """
     import os
 
     tavily_key = tavily_api_key or os.environ.get("TAVILY_API_KEY")
     brave_key = brave_api_key or os.environ.get("BRAVE_API_KEY")
+    serper_key = serper_api_key or os.environ.get("SERPER_API_KEY")
 
     if engine == "tavily":
         if tavily_key:
@@ -299,11 +339,20 @@ def create_search_engine(
         logger.warning("Brave API key not set, falling back to best available")
         engine = "auto"
 
+    if engine == "serper":
+        if serper_key:
+            return SerperSearch(serper_key)
+        logger.warning("Serper API key not set, falling back to best available")
+        engine = "auto"
+
     if engine == "auto":
-        # Use best available: Tavily > Brave > DuckDuckGo
+        # Use best available: Tavily > Serper > Brave > DuckDuckGo
         if tavily_key:
             logger.info("Auto-selected Tavily search (API key available)")
             return TavilySearch(tavily_key)
+        if serper_key:
+            logger.info("Auto-selected Serper search (API key available)")
+            return SerperSearch(serper_key)
         if brave_key:
             logger.info("Auto-selected Brave search (API key available)")
             return BraveSearch(brave_key)

@@ -296,6 +296,8 @@ class ResearchTab(ttk.Frame):
         engines = ["duckduckgo"]
         if os.environ.get("TAVILY_API_KEY"):
             engines.append("tavily")
+        if os.environ.get("SERPER_API_KEY"):
+            engines.append("serper")
         if os.environ.get("BRAVE_API_KEY"):
             engines.append("brave")
         self.engine_combo["values"] = engines
@@ -304,6 +306,8 @@ class ResearchTab(ttk.Frame):
         if current not in engines:
             if "tavily" in engines:
                 self.engine_var.set("tavily")
+            elif "serper" in engines:
+                self.engine_var.set("serper")
             elif "brave" in engines:
                 self.engine_var.set("brave")
             else:

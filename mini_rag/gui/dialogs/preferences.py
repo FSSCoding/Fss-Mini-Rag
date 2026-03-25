@@ -148,6 +148,7 @@ class PreferencesDialog(tk.Toplevel):
             ("OPENAI_API_KEY", "OpenAI API Key (fallback)"),
             ("TAVILY_API_KEY", "Tavily Search API Key"),
             ("BRAVE_API_KEY", "Brave Search API Key"),
+            ("SERPER_API_KEY", "Serper (Google) API Key"),
         ]
 
         for key_name, label in keys:
