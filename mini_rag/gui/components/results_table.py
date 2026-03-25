@@ -107,14 +107,12 @@ class ResultsTable(ttk.Frame):
 
     def add_llm_response(self, timing_ms: float = 0):
         """Add an LLM Response row at the top of the results list."""
-        # Remove existing LLM row if present
         if self.tree.exists("llm"):
             self.tree.delete("llm")
         timing_str = f"{timing_ms:.0f}ms" if timing_ms else ""
         self.tree.insert("", 0, iid="llm", values=(
             "LLM", "— response —", "synthesis", timing_str,
         ))
-        # Auto-select it
         self.tree.selection_set("llm")
 
     def _on_select(self, event):
