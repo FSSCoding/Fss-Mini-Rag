@@ -65,42 +65,44 @@ MESSAGES = {
 
 
 class LoadingOverlay(tk.Frame):
-    """Semi-transparent overlay with spinner and rotating messages."""
+    """Compact semi-transparent overlay with spinner and rotating messages.
+
+    Sits in the center of the parent widget — the GUI is still visible
+    behind and around the overlay panel.
+    """
 
     def __init__(self, parent):
-        super().__init__(parent, bg="#1a1a1a")
+        super().__init__(parent)
         self._message_idx = 0
         self._spin_idx = 0
         self._spin_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self._operation = "searching"
         self._after_id = None
         self._messages = []
+        self._msg_after_id = None
 
-        # Center content
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-
-        container = tk.Frame(self, bg="#1a1a1a")
-        container.grid(row=0, column=0)
+        # Compact centered panel with border
+        self.configure(bg="#1e1e2e", highlightbackground="#3a3a4a",
+                       highlightthickness=1, padx=30, pady=20)
 
         self.spinner_label = tk.Label(
-            container, text="⠋", font=("", 32), fg="#4a9eff", bg="#1a1a1a",
+            self, text="⠋", font=("", 28), fg="#4a9eff", bg="#1e1e2e",
         )
-        self.spinner_label.pack(pady=(0, 10))
+        self.spinner_label.pack(pady=(0, 8))
 
         self.message_label = tk.Label(
-            container, text="", font=("", 11), fg="#888888", bg="#1a1a1a",
-            wraplength=400,
+            self, text="", font=("", 10), fg="#a0a0a0", bg="#1e1e2e",
+            wraplength=350,
         )
         self.message_label.pack()
 
         self.detail_label = tk.Label(
-            container, text="", font=("", 9), fg="#555555", bg="#1a1a1a",
+            self, text="", font=("", 9), fg="#666666", bg="#1e1e2e",
         )
-        self.detail_label.pack(pady=(8, 0))
+        self.detail_label.pack(pady=(6, 0))
 
     def show(self, operation: str = "searching", detail: str = ""):
-        """Show the overlay for a given operation type."""
+        """Show the overlay centered in the parent widget."""
         self._operation = operation
         self._messages = list(MESSAGES.get(operation, MESSAGES["searching"]))
         random.shuffle(self._messages)
@@ -109,7 +111,7 @@ class LoadingOverlay(tk.Frame):
 
         self.detail_label.config(text=detail)
         self._update_message()
-        self.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.place(relx=0.5, rely=0.4, anchor="center")
         self.lift()
         self._animate()
 
@@ -118,6 +120,9 @@ class LoadingOverlay(tk.Frame):
         if self._after_id:
             self.after_cancel(self._after_id)
             self._after_id = None
+        if self._msg_after_id:
+            self.after_cancel(self._msg_after_id)
+            self._msg_after_id = None
         self.place_forget()
 
     def set_detail(self, text: str):
@@ -137,4 +142,4 @@ class LoadingOverlay(tk.Frame):
             self.message_label.config(text=msg)
             self._message_idx += 1
         # Rotate message every 3 seconds
-        self.after(3000, self._update_message)
+        self._msg_after_id = self.after(3000, self._update_message)
