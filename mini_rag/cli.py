@@ -437,7 +437,7 @@ def debug_schema(path: str):
 
         db = lancedb.connect(rag_dir)
 
-        if "code_vectors" not in db.list_tables():
+        if "code_vectors" not in db.table_names():
             console.print("[red]No code_vectors table found.[/red]")
             return
 

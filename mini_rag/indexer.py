@@ -8,6 +8,9 @@ import json
 import logging
 import os
 import threading
+import warnings
+
+warnings.filterwarnings("ignore", message="table_names.*deprecated", category=DeprecationWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -801,7 +804,7 @@ class ProjectIndexer:
             )
 
             # Create or open table
-            if "code_vectors" in self.db.list_tables():
+            if "code_vectors" in self.db.table_names():
                 try:
                     # Try to open existing table
                     self.table = self.db.open_table("code_vectors")
@@ -825,13 +828,22 @@ class ProjectIndexer:
                         logger.info("Opened existing code_vectors table")
                 except Exception as e:
                     logger.warning(f"Failed to open existing table: {e}. Recreating...")
-                    if "code_vectors" in self.db.list_tables():
+                    if "code_vectors" in self.db.table_names():
                         self.db.drop_table("code_vectors")
                     self.table = self.db.create_table("code_vectors", schema=schema)
                     logger.info("Recreated code_vectors table")
             else:
                 # Create empty table with schema
-                self.table = self.db.create_table("code_vectors", schema=schema)
+                try:
+                    self.table = self.db.create_table("code_vectors", schema=schema)
+                except Exception as create_err:
+                    # LanceDB corruption: table not listed but create says it exists
+                    logger.warning(f"Table create conflict: {create_err}. Attempting recovery...")
+                    try:
+                        self.db.drop_table("code_vectors")
+                    except Exception:
+                        pass
+                    self.table = self.db.create_table("code_vectors", schema=schema)
                 logger.info(
                     f"Created new code_vectors table with embedding dimension {embedding_dim}"
                 )
@@ -892,7 +904,7 @@ class ProjectIndexer:
                 "files": {},
             }
             # Clear existing table
-            if "code_vectors" in self.db.list_tables():
+            if "code_vectors" in self.db.table_names():
                 self.db.drop_table("code_vectors")
                 self.table = None
                 # Reinitialize the database to recreate the table

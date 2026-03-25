@@ -238,7 +238,7 @@ class FastRAGServer:
 
         try:
             db = lancedb.connect(rag_dir)
-            if "code_vectors" not in db.list_tables():
+            if "code_vectors" not in db.table_names():
                 return True
             table = db.open_table("code_vectors")
             count = table.count_rows()

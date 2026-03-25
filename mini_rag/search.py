@@ -5,7 +5,12 @@ Optimized for code search with relevance scoring.
 
 import logging
 import os
+import warnings
 from collections import defaultdict
+
+# Suppress LanceDB deprecation warning for table_names() — list_tables() returns
+# a different type (ListTablesResponse) that breaks our `in` checks
+warnings.filterwarnings("ignore", message="table_names.*deprecated", category=DeprecationWarning)
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -232,7 +237,7 @@ class CodeSearcher:
 
             self.db = lancedb.connect(self.rag_dir)
 
-            if "code_vectors" not in self.db.list_tables():
+            if "code_vectors" not in self.db.table_names():
                 print("🔧 Index Database Corrupted")
                 print("   The search index exists but is missing data tables")
                 print(
