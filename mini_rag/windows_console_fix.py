@@ -39,7 +39,7 @@ def fix_windows_console():
 
         try:
             # Set console to UTF-8 code page
-            subprocess.run(["chcp", "65001"], shell=True, capture_output=True)
+            subprocess.run(["chcp", "65001"], shell=True, capture_output=True)  # nosec B602 - chcp is a shell built-in, no user input
         except (OSError, subprocess.SubprocessError):
             pass
 

@@ -113,7 +113,8 @@ def get_command_context() -> Dict[str, str]:
 if __name__ == "__main__":
     print("System Context Test:")
     print(f"Context: {get_system_context()}")
-    print(f"Context with path: {get_system_context(Path('/tmp/test'))}")
+    import tempfile
+    print(f"Context with path: {get_system_context(Path(tempfile.gettempdir()) / 'test')}")
     print()
     print("Command Context:")
     cmds = get_command_context()

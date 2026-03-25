@@ -328,10 +328,18 @@ class OllamaEmbedder:
         self.fallback_embedder.model_type = "sentence_transformer"
 
     def _init_transformer_model(self, model_name: str):
-        """Initialize transformer model."""
+        """Initialize transformer model.
+
+        Uses trust_remote_code=False (default) to prevent arbitrary code execution.
+        Model names are controlled by config, not user input.
+        """
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModel.from_pretrained(model_name).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+            model_name, trust_remote_code=False
+        )
+        model = AutoModel.from_pretrained(  # nosec B615
+            model_name, trust_remote_code=False
+        ).to(device)
         model.eval()
 
         # Create a simple wrapper
