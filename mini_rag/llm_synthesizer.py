@@ -137,11 +137,14 @@ class LLMSynthesizer:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
+        # Extra budget for thinking tokens when thinking mode is enabled
+        token_limit = 2048 + (2000 if self.enable_thinking else 0)
+
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
-            "max_tokens": 2048,
+            "max_tokens": token_limit,
         }
 
         try:
@@ -149,7 +152,7 @@ class LLMSynthesizer:
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=120 if self.enable_thinking else 60,
             )
             response.raise_for_status()
             data = response.json()
@@ -173,11 +176,13 @@ class LLMSynthesizer:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
+        token_limit = 2048 + (2000 if self.enable_thinking else 0)
+
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
-            "max_tokens": 2048,
+            "max_tokens": token_limit,
             "stream": True,
             "stream_options": {"include_usage": True},
         }

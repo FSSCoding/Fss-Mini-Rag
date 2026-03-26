@@ -153,6 +153,36 @@ class ResearchService:
                             "url": url, "error": error_msg,
                         })
 
+                # Retry failed URLs once
+                if failed_urls and not self._cancel.is_set():
+                    retry_urls = [f["url"] for f in failed_urls]
+                    logger.info(f"Retrying {len(retry_urls)} failed URLs")
+                    still_failed = []
+                    import time as _time
+                    _time.sleep(1)
+                    for url_info in failed_urls:
+                        url = url_info["url"]
+                        if self._cancel.is_set():
+                            still_failed.append(url_info)
+                            continue
+                        try:
+                            page = scraper.fetch(url)
+                        except Exception:
+                            page = None
+                        if page:
+                            session.add_page(page)
+                            _log_scrape(project_path, url, True,
+                                        title=page.title, word_count=page.word_count)
+                            self.bus.emit("research:page_scraped", {
+                                "title": page.title,
+                                "url": page.url,
+                                "word_count": page.word_count,
+                                "content": page.content,
+                            })
+                        else:
+                            still_failed.append(url_info)
+                    failed_urls = still_failed
+
                 self.bus.emit("research:scrape_completed", {
                     "session_dir": str(session.session_dir),
                     "pages_scraped": session.metadata.get("pages_scraped", 0),
@@ -276,7 +306,7 @@ class ResearchService:
                 })
 
             except Exception as e:
-                logger.error(f"Deep research failed: {e}")
+                logger.error(f"Deep research failed: {e}", exc_info=True)
                 self.bus.emit("research:error", {"error": f"Deep research failed: {e}"})
 
         self._thread = threading.Thread(target=_run, daemon=True)

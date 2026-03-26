@@ -1255,15 +1255,33 @@ class DeepResearchEngine:
         )
         self.report = ResearchReport()
         self._session_log = []  # Accumulated markdown session log
+        self._consecutive_llm_failures = 0
+        self._max_consecutive_failures = 5  # Re-init LLM after this many
 
         # Rate limiters
-        from .rate_limiter import get_limiter, get_retry_config, retry_with_backoff
+        from .rate_limiter import get_limiter, get_retry_config
         self._llm_limiter = get_limiter("llm")
         self._llm_retry = get_retry_config("llm")
 
     def _tracked_llm_call(self, prompt: str, temperature: float = 0.3) -> Optional[str]:
-        """Wrapper around LLM call with rate limiting, retry, and metrics."""
+        """Wrapper around LLM call with rate limiting, retry, and metrics.
+
+        Tracks consecutive failures. After too many, waits longer and
+        logs a warning so the user knows the LLM may be unavailable.
+        """
         from .rate_limiter import retry_with_backoff
+
+        # If we've had many consecutive failures, back off before trying
+        if self._consecutive_llm_failures >= self._max_consecutive_failures:
+            logger.warning(
+                f"LLM has failed {self._consecutive_llm_failures} times consecutively, "
+                "waiting 10s before next attempt"
+            )
+            console.print(
+                f"    [yellow]LLM unavailable ({self._consecutive_llm_failures} failures), "
+                f"waiting 10s...[/yellow]"
+            )
+            time.sleep(10)
 
         tokens_in = len(prompt) // 4
 
@@ -1278,8 +1296,14 @@ class DeepResearchEngine:
             )
         except Exception as e:
             logger.warning(f"LLM call failed after retries: {e}")
+            self._consecutive_llm_failures += 1
             self.metrics.record_llm_call(tokens_in=tokens_in, tokens_out=0, success=False)
             return None
+
+        if response:
+            self._consecutive_llm_failures = 0  # Reset on success
+        else:
+            self._consecutive_llm_failures += 1
 
         tokens_out = len(response) // 4 if response else 0
         self.metrics.record_llm_call(
@@ -1396,6 +1420,11 @@ class DeepResearchEngine:
             text = data.get("summary", "")
             if text:
                 log.append(f"\n## Executive Summary\n\n{text}\n\n")
+        elif t == "phase_error":
+            phase = data.get("phase", "?")
+            error = data.get("error", "unknown")
+            attempts = data.get("attempts", 0)
+            log.append(f"**{phase.upper()} FAILED** after {attempts} attempts: {error}\n\n")
         elif t == "report_start":
             log.append("\n## Generating Final Report...\n\n")
         elif t == "complete":
@@ -1412,6 +1441,36 @@ class DeepResearchEngine:
             self.session.add_agent_note(
                 "session-log.md", header + "".join(self._session_log)
             )
+
+    def _retry_phase(self, phase_name: str, func, *args, max_retries: int = 1, **kwargs):
+        """Run a phase function with retry on failure.
+
+        Returns the function result, or None if all attempts fail.
+        Logs failures and emits events so the user sees what happened.
+        """
+        last_err = None
+        for attempt in range(max_retries + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_err = e
+                if attempt < max_retries:
+                    wait = 2 ** attempt
+                    logger.warning(
+                        f"{phase_name} failed (attempt {attempt + 1}), "
+                        f"retrying in {wait}s: {e}"
+                    )
+                    console.print(
+                        f"    [yellow]{phase_name} failed, retrying "
+                        f"({attempt + 1}/{max_retries})...[/yellow]"
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.error(f"{phase_name} failed after {max_retries + 1} attempts: {e}")
+                    console.print(f"    [red]{phase_name} failed: {e}[/red]")
+                    self._emit("phase_error", phase=phase_name.lower(),
+                               error=str(e), attempts=max_retries + 1)
+        return None
 
     def run(
         self,
@@ -1507,7 +1566,13 @@ class DeepResearchEngine:
                 self._emit("phase_start", phase="analyze")
                 console.print(f"  [cyan]ANALYZE:[/cyan] Evaluating corpus ({src_count} sources)...")
 
-                analysis = self.analyzer.analyze(self.session, topic)
+                analysis = self._retry_phase(
+                    "Analyze", self.analyzer.analyze, self.session, topic,
+                )
+                if analysis is None:
+                    console.print("    [yellow]Skipping round — analyze failed[/yellow]")
+                    self.metrics.end_round(0)
+                    continue
 
                 console.print(f"    Covered: {len(analysis.covered_topics)} topics")
                 console.print(f"    Gaps: {len(analysis.gap_topics)} identified")
@@ -1562,22 +1627,33 @@ class DeepResearchEngine:
 
                 all_urls = []
                 for query in queries:
-                    results = self.search_engine.search(query, max_results=5)
+                    results = []
+                    try:
+                        results = self.search_engine.search(query, max_results=5)
+                    except Exception as search_err:
+                        logger.warning(f"Search failed for '{query[:40]}': {search_err}")
+                        console.print(f"    [yellow]Search error, trying fallbacks...[/yellow]")
 
                     # If search returns nothing, try a shorter version of the query
                     if not results and len(query.split()) > 5:
                         short_query = " ".join(query.replace('"', '').split()[:6])
                         console.print(f"    [dim]No results, retrying: {short_query[:50]}[/dim]")
-                        results = self.search_engine.search(short_query, max_results=5)
+                        try:
+                            results = self.search_engine.search(short_query, max_results=5)
+                        except Exception:
+                            pass
 
                     # If still nothing, try fallback search engines
                     if not results and self._fallback_engines:
                         for fb_engine in self._fallback_engines:
                             fb_name = type(fb_engine).__name__
                             console.print(f"    [dim]Trying fallback: {fb_name}[/dim]")
-                            results = fb_engine.search(query, max_results=5)
-                            if results:
-                                break
+                            try:
+                                results = fb_engine.search(query, max_results=5)
+                                if results:
+                                    break
+                            except Exception as fb_err:
+                                logger.warning(f"Fallback {fb_name} failed: {fb_err}")
 
                     urls = [r.url for r in results if not self.session.has_visited(r.url)]
                     all_urls.extend(urls)
@@ -1624,12 +1700,34 @@ class DeepResearchEngine:
                     len(unique_urls),
                     self.config.max_total_pages - self.session.metadata.get("pages_scraped", 0),
                 )
-                pages = self.scraper.scrape_urls(
-                    unique_urls, self.session, max_pages=scrape_limit,
-                )
+                try:
+                    pages = self.scraper.scrape_urls(
+                        unique_urls, self.session, max_pages=scrape_limit,
+                    )
+                except Exception as scrape_err:
+                    logger.error(f"Scrape phase failed: {scrape_err}")
+                    console.print(f"    [red]Scrape failed: {scrape_err}[/red]")
+                    pages = []
+
+                # Retry failed URLs once (only those that weren't scraped)
+                scraped_urls = {p.url for p in pages}
+                failed_urls = [
+                    u for u in unique_urls[:scrape_limit]
+                    if u not in scraped_urls
+                ]
+                if failed_urls and len(failed_urls) < len(unique_urls[:scrape_limit]):
+                    console.print(f"    [dim]Retrying {len(failed_urls)} failed URLs...[/dim]")
+                    time.sleep(1)
+                    try:
+                        retry_pages = self.scraper.scrape_urls(
+                            failed_urls, self.session, max_pages=len(failed_urls),
+                        )
+                        pages.extend(retry_pages)
+                        scraped_urls.update(p.url for p in retry_pages)
+                    except Exception:
+                        pass  # Best-effort retry
 
                 # Register scraped files and track attempts
-                scraped_urls = {p.url for p in pages}
                 for url in unique_urls[:scrape_limit]:
                     scraped = url in scraped_urls
                     self.metrics.record_scrape_attempt(
@@ -1694,7 +1792,12 @@ class DeepResearchEngine:
                     self._emit("phase_start", phase="prune")
                     console.print(f"  [cyan]PRUNE:[/cyan] Checking for duplicates...")
 
-                    prune_result = self.pruner.prune(self.session)
+                    try:
+                        prune_result = self.pruner.prune(self.session)
+                    except Exception as prune_err:
+                        logger.error(f"Prune phase failed: {prune_err}")
+                        console.print(f"    [yellow]Prune failed: {prune_err} — skipping[/yellow]")
+                        prune_result = {"removed": [], "duplicates": [], "corroborations": []}
 
                     # Track pruned files in metrics
                     for removed_name in prune_result.get("removed", []):
@@ -1816,31 +1919,37 @@ class DeepResearchEngine:
         self.report.corpus_growth = summary["corpus_growth"]
         self.report.confidence_trend = summary["confidence_trend"]
 
-        # Generate completion summary (new LLM call)
+        # Generate completion summary (new LLM call) — retry once on failure
         if self._call_llm and self.report.rounds_completed > 0:
             console.print("  Generating executive summary...")
-            comp_prompt = PROMPT_COMPLETION_SUMMARY.format(
-                topic=topic,
-                rounds=self.report.rounds_completed,
-                time=self.report.total_time_minutes,
-                files=summary["active_files"],
-                tokens=summary["total_tokens"],
-                confidence=self.report.confidence,
-                covered=", ".join(self.report.topics_covered[:8]) or "none yet",
-                gaps=", ".join(self.report.gaps_remaining[:8]) or "none identified",
-                trend=" → ".join(summary.get("confidence_trend", [])) or "n/a",
-            )
-            comp_summary = self._tracked_llm_call(comp_prompt, temperature=0.3)
-            if comp_summary:
-                self.report.completion_summary = comp_summary.strip()
-                self._emit("completion_summary", summary=self.report.completion_summary)
+            try:
+                comp_prompt = PROMPT_COMPLETION_SUMMARY.format(
+                    topic=topic,
+                    rounds=self.report.rounds_completed,
+                    time=self.report.total_time_minutes,
+                    files=summary["active_files"],
+                    tokens=summary["total_tokens"],
+                    confidence=self.report.confidence,
+                    covered=", ".join(self.report.topics_covered[:8]) or "none yet",
+                    gaps=", ".join(self.report.gaps_remaining[:8]) or "none identified",
+                    trend=" → ".join(summary.get("confidence_trend", [])) or "n/a",
+                )
+                comp_summary = self._tracked_llm_call(comp_prompt, temperature=0.3)
+                if comp_summary:
+                    self.report.completion_summary = comp_summary.strip()
+                    self._emit("completion_summary", summary=self.report.completion_summary)
+            except Exception as e:
+                logger.warning(f"Completion summary failed: {e}")
 
-        # Generate corpus assessment if we have sources
+        # Generate corpus assessment if we have sources — retry once on failure
         if summary["active_files"] > 0 and self._call_llm:
             console.print("  Generating corpus assessment...")
-            assessment = self.analyzer.assess_corpus(self.session, topic)
-            self.session.add_agent_note("corpus-assessment.md", assessment)
-            self.report.corpus_assessment = assessment
+            try:
+                assessment = self.analyzer.assess_corpus(self.session, topic)
+                self.session.add_agent_note("corpus-assessment.md", assessment)
+                self.report.corpus_assessment = assessment
+            except Exception as e:
+                logger.warning(f"Corpus assessment failed: {e}")
 
         # Write report
         report_md = self.report.to_markdown(topic)
