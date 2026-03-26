@@ -148,7 +148,7 @@ class LLMSynthesizer:
         }
 
         try:
-            response = requests.post(
+            response = requests.post(  # nosec B113 - timeout is set below
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 json=payload,
