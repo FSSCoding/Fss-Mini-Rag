@@ -39,7 +39,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fss-mini-rag"
-version = "2.3.0"
+version = "2.3.2"
 description = "Self-contained research and code search system with hybrid semantic + keyword search, web scraping, deep research, and desktop GUI."
 authors = [
     {name = "Brett Fox", email = "brett@foxsoftwaresolutions.com.au"}

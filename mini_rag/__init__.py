@@ -5,7 +5,7 @@ Hybrid semantic + BM25 search with RRF fusion, web scraping, deep research,
 LLM synthesis, and desktop GUI. Works with any OpenAI-compatible endpoint.
 """
 
-__version__ = "2.3.0"
+__version__ = "2.3.2"
 
 from .chunker import CodeChunker
 from .indexer import ProjectIndexer

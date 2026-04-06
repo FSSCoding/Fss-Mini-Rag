@@ -297,6 +297,22 @@ Good general-purpose search. Requires an API key.
 
 Rate limited to 15 queries/minute with automatic retry on 429 errors.
 
+### Serper
+
+Google search results via API. Good quality, generous free tier.
+
+1. Sign up at [serper.dev](https://serper.dev)
+2. Add your key to `.env`:
+   ```
+   SERPER_API_KEY=your-serper-key-here
+   ```
+3. Use it:
+   ```bash
+   rag-mini search-web "research databases" --engine serper
+   ```
+
+Rate limited to 30 queries/minute with automatic retry.
+
 ### API keys in `.env`
 
 Create a `.env` file in your project root (it's already in `.gitignore`):

@@ -55,7 +55,7 @@ class UpdateChecker:
         self,
         repo_owner: str = "FSSCoding",
         repo_name: str = "Fss-Mini-Rag",
-        current_version: str = "2.1.0",
+        current_version: str = "2.3.2",
     ):
         self.repo_owner = repo_owner
         self.repo_name = repo_name
