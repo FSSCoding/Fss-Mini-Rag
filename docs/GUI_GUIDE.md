@@ -127,7 +127,10 @@ When indexing a collection, the status bar shows:
 ## Web Research Tab
 
 ![Web Research Tab](images/gui-research.png)
-*The Web Research tab: search the web, scrape URLs, run deep research*
+*Deep research session starting — Round 1 ANALYZE phase identifying gaps*
+
+![Deep Research Completing](images/gui-deep-research-complete.png)
+*Deep research Round 5 completing — pruning duplicates, generating final report*
 
 Switch to the **Web Research** tab to work with web content.
 

@@ -120,7 +120,13 @@ Launch with `rag-mini gui`. Dark/light theme, two-tab layout:
 
 **Search & Index** — Browse collections, search with live results, toggle LLM synthesis, view content with syntax highlighting.
 
+![Light Theme](docs/images/gui-search-light.png)
+*Light theme with LLM synthesis — rendered markdown with tables and formatted takeaways*
+
 **Web Research** — Search the web, scrape URLs, run deep research sessions, manage your research corpus.
+
+![Deep Research](docs/images/gui-deep-research-complete.png)
+*Deep research session completing — 5 rounds of autonomous search, scrape, and analysis*
 
 Built with Tkinter + Sun Valley theme. LLM responses stream live with collapsible thinking blocks.
 
