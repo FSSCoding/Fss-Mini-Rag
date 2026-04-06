@@ -3,7 +3,8 @@
 > **Search your code by meaning. Research any topic from the web. All running locally.**
 > *Distilled from 2 years of building production RAG systems — designed to be understood, modified, and used.*
 
-![FSS-Mini-RAG Demo](recordings/fss-mini-rag-demo-20250812_161410.gif)
+![FSS-Mini-RAG Desktop GUI](docs/images/gui-search-dark.png)
+*Desktop GUI: semantic search with LLM synthesis, warm dark theme, rendered markdown output*
 
 ## What This Does
 
@@ -132,7 +133,7 @@ Built with Tkinter + Sun Valley theme. LLM responses stream live with collapsibl
 | **Search** | Independent semantic + BM25 with RRF fusion, code-aware tokenizer (`snake_case`/`CamelCase` splitting), auto-calibrating score labels, adjacent chunk consolidation |
 | **Chunking** | Python AST extraction, paragraph-based markdown splitting, code block preservation, file overview chunks, per-language size tuning |
 | **Embeddings** | Any OpenAI-compatible endpoint (LM Studio, vLLM, OpenAI), auto-detection via `/v1/models`, two profiles (precision/conceptual), honest degradation to BM25-only |
-| **Web Research** | HTML/PDF/arXiv/GitHub extractors, DuckDuckGo/Tavily/Brave search, deep research with time budgets, vector-based corpus deduplication |
+| **Web Research** | HTML/PDF/arXiv/GitHub extractors, DuckDuckGo/Serper/Tavily/Brave search, deep research with time budgets, vector-based corpus deduplication |
 | **Desktop GUI** | Tkinter + Sun Valley dark/light theme, LLM streaming with live tokens, RenderedMarkdown widget, research session management |
 | **Rate Limiting** | Built-in retry with exponential backoff for all API calls, per-domain tracking, robots.txt compliance |
 
